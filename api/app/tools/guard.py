@@ -94,8 +94,9 @@ async def pinning_argument(url: str) -> list[str]:
 
     Without it the browser resolves the name again at connection time, so a DNS answer
     that changes between the check and the request (DNS rebinding) reaches an address the
-    guard never saw. Subresource hosts cannot be pinned here because the crawl does not
-    know them yet; P1 pins the whole validated host set.
+    guard never saw. The crawl keeps to one host, so on that path the pinned set is the
+    audited host. Third-party subresources are still resolved by the browser and are
+    covered only by the per-request guard check, so do not describe the window as closed.
     """
     host = urlsplit(url).hostname
     if not host or host in LOCAL_HOSTNAMES:

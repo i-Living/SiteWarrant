@@ -186,6 +186,10 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **The crawl digest is part of `agent_version`.** `app/crawl/version.py` hashes the discovery sources,
   because which pages get audited changes the report. Editing the crawler changes every version string
   and every published number — expected, not a bug.
+- **Rebinding is narrowed, not closed.** The browser is launched with
+  `--host-resolver-rules=MAP <host> <ip>` for the page host, and an `httpx` response whose peer address
+  is private is refused (`app/tools/guard.py::peer_is_blocked`). Third-party subresources are resolved by
+  the browser and are covered only by the per-request guard check, so do not claim the window is shut.
 - **`pytest-asyncio` gives each test its own event loop.** A pooled SQLAlchemy engine then hands a
   connection from a dead loop to the next test and fails with "Event loop is closed". Tests set
   `SITEWARRANT_DB_NULL_POOL=1`; do not remove it to make tests "faster".
