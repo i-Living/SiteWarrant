@@ -5,6 +5,12 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def viewport_size(value: str) -> tuple[int, int]:
+    """Parse "WIDTHxHEIGHT" into CSS pixels."""
+    width, _, height = value.partition("x")
+    return int(width), int(height)
+
+
 class Settings(BaseSettings):
     """Runtime configuration. Every value has a working local default.
 
@@ -27,6 +33,10 @@ class Settings(BaseSettings):
         default="1440x900",
         validation_alias=AliasChoices("SITEWARRANT_VIEWPORT", "viewport"),
     )
+    viewports: str = Field(
+        default="390x844,768x1024,1440x900",
+        validation_alias=AliasChoices("SITEWARRANT_VIEWPORTS", "viewports"),
+    )
     page_timeout_ms: int = Field(
         default=30_000,
         validation_alias=AliasChoices("SITEWARRANT_PAGE_TIMEOUT_MS", "page_timeout_ms"),
@@ -47,8 +57,17 @@ class Settings(BaseSettings):
 
     @property
     def viewport_size(self) -> tuple[int, int]:
-        width, _, height = self.viewport.partition("x")
-        return int(width), int(height)
+        return viewport_size(self.viewport)
+
+    @property
+    def viewport_list(self) -> tuple[str, ...]:
+        """The measured viewports, fixed rather than adaptive.
+
+        Comparing audits between agent versions needs identical conditions, so the set is
+        configuration with a default, not a per-site decision.
+        """
+        parsed = tuple(item.strip() for item in self.viewports.split(",") if item.strip())
+        return parsed or (self.viewport,)
 
     @property
     def allowed_private_host_set(self) -> frozenset[str]:

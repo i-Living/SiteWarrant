@@ -42,6 +42,7 @@ def report_with(*findings: FindingOut, measured: set[str] | None = None) -> Repo
         findings=list(findings),
         pages_audited=1,
         duration_ms=42,
+        observations_by_tool={"axe": 1},
         measured_categories=measured or {"a11y"},
     )
 

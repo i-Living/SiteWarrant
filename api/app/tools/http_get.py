@@ -26,6 +26,8 @@ class LightResponse(BaseModel):
     url: str
     status_code: int
     content_type: str
+    redirects: list[str]
+    headers: dict[str, str]
     text: str
     truncated: bool
 
@@ -50,8 +52,10 @@ async def http_get(
     otherwise land on a private address.
     """
     target = url
+    chain: list[str] = []
     async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=False) as client:
         for _hop in range(MAX_REDIRECTS + 1):
+            chain.append(target)
             if await is_blocked(target, allowed_private_hosts=allowed_private_hosts):
                 raise HttpGetBlocked(f"{target} is not a public address")
             try:
@@ -67,6 +71,7 @@ async def http_get(
                         continue
                     status_code = res.status_code
                     content_type = res.headers.get("content-type", "")
+                    headers = {name.lower(): value for name, value in res.headers.items()}
                     chunks: list[bytes] = []
                     total = 0
                     truncated = False
@@ -84,6 +89,8 @@ async def http_get(
                 url=str(res.url),
                 status_code=status_code,
                 content_type=content_type,
+                redirects=chain[:-1],
+                headers=headers,
                 text=text,
                 truncated=truncated,
             )

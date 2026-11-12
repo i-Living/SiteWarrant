@@ -375,9 +375,25 @@ BFS с лимитами, sitemap.xml, JS-рендеринг при пустом 
 
 Все инструменты и три viewport. Наблюдения в БД, артефакты на диск.
 
+**Выполнено 2026-11-12.** Восемь каналов на каждый viewport: `http` (статус, тип, цепочка
+редиректов, шесть security-заголовков), `dom` (title, description, h1, lang, canonical, заголовки
+страницы, картинки без alt), `axe` (нарушения + запись о самом прогоне), `contrast` (измеренные пары
+цветов и порог WCAG 2.2 SC 1.4.3 по размеру текста), `responsive` (переполнение документа, цели меньше
+24 px по SC 2.5.8), `occlusion` (hit-test центра интерактивного элемента), `performance` (TTFB, FCP,
+LCP, CLS, TBT как прокси INP, ресурсы) и `screenshot` (полностраничный PNG на viewport, обрезка по
+4000 px записывается). Viewport'ы фиксированы конфигом `SITEWARRANT_VIEWPORTS`; каждый канал пишет
+наблюдение даже при нулевом результате, иначе «канал не запускался» и «канал ничего не нашёл»
+неразличимы. Одна находка на правило: один и тот же дефект на трёх viewport'ах — это одна находка с
+тремя уликами. Артефакты: `audits/<id>/<page_key>/<viewport>.{html,dom.json,png}` + `report.json`.
+Схема БД не менялась — `snapshots.screenshot_key` уже был в модели §7.
+
 - Acceptance: каждый из 8 каналов даёт ≥1 observation на тестовой странице; два прогона подряд
-  (кроме чисел производительности) дают идентичный набор наблюдений.
-- Verify: `uv run pytest tests/tools -q` и `uv run sitewarrant audit http://localhost:8081/ --allow-private --no-llm` дважды с `diff`
+  (кроме чисел производительности) дают идентичный набор наблюдений. Подтверждено: 56 наблюдений на
+  фикстуре (`http=8 dom=3 axe=27 contrast=6 responsive=3 occlusion=3 performance=3 screenshot=3`),
+  3 snapshot'а с PNG на диске, 9 находок по 3 улики, `tests/integration/test_fact_layer.py`
+  сравнивает набор наблюдений двух прогонов и исключает `performance` и `screenshot`.
+- Verify: `uv run pytest -m integration -k fact_layer -q` и
+  `uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json`
 
 ### P3 — MCP, оркестратор, агенты, RAG (неделя 3–4)
 

@@ -106,7 +106,12 @@ def dom_drafts(observation: ObservationView) -> list[FindingDraft]:
 
 
 def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft]:
-    """Rules only claim what the catalog covers; every other fact stays an observation."""
+    """Rules only claim what the catalog covers; every other fact stays an observation.
+
+    One rule, one finding: the same defect seen at three viewports is one claim with three
+    evidence items, not three findings. Grouping happens here rather than per node, because
+    a per-node finding is noise a reader has to re-collapse by hand.
+    """
     drafts: list[FindingDraft] = []
     for observation in observations:
         if observation.tool == "axe":
@@ -115,7 +120,25 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
                 drafts.append(draft)
         elif observation.tool == "dom":
             drafts.extend(dom_drafts(observation))
-    return drafts
+    return merge_by_rule(drafts)
+
+
+def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
+    merged: dict[str, FindingDraft] = {}
+    for draft in drafts:
+        existing = merged.get(draft.rule_id)
+        if existing is None:
+            merged[draft.rule_id] = draft
+            continue
+        seen = {item.observation_id for item in existing.evidence}
+        for item in draft.evidence:
+            if len(existing.evidence) >= MAX_EVIDENCE_ITEMS:
+                break
+            if item.observation_id in seen:
+                continue
+            existing.evidence.append(item)
+            seen.add(item.observation_id)
+    return list(merged.values())
 
 
 def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDraft:

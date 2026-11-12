@@ -5,6 +5,8 @@ import pytest
 from typer.testing import CliRunner
 
 from app.cli import cli
+from app.core.config import get_settings
+from app.tools.fetch import BlockedRequestError, capture_page
 
 pytestmark = pytest.mark.integration
 
@@ -20,8 +22,20 @@ def test_redirect_to_a_metadata_address_is_blocked(tmp_path: Path) -> None:
     out = tmp_path / "redirect.json"
     result = CliRunner().invoke(cli, ["audit", f"{FIXTURE}to-private", "--out", str(out)])
     assert result.exit_code == 2, result.output
-    assert "request guard blocked" in result.output
+    # The HTTP probe runs before the browser, so the hop is refused there first. The
+    # browser guard is pinned separately below, because it must refuse the hop on its own.
+    assert "169.254.169.254" in result.output
     assert not out.exists()
+
+
+async def test_the_browser_guard_refuses_the_redirect_hop() -> None:
+    """Without this, a probe failure could hide a broken browser guard."""
+    with pytest.raises(BlockedRequestError):
+        await capture_page(
+            f"{FIXTURE}/to-private",
+            get_settings(),
+            allowed_private_hosts=frozenset({"localhost"}),
+        )
 
 
 def test_csp_page_is_still_audited(tmp_path: Path) -> None:
