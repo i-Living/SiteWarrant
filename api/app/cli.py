@@ -22,7 +22,7 @@ def version() -> None:
     """Print the agent version and the size of the rule catalog."""
     settings = get_settings()
     agent_version = compute_agent_version(
-        viewport=settings.viewport,
+        viewports=settings.viewport_list,
         page_timeout_ms=settings.page_timeout_ms,
         capture_timeout_ms=settings.capture_timeout_ms,
         user_agent=settings.user_agent,

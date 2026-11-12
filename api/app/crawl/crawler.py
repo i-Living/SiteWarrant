@@ -8,7 +8,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 from protego import Protego
 
-from app.core.config import Settings
+from app.core.config import Settings, viewport_size
 from app.core.urls import page_key
 from app.core.version import compute_agent_version
 from app.crawl.links import is_crawlable, parse_html
@@ -24,7 +24,7 @@ from app.crawl.templates import template_pattern
 from app.tools.fetch import IDLE_TIMEOUT_MS
 from app.tools.guard import install_request_guard, pinning_argument
 from app.tools.http_get import HttpGetBlocked, HttpGetFailed, http_get, is_html
-from app.tools.robots import fetch_robots
+from app.tools.robots import fetch_robots, robots_hop_check
 
 MAX_RENDERED_PAGES = 5
 
@@ -52,7 +52,7 @@ async def render_links(
     Only used when the fetched body has neither text nor links: an app shell. The browser
     runs under the same request guard and host pinning as an audit.
     """
-    width, height = settings.viewport_size
+    width, height = viewport_size(settings.viewport_list[0])
     launch_args = await pinning_argument(url)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(args=launch_args)
@@ -158,6 +158,11 @@ async def crawl(
                 queue.append((normalize_url(loc), 1, "sitemap"))
     queue.appendleft((start, 0, "start"))
 
+    hop_check = (
+        None
+        if ignore_robots
+        else robots_hop_check(settings.user_agent, allowed_private_hosts=allowed_private_hosts)
+    )
     seen: set[str] = set()
     pages: list[DiscoveredPage] = []
     policies: dict[str, Protego | None] = {}
@@ -194,6 +199,7 @@ async def crawl(
                 user_agent=settings.user_agent,
                 allowed_private_hosts=allowed_private_hosts,
                 timeout_s=settings.page_timeout_ms / 1000,
+                hop_check=hop_check,
             )
         except HttpGetBlocked:
             pages.append(
@@ -301,7 +307,7 @@ async def crawl(
         site=host,
         start_url=start,
         agent_version=compute_agent_version(
-            viewport=settings.viewport,
+            viewports=settings.viewport_list,
             page_timeout_ms=settings.page_timeout_ms,
             capture_timeout_ms=settings.capture_timeout_ms,
             user_agent=settings.user_agent,

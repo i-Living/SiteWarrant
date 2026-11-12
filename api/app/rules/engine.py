@@ -106,7 +106,12 @@ def dom_drafts(observation: ObservationView) -> list[FindingDraft]:
 
 
 def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft]:
-    """Rules only claim what the catalog covers; every other fact stays an observation."""
+    """Rules only claim what the catalog covers; every other fact stays an observation.
+
+    One rule, one finding: the same defect seen at three viewports is one claim with three
+    evidence items, not three findings. Grouping happens here rather than per node, because
+    a per-node finding is noise a reader has to re-collapse by hand.
+    """
     drafts: list[FindingDraft] = []
     for observation in observations:
         if observation.tool == "axe":
@@ -115,7 +120,41 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
                 drafts.append(draft)
         elif observation.tool == "dom":
             drafts.extend(dom_drafts(observation))
-    return drafts
+    return merge_by_rule(drafts)
+
+
+def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
+    """One draft per rule, with evidence pooled across viewports.
+
+    Evidence is taken round-robin by position within each draft, so a viewport that reports
+    ten nodes cannot fill the cap and hide the two later viewports. Items are deduplicated
+    by observation and excerpt: the same node twice is one item, two nodes of one observation
+    stay two items.
+    """
+    groups: dict[str, list[FindingDraft]] = {}
+    for draft in drafts:
+        groups.setdefault(draft.rule_id, []).append(draft)
+
+    merged: list[FindingDraft] = []
+    for group in groups.values():
+        head = group[0]
+        pooled = sorted(
+            ((index, item) for draft in group for index, item in enumerate(draft.evidence)),
+            key=lambda pair: pair[0],
+        )
+        seen: set[tuple[str, str, str | None]] = set()
+        evidence: list[EvidenceDraft] = []
+        for _, item in pooled:
+            key = (item.observation_id, item.kind, item.excerpt)
+            if key in seen:
+                continue
+            seen.add(key)
+            evidence.append(item)
+            if len(evidence) >= MAX_EVIDENCE_ITEMS:
+                break
+        head.evidence = evidence
+        merged.append(head)
+    return merged
 
 
 def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDraft:

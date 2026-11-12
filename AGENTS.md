@@ -98,9 +98,11 @@ api/app/core/      config, database engine, ORM models, report schema, agent_ver
 api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report
 api/app/rules/     catalog.py (what we claim) and engine.py (facts to findings)
 api/app/storage/   repository functions over the ORM
-api/app/tools/     axe, dom_probe, fetch (Playwright), http_get (httpx), guard (SSRF), robots; vendor/axe.min.js
+api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
+                   performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
 api/migrations/    Alembic environment and revisions
-api/tests/         unit tests, tests/crawl (in-memory sites) and tests/integration (fixture site, database, browser)
+api/tests/         unit tests (math, thresholds, merge), tests/crawl (in-memory sites) and
+                   tests/integration (fixture site, database, browser, three viewports)
 web/app/           Next.js report page
 benchmark/fixtures/  static site with planted defects, expected.json, robots.txt, sitemap.xml
 infra/             docker-compose: Postgres with pgvector, Redis, fixture site
@@ -168,6 +170,10 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   rule, and a weekly re-read. Disagreements go into the label note instead of being averaged away.
 - **Scope is the real risk, not difficulty.** Eight directions plus evals in eighty hours is tight. If time
   runs out, cut P6 (fix diffs), never P5 (evals) — a platform without measured quality is a demo.
+- **The viewport set is configuration, not a per-site choice.** `SITEWARRANT_VIEWPORTS` defaults to
+  `390x844,768x1024,1440x900`, mobile first. Discovery renders at the first entry, so the viewport
+  that decides which pages are found is inside the hashed set — there is no second viewport setting. Comparing two agent versions needs identical conditions, so
+  a per-site viewport would make the comparison meaningless.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
@@ -183,6 +189,34 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
   against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
   fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
+- **A channel must report that it ran, even with nothing to report.** Each tool writes a run
+  observation (`axe_run`, `contrast_run`) next to its findings. Without it, "the tool found nothing"
+  and "the tool never executed" look identical in the database, and the report would score a category
+  nobody measured.
+- **One rule, one finding, N evidence items.** The same defect at 390, 768 and 1440 px is one claim.
+  `draft_findings` merges by `rule_id` and deduplicates evidence by observation id; a per-viewport
+  finding triples the report for no new information.
+- **`page.add_init_script` takes source, not a function expression.** Passing `() => {...}` defines a
+  function and never calls it, so the LCP/CLS/long-task observers silently never register. Wrap the
+  script in `(() => { ... })()`; `app/tools/performance.py` does.
+- **LCP is not in `performance.getEntriesByType`.** It only exists through a
+  `PerformanceObserver({type: 'largest-contentful-paint', buffered: true})` created before the first
+  paint, which is why the observer is installed as an init script before navigation.
+- **Never round a value before comparing it to a threshold.** A contrast ratio of 4.496 stored as
+  4.5 claims a pass WCAG does not give, and a 23.999 px target stored as 24 hides the reason it was
+  reported. Keep full precision in the fact and in the comparison; round only for display.
+- **Alpha is part of the colour.** `rgb()` has three channels and is opaque; only `rgba()` and the
+  slash syntax carry alpha. Composite a translucent colour over its resolved backdrop before
+  measuring, or the probe reports a colour the user never sees.
+- **CLS is the largest session window, not the sum of shifts**, and TBT only counts long tasks after
+  the first paint and before the measurement window closes. The window closes before the geometry
+  probes run, because their long tasks are the auditor's work.
+- **robots.txt applies to every redirect hop.** A redirect target is a URL the tool fetches;
+  `http_get` takes a `hop_check` callback and `robots.robots_hop_check` is what the audit and the
+  crawler pass. The browser navigation is checked for the start URL only.
+- **Performance numbers are excluded from the determinism check.** TTFB, FCP, LCP, CLS and TBT move
+  between runs on the same machine; `tests/integration/test_fact_layer.py` compares every other channel
+  and says so. Do not "fix" the comparison by loosening it for other tools.
 - **The crawl digest is part of `agent_version`.** `app/crawl/version.py` hashes the discovery sources,
   because which pages get audited changes the report. Editing the crawler changes every version string
   and every published number — expected, not a bug.

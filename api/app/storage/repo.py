@@ -55,8 +55,18 @@ async def save_snapshot(
     page_id: uuid.UUID,
     viewport: str,
     html_key: str,
+    dom_key: str | None = None,
+    screenshot_key: str | None = None,
 ) -> None:
-    session.add(Snapshot(page_id=page_id, viewport=viewport, html_key=html_key))
+    session.add(
+        Snapshot(
+            page_id=page_id,
+            viewport=viewport,
+            html_key=html_key,
+            dom_key=dom_key,
+            screenshot_key=screenshot_key,
+        )
+    )
 
 
 async def save_observations(

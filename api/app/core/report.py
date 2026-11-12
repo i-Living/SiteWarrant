@@ -44,6 +44,7 @@ class SummaryOut(BaseModel):
     by_severity: dict[str, int]
     scores: dict[str, float]
     duration_ms: int
+    observations_by_tool: dict[str, int]
 
 
 class Report(BaseModel):
@@ -74,6 +75,7 @@ def build_report(
     pages_audited: int,
     duration_ms: int,
     measured_categories: set[str],
+    observations_by_tool: dict[str, int],
 ) -> Report:
     counts = Counter(finding.severity for finding in findings)
     by_severity = {severity: counts.get(severity, 0) for severity in SEVERITIES}
@@ -99,6 +101,7 @@ def build_report(
             by_severity=by_severity,
             scores=scores,
             duration_ms=duration_ms,
+            observations_by_tool=observations_by_tool,
         ),
         findings=list(findings),
     )

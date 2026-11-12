@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -73,6 +74,21 @@ async def fetch_robots(
                 return None
             return parse_robots(response.text)
     raise RobotsUnavailable(f"robots.txt redirected more than {MAX_ROBOTS_REDIRECTS} times")
+
+
+def robots_hop_check(
+    user_agent: str, *, allowed_private_hosts: frozenset[str]
+) -> Callable[[str], Awaitable[None]]:
+    """A permission check for one redirect hop.
+
+    A redirect target is a URL the tool fetches, so robots.txt has to be consulted for it as
+    well; checking only the URL the caller started with leaves the hops unguarded.
+    """
+
+    async def check(url: str) -> None:
+        await ensure_allowed(url, user_agent, allowed_private_hosts=allowed_private_hosts)
+
+    return check
 
 
 async def ensure_allowed(
