@@ -75,6 +75,13 @@ make check
 `make check` is the contract: ruff, mypy, pytest, biome and `tsc` in one command. If it does not exist
 yet, do not claim a change is verified.
 
+## Review
+
+Pull requests get an automated CodeRabbit review. [.coderabbit.yaml](.coderabbit.yaml) restates the
+invariants above as review instructions; where a comment disagrees with this file or `docs/PLAN.md`,
+the document wins. The configuration is read from the base branch, so it takes effect once it is on
+`main`.
+
 ## Layout
 
 ```
