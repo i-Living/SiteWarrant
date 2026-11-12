@@ -1,0 +1,264 @@
+# CodeRabbit configuration. Schema: https://coderabbit.ai/integrations/schema.v2.json
+# The working agreement in AGENTS.md is the source of truth for every instruction below.
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "chill"
+  high_level_summary: true
+  review_status: true
+  sequence_diagrams: true
+  changed_files_summary: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+
+  path_filters:
+    - "!api/uv.lock"
+    - "!**/*.lock"
+    - "!**/.venv/**"
+    - "!**/node_modules/**"
+    - "!**/.next/**"
+    - "!**/dist/**"
+    - "!**/htmlcov/**"
+    - "!**/__pycache__/**"
+    - "!**/playwright-report/**"
+    - "!**/test-results/**"
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+
+  path_instructions:
+    - path: "api/app/tools/**"
+      instructions: |
+        These modules produce deterministic facts. A review comment that asks for an LLM call,
+        a heuristic guess or a "reasonable default" number is wrong here: contrast ratios, header
+        values, timings, overflow and touch-target sizes come from code and must carry the unit,
+        the threshold and the source of the threshold.
+        - Flag any value returned without a unit or basis, and any rounding that hides a threshold.
+        - The SSRF guard, redirect re-validation and response size caps are load-bearing. Never
+          propose relaxing them "for this site"; flag any change that resolves a host, follows a
+          redirect or downloads a body without re-running the guard.
+        - Crawling must respect robots.txt. Flag code paths that skip it, including in tests.
+        - Tools must be usable without network access: fixtures in tests, no third-party hosts.
+        - Async code (httpx, asyncpg, Playwright) must set explicit timeouts.
+
+    - path: "api/app/agents/**"
+      instructions: |
+        Prompts are code. Each agent is one prompt file under prompts/, written in English, and
+        reviewed like code. The invariants they implement:
+        - Tools compute facts, the model interprets them. An agent that asserts a number not
+          present in observations is a defect.
+        - No evidence, no finding: every finding references at least one observations row.
+        - Agents never suppress their own duplicates. Deduplication happens in the chief auditor.
+        - Root-cause clustering is deterministic (shared layout component, shared DOM ancestor,
+          rule family). The model writes rationale and impact only, never the cluster key.
+        - Flag any prompt change that silently changes output shape, drops a field or removes a
+          required evidence reference: that changes agent_version and every published metric.
+        - Treat prompt edits with the same scrutiny as code: no vague instructions, no "use your
+          judgement" where an observation should be cited.
+
+    - path: "api/app/crawl/**"
+      instructions: |
+        Crawling and URL normalisation decide the published metrics.
+        - page_key(url) is host plus path, query and hash dropped, trailing slash stripped. Treat
+          every change to it as breaking: it silently changes precision and recall. Ask for the
+          benchmark impact, do not approve it on the strength of the code alone.
+        - Discovery must stay inside the audited host set; flag any path that escapes it.
+        - Robots.txt and the SSRF guard apply here first: flag a redirect, a DNS answer or a
+          sitemap entry that is followed without re-validation.
+        - Page-template clustering is deterministic; flag a model call inside it.
+
+    - path: "api/app/evals/**"
+      instructions: |
+        Every published number comes from a run artifact under evals/runs/ with a denominator and
+        a date. A zero denominator yields null, never 0.
+        - Flag any metric computed without a denominator, or hardcoded, or reported without the
+          run id and date.
+        - Matching is fixed: same page_key, same rule_id, same selector path (or a documented
+          equivalent). Threshold and matching-rule changes are an "ask first" change: request the
+          reason and the before/after run, do not approve silently.
+        - Cost is an estimate from the versioned price table; tokens, call counts and wall time are
+          measured. Flag any code that presents the dollar figure as measured.
+        - Eval fixtures must not reach the public network.
+
+    - path: "api/app/api/**"
+      instructions: |
+        HTTP surface: pydantic models in, pydantic models out, small typed functions.
+        - Flag untyped or loosely typed boundaries, missing response models and error paths that
+          return a different shape than the advertised model.
+        - A route that starts a crawl must not trust a client-supplied URL without the SSRF guard;
+          flag any host, scheme or port accepted from the request body.
+        - Do not accept a required dependency, a schema change or a new queue in a drive-by PR
+          without the owner's decision recorded in docs/PLAN.md.
+        - No classes unless a framework or protocol demands one.
+
+    - path: "api/app/core/**"
+      instructions: |
+        Config, database, tracing and the price table.
+        - Secrets come from the environment only. Flag any default value that looks like a key,
+          token or password, and any log line that would print one.
+        - Schema and migration changes are an "ask first" change: flag them and ask for the
+          migration plan instead of approving.
+        - The price table is versioned. A price change must note the date it takes effect.
+
+    - path: "api/app/mcp/**"
+      instructions: |
+        The MCP server exposes tools and reads their results. Flag any tool that returns a number
+        without the observation it came from, and any client code that retries or reshapes a tool
+        result in a way that loses the evidence identifier.
+
+    - path: "api/tests/**"
+      instructions: |
+        - Tests must not be deleted, skipped or weakened to make a change pass. Flag removed
+          assertions, new skips, xfail without a linked issue, and narrower assertions that no
+          longer check the behaviour under test.
+        - Markers are part of the contract: unit tests run with `-m "not integration and not
+          network"`, integration tests use the local fixture site, network tests are local only.
+          Flag any test that reaches a third-party host without the network marker.
+        - Agent tests replay recorded observations; a test that needs a live LLM call is a defect.
+        - Prefer a fixture expectation in benchmark/fixtures/expected.json over a new inline
+          literal for a rule result.
+
+    - path: "api/migrations/**"
+      instructions: |
+        Applied migrations are immutable. Flag edits to an existing revision, and any downgrade
+        that drops data. New indexes, constraints or enum values on large tables need a note on
+        lock behaviour.
+
+    - path: "web/**"
+      instructions: |
+        Next.js app router. Function components, named exports, no classes, domain names over
+        framework names.
+        - Flag any client component that could be a server component, and any data fetch duplicated
+          between the report page and an API route.
+        - Numbers rendered in the report must come from the audit artifact; flag a computed or
+          formatted value that the API does not return.
+        - Empty and null denominators render as "not measured", never as 0.
+        - Formatting and linting belong to biome; do not suggest eslint or prettier rules.
+
+    - path: "rules/**"
+      instructions: |
+        The rule corpus is versioned through agent_version. A changed or added rule needs a fixture
+        expectation in benchmark/fixtures/expected.json in the same pull request; flag the change if
+        it is missing. Rule text must state the WCAG 2.2 success criterion or the RFC for headers,
+        not a paraphrase.
+
+    - path: "benchmark/**"
+      instructions: |
+        Gold labels are four severities with written definitions and one matching rule. Flag any
+        label edit without a note explaining the disagreement, any change to what counts as a gold
+        label, and any fixture that depends on a third-party website. CI uses the local fixture site
+        only.
+
+    - path: "infra/**"
+      instructions: |
+        - Egress limits, the SSRF guard and response size caps are not configurable per site. Flag
+          any compose change that widens network access, disables a healthcheck or publishes a port
+          beyond the local host.
+        - Flag secrets, tokens and captured pages in images, compose files or .env examples.
+        - Images must be pinned; flag `latest` and unpinned base images.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        CI runs against the local fixture site, never a third-party website. Flag any job that
+        reaches the public internet, any `--no-verify`, any skipped test, and any step that hides a
+        failure (continue-on-error, `|| true`). Lighthouse and other noisy measurements stay out of
+        merge gates.
+
+    - path: "**/*.md"
+      instructions: |
+        Prose is reviewed for contradictions with the code and with docs/PLAN.md, which is
+        authoritative on scope, metrics and phase order. Flag a change to commands or invariants
+        that does not update AGENTS.md and docs/PLAN.md in the same pull request. Do not rewrite
+        style, do not ask for a summary section, and keep Russian text in Russian.
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+      requirements: >-
+        Imperative mood, at most 72 characters, names the area it touches (api, web, infra, evals,
+        rules, docs). Example: "Add SSRF guard for cross-host redirects".
+    description:
+      mode: "warning"
+    issue_assessment:
+      mode: "warning"
+    custom_checks:
+      - name: "No fabricated evidence"
+        mode: "warning"
+        instructions: |
+          Fail if the diff can produce a finding without an observations row from the same audit,
+          or asserts a number (contrast ratio, timing, size, header value) that no observation
+          carries. Adding a finding, an agent output schema or an eval metric without its evidence
+          reference fails this check.
+      - name: "Tests not weakened"
+        mode: "warning"
+        instructions: |
+          Fail if the diff deletes or skips a test, removes an assertion, narrows an assertion so it
+          no longer covers the reported behaviour, or makes CI hide a failure, in order to make the
+          change pass.
+
+  tools:
+    ruff:
+      enabled: true
+      config_file: "api/pyproject.toml"
+    pylint:
+      enabled: false
+    flake8:
+      enabled: false
+    biome:
+      enabled: true
+    oxc:
+      enabled: false
+    eslint:
+      enabled: false
+    markdownlint:
+      enabled: true
+    languagetool:
+      enabled: false
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    hadolint:
+      enabled: true
+    checkov:
+      enabled: true
+    trivy:
+      enabled: true
+    dotenvLint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: false
+    squawk:
+      enabled: true
+    sqlfluff:
+      enabled: false
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/AGENTS.md"
+      - "docs/PLAN.md"
+  web_search:
+    enabled: true
