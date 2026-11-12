@@ -1,0 +1,17 @@
+{
+  "url": "http://localhost:8081/",
+  "page_key": "localhost",
+  "notes": "Nine planted defects, one per catalogued rule in api/app/rules/catalog.py.",
+  "rule_ids": [
+    "A11Y-BUTTON-NAME",
+    "A11Y-CONTRAST",
+    "A11Y-IMG-ALT",
+    "A11Y-LABEL",
+    "A11Y-LANG",
+    "A11Y-LINK-NAME",
+    "SEO-H1",
+    "SEO-META-DESC",
+    "SEO-TITLE"
+  ],
+  "blockers": ["A11Y-BUTTON-NAME", "A11Y-LABEL"]
+}

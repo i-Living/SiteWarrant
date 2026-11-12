@@ -1,0 +1,16 @@
+{
+  "files": {
+    "includes": ["app/**", "*.ts", "*.json", "!**/.next"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  }
+}

@@ -8,13 +8,14 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 
 ## Status
 
-**No code yet.** The repository currently holds the specification set only: this file,
-[README.md](README.md), [docs/PLAN.md](docs/PLAN.md), the original concept in [idea.md](idea.md) and the
-naming decision in [.agents/plans/2026-11-12-naming.md](.agents/plans/2026-11-12-naming.md).
+**Phase P0 is complete.** The repository holds a working vertical slice: one page in, one JSON report
+out, every finding citing a stored observation. `api/` has the FastAPI service, the Playwright capture,
+axe-core, the DOM probe and the rule engine; `web/` is a Next.js page that renders a stored report;
+`infra/` brings up Postgres, Redis and a fixture site with nine planted defects.
 
-The commands below are targets taken from `docs/PLAN.md` section 9. They become real in phase P0, which
-creates `api/`, `web/` and `infra/`. Until then, do not present them as working, and do not add a command
-to this file that has not been executed at least once.
+The commands below were executed at least once on 2026-11-12 and are annotated with the phase that
+makes them meaningful. Anything marked with a later phase does not work yet — do not present it as
+working, and do not add a command to this file that has not been run.
 
 ## Invariants
 
@@ -36,44 +37,46 @@ These are not style preferences. Breaking one silently invalidates the published
 
 ## Commands
 
-Targets, not verified commands. Phase in brackets says when each becomes real.
+Verified P0 commands, plus the ones that only work once their phase lands. Phase in brackets says when
+each becomes real; `verified` means it ran against this repository.
 
 ```bash
-# Infrastructure [P0]
-docker compose -f infra/docker-compose.yml up -d postgres redis fixtures
+# Infrastructure [P0, verified]
+docker compose -f infra/docker-compose.yml up -d --wait   # ports bound to 127.0.0.1
 
-# Backend [P0]
+# Backend [P0, verified]
 cd api && uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy app
-uv run pytest -q                      # unit and integration on fixtures, no network
-uv run pytest -q -m network           # real network, local only
+uv run pytest -q -m "not integration and not network"    # unit, no network, no database
+uv run pytest -q -m integration                           # database, fixture site, Chromium
 uv run alembic upgrade head
 
-# Audit [P0, agents added in P3]
-uv run sitewarrant audit https://example.com --max-pages 50 --out report.json
-uv run sitewarrant audit http://localhost:8080 --no-llm
-uv run sitewarrant crawl https://example.com --max-pages 50 --out pages.json
+# Audit [P0, verified]
+uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+uv run sitewarrant audit https://example.com --out report.json
+uv run sitewarrant audit https://example.com --ignore-robots --out report.json
+uv run sitewarrant version
 
-# Evals [P5] and re-audit [P6]
-uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
-uv run sitewarrant reaudit <audit_id> --against-report old.json
+# Not implemented yet, do not present as working
+# uv run sitewarrant crawl <url> --max-pages 50 --out pages.json    [P1]
+# uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json  [P5]
+# uv run sitewarrant reaudit <audit_id> --against-report old.json   [P6]
+# uv run sitewarrant-mcp                                            [P3]
 
-# MCP server [P3]
-uv run sitewarrant-mcp
-
-# Frontend [P0 skeleton, P4 report]
-cd web && bun install && bun run dev
+# Frontend [P0 stub verified]
+cd web && bun install
+bun run dev
 bun run build
-bunx biome check src
+bunx biome check .
 bunx tsc --noEmit
 
-# Single gate before a commit [P0]
+# Single gate before a commit [P0, verified]
 make check
 ```
 
-`make check` is the contract: ruff, mypy, pytest, biome and `tsc` in one command. If it does not exist
-yet, do not claim a change is verified.
+`make check` is the contract: ruff, mypy, pytest, biome and `tsc` in one command. It runs against the
+committed state of both apps; run it before claiming a change is verified.
 
 ## Review
 
@@ -84,20 +87,23 @@ the document wins. The configuration is read from the base branch, so it takes e
 
 ## Layout
 
+What exists today:
+
 ```
-api/app/api/       HTTP routes: create audit, status, report, feedback
-api/app/core/      config, database, tracing, price table
-api/app/crawl/     crawler, discovery, page-template clustering
-api/app/tools/     http_probe, dom_probe, axe, lighthouse, screenshot, occlusion, responsive
-api/app/agents/    eight auditors, chief auditor, prompts as separate files
-api/app/mcp/       MCP server and the orchestrator's MCP client
-api/app/evals/     matching, metrics, benchmark runner
-api/app/worker/    Redis queue, Playwright worker
-web/               Next.js report interface
-benchmark/         site manifest, gold labels, CI fixtures
-rules/             WCAG 2.2, SEO and HTTP security corpus plus the indexing script
-infra/             compose, images, egress limits
+api/app/api/       FastAPI app: health, create audit, fetch stored report
+api/app/core/      config, database engine, ORM models, report schema, agent_version, page_key
+api/app/rules/     catalog.py (what we claim) and engine.py (facts to findings)
+api/app/storage/   repository functions over the ORM
+api/app/tools/     axe, dom_probe, fetch (Playwright), guard (SSRF), robots; vendor/axe.min.js
+api/migrations/    Alembic environment and revisions
+api/tests/         unit tests and tests/integration (fixture site, database, browser)
+web/app/           Next.js report page
+benchmark/fixtures/  static site with planted defects, expected.json, robots.txt
+infra/             docker-compose: Postgres with pgvector, Redis, fixture site
 ```
+
+What later phases add: `api/app/crawl/`, `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`,
+`api/app/worker/`, `rules/` (the WCAG and header corpus).
 
 ## Code conventions
 
@@ -158,6 +164,19 @@ infra/             compose, images, egress limits
   rule, and a weekly re-read. Disagreements go into the label note instead of being averaged away.
 - **Scope is the real risk, not difficulty.** Eight directions plus evals in eighty hours is tight. If time
   runs out, cut P6 (fix diffs), never P5 (evals) — a platform without measured quality is a demo.
+- **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
+  `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
+  subcommand shape that `docs/PLAN.md` promises.
+- **The stdlib `robotparser` does not implement longest-match precedence.** `Allow: /` before
+  `Disallow: /private` allows everything, because the first matching rule wins. `app/tools/robots.py` uses
+  protego and `tests/test_robots.py` pins that case; do not "simplify" it back to the stdlib.
+- **`pytest-asyncio` gives each test its own event loop.** A pooled SQLAlchemy engine then hands a
+  connection from a dead loop to the next test and fails with "Event loop is closed". Tests set
+  `SITEWARRANT_DB_NULL_POOL=1`; do not remove it to make tests "faster".
+- **Playwright must run against a Chromium that exists.** `uv run playwright install chromium` is a
+  separate step from `uv sync`, and CI does it explicitly.
+- **Alembic autogenerate omits the `postgresql` import for JSONB columns.** The generated revision fails
+  with `NameError` until `from sqlalchemy.dialects import postgresql` is added.
 
 ## Where decisions live
 

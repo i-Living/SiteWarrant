@@ -3,10 +3,14 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: specification. There is no code yet.**
-> Every number in this repository today is a target or an estimate. Nothing here has been measured.
-> When the first eval run exists, its numbers replace the `null` values below and carry the date
-> and denominator of that run.
+> **Stage: phase P0 complete. The vertical slice runs; the platform does not exist yet.**
+> `sitewarrant audit <url>` crawls one page, runs axe-core and a DOM probe, and writes a JSON report
+> where every finding cites a stored observation. Crawling, the eight audit agents, root-cause
+> clustering, evals and re-audits are still ahead — see the phase table below.
+>
+> The quality metrics are `null`: there is no eval run yet, and no number here was produced by a
+> benchmark. The only measured facts in this repository are the fixture results described under
+> "Verification".
 
 ## The problem this solves
 
@@ -78,7 +82,7 @@ Planned for 8 weeks of evening work, roughly 80 hours. That is an estimate, not 
 
 | Phase | Weeks | Deliverable | State |
 | --- | --- | --- | --- |
-| P0 | 1 | repository skeleton, CLI, one page to one report | not started |
+| P0 | 1 | repository skeleton, CLI, one page to one report | **done** |
 | P1 | 1–2 | crawl, discovery, page templates | not started |
 | P2 | 2–3 | deterministic fact layer, three viewports | not started |
 | P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | not started |
@@ -96,7 +100,38 @@ Not a replacement for Lighthouse, Screaming Frog, Siteimprove, Semrush, BrowserS
 is the opposite direction: combining their measurements, interpreting them together, finding the shared
 cause, and verifying that a fix actually fixed something.
 
-## Planned layout
+## Quick start
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, Redis, fixture site
+cd api && uv sync && uv run alembic upgrade head
+uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+```
+
+The fixture site at `http://localhost:8081/` is a static page with nine defects planted on purpose,
+one per rule in `api/app/rules/catalog.py`. `--allow-private` is required because the request guard
+refuses loopback addresses by default; without the flag the audit exits with code 2.
+
+Exit codes: `0` no blocker, `1` a blocker was proven, `2` the audit itself failed.
+
+## Verification
+
+Measured on 2026-11-12 against the fixture site, agent `sha256:bad8b4ff6428d618` (axe-core 4.14.0,
+9 rules):
+
+- 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
+- Exit code `1`, because two blockers were proven.
+- Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
+  stored row — asserted by `tests/integration/test_audit_fixture.py`.
+- Two consecutive runs on the same page report the same rule set.
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 43 tests green (32 unit, 11 integration).
+- Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
+- `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
+  code 2 unless `--ignore-robots` is passed.
+
+This is a single page of nine known defects. It is not precision, not recall, and not a benchmark.
+
+## Layout
 
 ```
 api/          FastAPI service, crawler, audit tools, agents, evals, MCP server
@@ -109,8 +144,12 @@ docs/         PLAN.md, ENGINEERING_REPORT.md
 
 ## Requirements
 
-Planned: Python 3.12 with `uv`, Node 24 with `bun`, Docker and Docker Compose. Nothing is installable
-yet; the commands appear in [AGENTS.md](AGENTS.md) once phase P0 creates them.
+- Python 3.12 with [`uv`](https://docs.astral.sh/uv/)
+- [Bun](https://bun.sh/) for the web app
+- Docker with Compose, for Postgres, Redis and the fixture site
+- Chromium for Playwright: `cd api && uv run playwright install chromium`
+
+Full commands, including the single `make check` gate, are in [AGENTS.md](AGENTS.md).
 
 ## Documentation
 
