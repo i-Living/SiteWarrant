@@ -88,17 +88,19 @@ async def run_agents(
 
     runs: list[AgentRun] = []
     for name in names:
-        spec = spec_for(name)
-        llm = build_client(settings, name, observations=observations)
         started = time.monotonic()
         try:
+            # The client is built inside the boundary too: a broken cassette or a missing key
+            # is this agent's failure, not a reason to lose the audit's deterministic findings.
+            spec = spec_for(name)
+            llm = build_client(settings, name, observations=observations)
             async with McpToolProvider(str(audit_id)) as tools:
                 run = await run_agent(spec, llm=llm, tools=tools, observations=observations)
         except Exception as error:
             run = AgentRun(
                 name=name,
                 status="failed",
-                error=str(error)[:500],
+                error=describe_error(error),
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
         runs.append(run)

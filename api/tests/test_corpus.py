@@ -63,3 +63,16 @@ def test_the_digest_is_stable_across_reloads() -> None:
     corpus.entries.cache_clear()
     corpus._vectors.cache_clear()
     assert corpus.corpus_digest() == before
+
+
+def test_the_digest_covers_fields_beyond_the_text(monkeypatch) -> None:
+    """An edit to the citation channels or the criterion has to change the digest."""
+    original = corpus.entries()
+    before = corpus.corpus_digest()
+
+    changed = [entry.model_copy(deep=True) for entry in original]
+    target = next(entry for entry in changed if entry.kind == "claim")
+    target.observation_tools = (*target.observation_tools, "performance")
+
+    monkeypatch.setattr(corpus, "entries", lambda: tuple(changed))
+    assert corpus.corpus_digest() != before

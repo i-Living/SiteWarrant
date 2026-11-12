@@ -60,8 +60,10 @@ DEFAULT_BUDGET = AgentBudget()
 def parse_agent_names(value: str) -> list[str]:
     """Read `--agents seo,a11y` and `--agents all`, rejecting unknown names loudly."""
     names = [item.strip().lower() for item in value.split(",") if item.strip()]
-    if names == ["all"]:
+    if "all" in names:
         return list(SPECS)
+    # "a11y,a11y" is one agent: running it twice doubles the cost and the findings.
+    names = list(dict.fromkeys(names))
     unknown = [name for name in names if name not in SPECS]
     if unknown:
         raise ValueError(

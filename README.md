@@ -120,7 +120,7 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-12 against the fixture site, agent `sha256:49eab0d923783c84` (axe-core 4.14.0,
+Measured on 2026-11-12 against the fixture site, agent `sha256:3bfcede189fda5bf` (axe-core 4.14.0,
 9 rules):
 
 - 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
@@ -128,7 +128,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:49eab0d923783c84`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 212 tests green (181 unit, 31 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 226 tests green (193 unit, 33 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -153,7 +153,9 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:49eab0d923783c84`
   whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
 - A real run with `--agents a11y` against the fixture reported `a11y=ok(1)` — one finding citing
   WCAG 2.2 SC 2.5.8 with two evidence items — after the validator rejected one earlier attempt,
-  at 37 929 input and 3 646 output tokens in 40 s.
+  at 37 929 input and 3 646 output tokens in 40 s. With `--agents seo,a11y` the same fixture yields
+  17 findings: the nine deterministic ones, two from seo and six `A11Y-TARGET-SIZE` findings, one
+  per small target, each citing the viewports where it appears.
 - A failed agent does not fail the audit: the report carries `status: partial` and the deterministic
   findings stay. `tests/integration/test_agents_audit.py` pins both behaviours on cassettes.
 

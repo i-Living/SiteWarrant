@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from collections.abc import Mapping, Sequence
@@ -151,6 +152,8 @@ async def run_agent(
     rejected_seen: list[Rejection] = []
     warned = False
     warned_calls = 0
+    accepted_so_far: list[CandidateFinding] = []
+    seen_candidates: set[tuple[str, ...]] = set()
 
     def run(
         *,
@@ -172,8 +175,13 @@ async def run_agent(
             calls=calls,
         )
 
+    def remaining() -> float:
+        return spec.budget.timeout_s - (time.monotonic() - started)
+
     while True:
-        if time.monotonic() - started > spec.budget.timeout_s:
+        # The deadline covers the awaited work, not just the gap between calls: one slow
+        # model reply must not let the agent finish after its budget is gone.
+        if remaining() <= 0:
             return run(status="timeout", error=f"exceeded {spec.budget.timeout_s:.0f} s")
         # After the warning the token cap no longer stops the loop: the point of the warning
         # is to reserve room for the submission. The call count below is what bounds it.
@@ -208,7 +216,13 @@ async def run_agent(
             )
 
         try:
-            reply = await llm.complete(messages=messages, tools=schemas)
+            async with asyncio.timeout(remaining()):
+                reply = await llm.complete(messages=messages, tools=schemas)
+        except TimeoutError:
+            return run(
+                status="timeout",
+                error=f"exceeded {spec.budget.timeout_s:.0f} s waiting for the model",
+            )
         except LlmError as error:
             return run(status="llm_error", error=str(error)[:500])
         llm_calls += 1
@@ -267,7 +281,13 @@ async def run_agent(
                         error=f"exceeded {spec.budget.max_tool_calls} tool calls",
                     )
                 try:
-                    text = await tools.call(call.name, call.arguments)
+                    async with asyncio.timeout(max(remaining(), 0.1)):
+                        text = await tools.call(call.name, call.arguments)
+                except TimeoutError:
+                    return run(
+                        status="timeout",
+                        error=f"exceeded {spec.budget.timeout_s:.0f} s in tool {call.name}",
+                    )
                 except Exception as error:
                     text = f"tool {call.name} failed: {error}"
                 messages.append(tool_message(call.id, text))
@@ -280,8 +300,22 @@ async def run_agent(
                 continue
 
             result = validate_all(candidates, observations=observations, agent=spec.name)
+            # A retry usually resubmits only the rejected candidate, so accepted ones have to
+            # survive the round. Identical resubmissions are dropped; distinct findings that
+            # happen to share an observation are not, because that is the chief auditor's call.
+            for candidate in result.accepted:
+                key = (
+                    candidate.rule_id,
+                    candidate.title,
+                    candidate.summary,
+                    *(sorted(item.observation_id for item in candidate.evidence)),
+                )
+                if key in seen_candidates:
+                    continue
+                seen_candidates.add(key)
+                accepted_so_far.append(candidate)
             if result.rejected:
                 rejected_seen.extend(result.rejected)
                 messages.append(tool_message(call.id, rejection_text(result.rejected)))
                 continue
-            return run(status="ok", accepted=result.accepted)
+            return run(status="ok", accepted=accepted_so_far)

@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.agents.orchestrator import observation_index, run_agents
-from app.agents.specs import spec_for
+from app.agents.specs import parse_agent_names, spec_for
 from app.agents.validator import validate
 from app.core.config import get_settings
 from app.core.db import session_scope
@@ -276,6 +276,9 @@ async def run_audit(
     Agents and root causes arrive in later phases; this is the deterministic fact layer.
     """
     settings = get_settings()
+    # Resolve the names first: an unknown agent must fail before anything is written, not after
+    # the facts are committed and the audit has to be marked failed with no pages.
+    agent_names = parse_agent_names(",".join(agents)) if agents else []
     started = time.monotonic()
     allowed_private_hosts = settings.allowed_private_host_set
     if allow_private:
@@ -300,7 +303,7 @@ async def run_audit(
                 "tools": list(AUDIT_TOOLS),
                 "pages_limit": 1,
                 "robots": "ignored" if ignore_robots else "enforced",
-                "agents": list(agents),
+                "agents": agent_names,
             },
         )
         try:
@@ -381,11 +384,12 @@ async def run_audit(
             measured = measured_categories(MEASURED_TOOLS)
             agent_summaries: list[AgentSummaryOut] = []
             status = "completed"
-            if agents:
+            pages_committed = 1
+            if agent_names:
                 # The agents read the facts through a separate process, so the facts have to
                 # be committed before the MCP server can serve them.
                 await session.commit()
-                orchestration = await run_agents(audit_id, names=agents, settings=settings)
+                orchestration = await run_agents(audit_id, names=agent_names, settings=settings)
                 index = await observation_index(audit_id)
                 agent_drafts: list[FindingDraft] = []
                 for run in orchestration.runs:
@@ -446,7 +450,9 @@ async def run_audit(
                 session,
                 audit_id=audit_id,
                 status="failed",
-                pages_count=0,
+                # The facts may already be committed when a later step fails; the page count has
+                # to describe what is in the database, not what this call managed to finish.
+                pages_count=pages_committed if "pages_committed" in locals() else 0,
                 report_key=None,
                 error=str(error)[:2000],
             )

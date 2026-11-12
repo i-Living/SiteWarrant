@@ -26,6 +26,10 @@ Non-negotiable rules:
    reasons, fix the citation or the wording, and submit again.
 6. If the page is clean for your category, submit an empty list. An empty result is a valid
    answer; a padded report is not.
+7. When one observation supports several distinct findings (two small targets in one responsive
+   report), set `subject` to the element or URL each finding is about, copied from the
+   observation. A subject the observation does not contain does not distinguish anything: the
+   same claim filed twice is one finding, and the second copy is dropped.
 """
 
 
@@ -74,9 +78,14 @@ def user_prompt() -> str:
 
 
 def prompts_digest() -> str:
-    """Digest of every prompt file, so an edited prompt is a new agent version."""
-    payload = "\n".join(
+    """Digest of everything that reaches the model as instructions.
+
+    The Markdown briefs are only part of it: SHARED_RULES and user_prompt() are sent on every
+    call, so editing either has to change agent_version as well.
+    """
+    parts = [SHARED_RULES, user_prompt()]
+    parts.extend(
         f"{path.name}\t{path.read_text(encoding='utf-8')}"
         for path in sorted(PROMPT_DIR.glob("*.md"))
     )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]

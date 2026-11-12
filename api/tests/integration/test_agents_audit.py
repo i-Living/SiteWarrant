@@ -123,3 +123,29 @@ async def test_the_agent_can_reach_the_facts_over_mcp(cassette) -> None:
     index = await observation_index(uuid.UUID(report.audit_id))
     assert any(facts.tool == "contrast" for facts in index.values())
     assert any(facts.tool == "performance" for facts in index.values())
+
+
+async def test_an_unknown_agent_name_fails_before_anything_is_written(cassette) -> None:
+    """An unknown name must not leave a failed audit with committed facts and no page count."""
+    with pytest.raises(ValueError, match="unknown agent"):
+        await run_audit(URL, allow_private=True, agents=["nope"])
+
+
+async def test_a_broken_cassette_is_one_failed_agent_not_a_failed_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Client construction sits inside the per-agent boundary, so the audit still reports."""
+    broken = CASSETTES / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    try:
+        monkeypatch.setenv("SITEWARRANT_LLM_CASSETTE", str(broken))
+        get_settings.cache_clear()
+        report = await run_audit(URL, allow_private=True, agents=["a11y"])
+    finally:
+        broken.unlink(missing_ok=True)
+        monkeypatch.delenv("SITEWARRANT_LLM_CASSETTE", raising=False)
+        get_settings.cache_clear()
+
+    assert report.status == "partial"
+    assert report.summary.agents[0].status == "failed"
+    assert report.summary.findings_total >= 9

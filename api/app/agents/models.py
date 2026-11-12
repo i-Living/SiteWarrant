@@ -31,6 +31,9 @@ class CandidateFinding(BaseModel):
     suggested_fix: str = Field(max_length=600)
     impact: Impact = Field(default_factory=Impact)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    # What the finding is about (an element, a URL). Two findings may cite one observation —
+    # two small targets, one responsive report — and only a subject tells them apart.
+    subject: str | None = None
     evidence: list[EvidenceRef] = Field(min_length=1, max_length=10)
     criterion: str | None = Field(
         default=None, description="For accessibility findings: the WCAG criterion id."

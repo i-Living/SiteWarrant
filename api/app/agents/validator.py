@@ -5,6 +5,7 @@ from typing import Any
 
 from app.agents.models import (
     CandidateFinding,
+    EvidenceRef,
     ObservationFacts,
     Rejection,
     ValidationResult,
@@ -17,6 +18,8 @@ from app.rules.engine import EvidenceDraft, FindingDraft
 IDENTIFIER = re.compile(r"\b(?:WCAG|SC)\s*\d+(?:\.\d+)+\b|\b[A-Z][A-Z0-9]*(?:-[A-Z0-9.]+)+\b")
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 DECIMALS = re.compile(r"[.,](\d+)")
+# "1,000" is a thousand and "4,5" is four and a half; the comma means different things.
+GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+")
 # An agent that writes "nine images" is making the same claim as one that writes "9".
 NUMBER_WORDS: dict[str, int] = {
     "two": 2,
@@ -62,10 +65,15 @@ def claimed_numbers(text: str) -> list[str]:
     return found
 
 
+def to_float(text: str) -> float:
+    """Read a number the way its separator says it should be read."""
+    if GROUPED.fullmatch(text):
+        return float(text.replace(",", ""))
+    return float(text.replace(",", "."))
+
+
 def payload_numbers(payload: dict[str, Any]) -> list[float]:
-    return [
-        float(match.group(0).replace(",", ".")) for match in NUMBER.finditer(json.dumps(payload))
-    ]
+    return [to_float(match.group(0)) for match in NUMBER.finditer(json.dumps(payload))]
 
 
 def number_is_corroborated(claimed: str, observed: Sequence[float]) -> bool:
@@ -76,8 +84,8 @@ def number_is_corroborated(claimed: str, observed: Sequence[float]) -> bool:
     what the agent asserted. Rounding the other way — making the observation fit the claim —
     is exactly the move the validator exists to stop.
     """
-    value = float(claimed.replace(",", "."))
-    decimals = DECIMALS.search(claimed)
+    value = to_float(claimed)
+    decimals = None if GROUPED.fullmatch(claimed) else DECIMALS.search(claimed)
     places = len(decimals.group(1)) if decimals else 0
     return any(round(observed_value, places) == round(value, places) for observed_value in observed)
 
@@ -108,7 +116,7 @@ def validate(
             f"{candidate.severity} would soften it"
         )
 
-    cited: list[ObservationFacts] = []
+    cited: list[tuple[EvidenceRef, ObservationFacts]] = []
     for evidence in candidate.evidence:
         facts = observations.get(evidence.observation_id)
         if facts is None:
@@ -120,15 +128,15 @@ def validate(
                 f"observation {evidence.observation_id} comes from {facts.tool}"
             )
             continue
-        cited.append(facts)
+        cited.append((evidence, facts))
 
     if not cited and not reasons:
         reasons.append("no citable observation survived the checks")
 
     # The numbers a citation can support: the payload, and the viewport the observation was
     # taken at ("390x844" is where the measurement happened, so 390 and 844 are facts too).
-    observed = [number for facts in cited for number in payload_numbers(facts.payload)]
-    for facts in cited:
+    observed = [number for _, facts in cited for number in payload_numbers(facts.payload)]
+    for _, facts in cited:
         if facts.viewport:
             observed.extend(payload_numbers({"viewport": facts.viewport}))
 
@@ -136,7 +144,7 @@ def validate(
     # Repeating a rule is not asserting a measurement, so those are allowed anywhere in the
     # finding; a number that is neither measured nor part of the claim is still rejected.
     constants = [
-        float(value.replace(",", "."))
+        to_float(value)
         for value in claimed_numbers(" ".join([claim.title, claim.body, claim.suggested_fix or ""]))
     ]
     supported = observed + constants
@@ -144,6 +152,20 @@ def validate(
         for claimed in claimed_numbers(text):
             if not number_is_corroborated(claimed, supported):
                 reasons.append(f"number {claimed} is not in the cited observations")
+
+    # An excerpt is copied into the report as the observation's own words, so every number in
+    # it has to come from that observation, not from a different one cited alongside it.
+    for evidence, facts in cited:
+        if not evidence.excerpt:
+            continue
+        own = payload_numbers(facts.payload)
+        if facts.viewport:
+            own.extend(payload_numbers({"viewport": facts.viewport}))
+        for claimed in claimed_numbers(evidence.excerpt):
+            if not number_is_corroborated(claimed, own + constants):
+                reasons.append(
+                    f"excerpt number {claimed} is not in observation {evidence.observation_id}"
+                )
 
     if candidate.category == "a11y":
         if candidate.criterion is None:
@@ -184,18 +206,36 @@ def validate(
     return draft, None
 
 
+def finding_identity(candidate: CandidateFinding, observations: ObservationIndex) -> str:
+    """What the finding is about: a subject the evidence contains, or the evidence itself."""
+    subject = (candidate.subject or "").strip().lower()
+    if subject:
+        cited = " ".join(
+            json.dumps(observations[item.observation_id].payload, ensure_ascii=False).lower()
+            for item in candidate.evidence
+            if item.observation_id in observations
+        )
+        if subject in cited:
+            return subject
+    return "|".join(sorted(item.observation_id for item in candidate.evidence))
+
+
 def validate_all(
     candidates: Sequence[CandidateFinding], *, observations: ObservationIndex, agent: str
 ) -> ValidationResult:
     accepted: list[CandidateFinding] = []
     rejected: list[Rejection] = []
-    seen: set[tuple[str, tuple[str, ...]]] = set()
+    seen: set[tuple[str, str]] = set()
     for candidate in candidates:
         _draft, rejection = validate(candidate, observations=observations, agent=agent)
         if rejection is not None:
             rejected.append(rejection)
             continue
-        key = (candidate.rule_id, tuple(sorted(item.observation_id for item in candidate.evidence)))
+        # The same claim about the same thing is one finding, not two: an agent that files it
+        # twice in one submission would double the score. Two findings on one observation are
+        # still allowed, but only when the subject is a value the observation actually contains
+        # — an invented subject distinguishes nothing. Deduplication across agents is P4.
+        key = (candidate.rule_id, finding_identity(candidate, observations))
         if key in seen:
             continue
         seen.add(key)

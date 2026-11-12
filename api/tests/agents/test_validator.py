@@ -236,10 +236,122 @@ def test_a_criterion_that_does_not_match_the_claim_is_rejected() -> None:
     assert any("rests on WCAG-1.4.3" in reason for reason in rejection.reasons)
 
 
-def test_duplicate_candidates_are_stored_once() -> None:
+def test_two_findings_on_one_observation_both_survive() -> None:
+    """One responsive observation can list two targets; both are findings.
+
+    Suppressing by (rule, observation) would silently drop the second one. Deduplication
+    across agents is the chief auditor's job, not the validator's.
+    """
+    first = candidate(
+        rule_id="A11Y-TARGET-SIZE",
+        category="a11y",
+        severity="major",
+        title="Header link is smaller than the minimum target",
+        summary="The header link measures 16 by 20 pixels at this viewport.",
+        suggested_fix="Increase the target to at least 24 by 24 CSS pixels.",
+        criterion="WCAG-2.5.8",
+        evidence=[EvidenceRef(observation_id=RESPONSIVE_ID, kind="responsive")],
+    )
+    second = first.model_copy(
+        update={
+            "title": "Footer link is smaller than the minimum target",
+            "subject": "footer:nth-of-type(1) > a:nth-of-type(1)",
+        }
+    )
+    first = first.model_copy(update={"subject": "header:nth-of-type(1) > a:nth-of-type(1)"})
+    result = validate_all([first, second], observations=observations(), agent="a11y")
+    assert len(result.accepted) == 2
+    assert result.rejected == []
+
+
+def test_the_same_claim_about_the_same_subject_is_one_finding() -> None:
+    """Filing one claim twice would double the score, so the second copy is dropped."""
+    result = validate_all(
+        [candidate(subject="canonical: null"), candidate(subject="Canonical: Null ")],
+        observations=observations(),
+        agent="seo",
+    )
+    assert len(result.accepted) == 1
+
+
+def test_an_invented_subject_does_not_split_a_finding() -> None:
+    """A subject the evidence does not contain distinguishes nothing, so the claim is one."""
+    result = validate_all(
+        [
+            candidate(subject="the meta description tag"),
+            candidate(subject="the description meta tag"),
+        ],
+        observations=observations(),
+        agent="seo",
+    )
+    assert len(result.accepted) == 1
+
+
+def test_without_a_subject_the_cited_evidence_is_the_identity() -> None:
     result = validate_all([candidate(), candidate()], observations=observations(), agent="seo")
     assert len(result.accepted) == 1
-    assert result.rejected == []
+
+
+def test_a_grouped_thousands_separator_is_not_a_decimal() -> None:
+    """'1,000 pages' is a thousand; reading it as 1.0 would let h1_count=1 corroborate it."""
+    draft, rejection = validate(
+        candidate(
+            title="The site has 1,000 pages without a canonical URL",
+            summary="The DOM snapshot declares no canonical URL.",
+            suggested_fix="Add a canonical link pointing at the preferred URL.",
+        ),
+        observations=observations(),
+        agent="seo",
+    )
+    assert draft is None
+    assert rejection is not None
+    assert any("number 1,000" in reason for reason in rejection.reasons)
+    assert number_is_corroborated("1,000", [1000.0])
+    assert not number_is_corroborated("1,000", [1.0])
+
+
+def test_an_excerpt_number_must_come_from_its_own_observation() -> None:
+    """An excerpt is copied into the report as the observation's words, so it is checked."""
+    draft, rejection = validate(
+        candidate(
+            title="Page declares no canonical URL",
+            summary="The DOM snapshot has no canonical link.",
+            suggested_fix="Add a canonical link pointing at the preferred URL.",
+            evidence=[
+                EvidenceRef(
+                    observation_id=DOM_ID,
+                    kind="dom",
+                    excerpt="images_total: 47, images_missing_alt: 3",
+                )
+            ],
+        ),
+        observations=observations(),
+        agent="seo",
+    )
+    assert draft is None
+    assert rejection is not None
+    assert any("excerpt number 47" in reason for reason in rejection.reasons)
+
+
+def test_an_excerpt_with_real_numbers_passes() -> None:
+    draft, rejection = validate(
+        candidate(
+            title="Page declares no canonical URL",
+            summary="The DOM snapshot has no canonical link.",
+            suggested_fix="Add a canonical link pointing at the preferred URL.",
+            evidence=[
+                EvidenceRef(
+                    observation_id=DOM_ID,
+                    kind="dom",
+                    excerpt="images_total: 12, images_missing_alt: 3",
+                )
+            ],
+        ),
+        observations=observations(),
+        agent="seo",
+    )
+    assert rejection is None, rejection.reasons if rejection else None
+    assert draft is not None
 
 
 def test_a_standard_constant_in_the_summary_is_not_a_measurement() -> None:

@@ -181,6 +181,8 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Commit the facts before the agents run.** The MCP server is a separate process and reads only
   committed rows, so an agent started inside the audit's open transaction sees an empty audit.
   `run_audit` commits before `run_agents`; without that the agent fails with an empty audit.
+- **`mcp>=2.0` is a real floor, not a preference.** `Client` is not exported from `mcp.client` in
+  1.9, and the server uses `MCPServer`; the pin is what keeps a fresh install working.
 - **MCP 2.x renamed things.** The server class is `MCPServer` (`mcp.server.mcpserver`), `FastMCP`
   is gone, and the tool schema field is `input_schema` on the model while OpenAI clients expect
   `inputSchema`. `app/mcp/client.py` reads both.
@@ -193,6 +195,10 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
+- **Both destructive downgrades ask for the flag.** The P3 downgrade drops `llm_calls`, which
+  cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.
+- **Agent names are resolved before anything is written.** An unknown name raises before the
+  audit row exists, so a failed audit never claims zero pages while its facts are committed.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
@@ -211,6 +217,20 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **The agent budget is 12 tool calls, 60k tokens and 90 s**, and the loop warns at 70 % of the
   tokens: after the warning a read is refused and the only way forward is `submit_findings`. Without
   that, a thorough agent reads until the budget dies and contributes nothing.
+- **An agent's failure is the agent's, never the audit's.** Client construction, the MCP
+  subprocess and the conversation all sit inside the per-agent boundary; a broken cassette or a
+  missing key yields one `failed` run and a `partial` report with the deterministic findings.
+- **The deadline covers awaited work.** Each model call and each tool call runs under
+  `asyncio.timeout` with the time the agent has left, so a slow reply cannot end the agent after
+  its budget in `ok`.
+- **Accepted findings survive a rejected sibling.** A retry usually resubmits only the candidate
+  that failed validation, so accepted candidates are kept across rounds; identical resubmissions
+  are dropped by their text and evidence.
+- **`subject` is what makes two findings on one observation distinct.** Two small targets in one
+  responsive report are two findings, so the candidate carries what it is about; without a subject
+  the cited evidence is the identity, and the same claim twice in one submission is one finding.
+- **An excerpt is evidence, so its numbers are checked** against the observation it names — not
+  against the union of everything the finding cites.
 - **The validator is the only path from a candidate to a finding.** An agent proposes; the
   validator checks the claim exists in the corpus, the category matches, severity is not lowered,
   every cited observation belongs to this audit, the channel is allowed for that claim, and every

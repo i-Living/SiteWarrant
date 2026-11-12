@@ -202,8 +202,13 @@ def search(query: str, *, limit: int = 4, kinds: Iterable[str] | None = None) ->
 
 
 def corpus_digest() -> str:
-    """Digest of the corpus text, part of agent_version."""
+    """Digest of every field of every entry, part of agent_version.
+
+    A digest over a few fields would let an edit to the citation channels, the criterion or the
+    suggested fix leave agent_version unchanged, and the index stale with it.
+    """
     payload = "\n".join(
-        f"{entry.id}\t{entry.title}\t{entry.body}\t{entry.severity or ''}" for entry in entries()
+        json.dumps(entry.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+        for entry in entries()
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

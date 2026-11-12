@@ -4,6 +4,7 @@ Revision ID: 4b7c1f9d2a10
 Revises: 91e29cb856c4
 Create Date: 2026-11-12 21:10:00.000000
 """
+import os
 
 from collections.abc import Sequence
 
@@ -72,9 +73,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Drop the corpus and the call log.
 
-    Nothing else references these tables, so the rollback is safe: the corpus is regenerated
-    from rules/claims.jsonl and the call log is a record of runs that no longer exist.
+    The corpus is regenerated from rules/claims.jsonl, but the call log is not: it is the only
+    record of what the agents spent, so dropping it is destructive and needs an explicit flag.
     """
+    if os.environ.get("SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE") != "1":
+        raise RuntimeError(
+            "downgrade drops llm_calls, which cannot be regenerated; "
+            "set SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1 to proceed"
+        )
     op.drop_index("ix_llm_calls_audit_id", table_name="llm_calls")
     op.drop_table("llm_calls")
     op.drop_table("rules")

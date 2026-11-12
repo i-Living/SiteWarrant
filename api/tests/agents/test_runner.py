@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from pathlib import Path
@@ -308,3 +309,54 @@ async def test_a_read_after_the_warning_is_refused(tmp_path: Path) -> None:
         if message.get("role") == "tool" and "refused" in str(message.get("content"))
     ]
     assert refusals, "the model must be told why its read did not happen"
+
+
+async def test_accepted_findings_survive_a_rejected_sibling(tmp_path: Path) -> None:
+    """A retry resubmits only the rejected candidate; the valid one must not be lost."""
+    valid = {
+        "rule_id": "SEO-CANONICAL",
+        "category": "seo",
+        "severity": "minor",
+        "title": "Page declares no canonical URL",
+        "summary": "The DOM snapshot has no canonical link.",
+        "suggested_fix": "Add a canonical link pointing at the preferred URL.",
+        "impact": {"seo": 2},
+        "confidence": 0.9,
+        "evidence": [{"observation_id": DOM_ID, "kind": "dom"}],
+    }
+    fabricated = {**valid, "title": "Page declares 900 canonical URLs"}
+    llm = cassette(
+        tmp_path,
+        [
+            reply(tool_calls=[submit("c1", [valid, fabricated])]),
+            reply(tool_calls=[submit("c2", [valid])]),
+        ],
+    )
+    run = await run_agent(spec(), llm=llm, tools=FakeTools(), observations=observations())
+
+    assert run.status == "ok"
+    assert [candidate.rule_id for candidate in run.accepted] == ["SEO-CANONICAL"]
+    assert len(run.rejected) == 1
+
+
+class SlowLlm:
+    """A client that answers, but only after the agent's deadline has passed."""
+
+    def __init__(self, delay_s: float) -> None:
+        self.delay_s = delay_s
+
+    async def complete(self, *, messages, tools):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(self.delay_s)
+        return reply(tool_calls=[submit("c1", [])])
+
+
+async def test_a_slow_reply_hits_the_deadline() -> None:
+    """The deadline covers awaited work, not just the gap between calls."""
+    run = await run_agent(
+        spec(budget=AgentBudget(timeout_s=0.05)),
+        llm=SlowLlm(0.5),
+        tools=FakeTools(),
+        observations=observations(),
+    )
+    assert run.status == "timeout"
+    assert "waiting for the model" in (run.error or "")
