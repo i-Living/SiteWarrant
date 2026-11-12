@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #16181d;
+  background: #f7f7f5;
+}
+
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.meta,
+.rule {
+  color: #5b6270;
+  font-size: 0.875rem;
+}
+
+.severities {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.findings {
+  padding: 0;
+  list-style: none;
+}
+
+.findings li {
+  border-left: 3px solid #c9ccd2;
+  padding: 0.5rem 0 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.findings li[data-severity="blocker"] {
+  border-color: #b42318;
+}
+
+.findings li[data-severity="major"] {
+  border-color: #b54708;
+}
+
+pre {
+  overflow-x: auto;
+  background: #ececea;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+}

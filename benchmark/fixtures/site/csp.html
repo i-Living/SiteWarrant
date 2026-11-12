@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Strict script policy: an injected inline <script> element is rejected here,
+         while Runtime.evaluate still works. Pins the axe injection method. -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'" />
+    <title>Northwind — strict CSP page</title>
+    <meta name="description" content="A page whose CSP forbids inline scripts." />
+  </head>
+  <body>
+    <header><a href="/">Northwind</a></header>
+    <main>
+      <h1>Strict policy page</h1>
+      <p>Only one defect here, so a finding proves axe ran under this policy.</p>
+      <img src="logo.png" />
+      <a href="/contact">Contact the studio</a>
+    </main>
+    <footer><p>Northwind, 2026</p></footer>
+  </body>
+</html>

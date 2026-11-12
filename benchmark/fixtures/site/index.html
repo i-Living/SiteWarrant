@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Planted defect: no <title> element, so document.title is empty. -->
+    <!-- Planted defect: no meta[name="description"]. -->
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; color: #1b1b1b; background: #ffffff; }
+      .site-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #dcdcdc; }
+      .brand { color: #1b1b1b; font-weight: 600; text-decoration: none; }
+      main { padding: 24px; max-width: 720px; }
+      .lede { color: #333333; font-size: 1.125rem; }
+      /* Planted defect: contrast ratio of this grey on white is about 2.6:1. */
+      .muted { color: #9aa0a6; }
+      form { display: flex; gap: 8px; margin-top: 12px; }
+      input, button { font-size: 1rem; padding: 8px 12px; }
+      footer { padding: 24px; color: #555555; border-top: 1px solid #dcdcdc; }
+    </style>
+  </head>
+  <body>
+    <!-- Planted defect: html has no lang attribute. -->
+    <header class="site-header">
+      <a class="brand" href="/">Northwind</a>
+      <a class="icon-link" href="/about">
+        <!-- Planted defect: the only content is an aria-hidden svg, so the link has no name. -->
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" />
+        </svg>
+      </a>
+    </header>
+
+    <main>
+      <!-- Planted defect: the page headline is an h2, there is no h1. -->
+      <h2>Field notes from the coast</h2>
+      <p class="lede">A small studio documenting the shoreline in prints and notebooks.</p>
+      <p class="muted">Prices start at 40 EUR per print, framed and shipped.</p>
+
+      <!-- Planted defect: this image has no alt attribute. -->
+      <img src="logo.png" />
+
+      <section>
+        <h2>Join the list</h2>
+        <!-- Planted defect: the email field has no label and no aria-label. -->
+        <form action="/subscribe" method="post">
+          <input type="email" name="email" required />
+          <button type="submit">Subscribe</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>Elsewhere</h2>
+        <!-- Planted defect: icon-only button with no accessible name. -->
+        <button type="button">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <rect width="16" height="16" fill="currentColor" />
+          </svg>
+        </button>
+        <!-- Clean: an image with alt text. -->
+        <img src="logo.png" alt="Northwind print on a table" />
+        <!-- Clean: a link with text. -->
+        <a href="/contact">Contact the studio</a>
+      </section>
+    </main>
+
+    <footer>
+      <p>Northwind, 2026</p>
+    </footer>
+  </body>
+</html>

@@ -239,22 +239,30 @@ docs/             PLAN.md, ENGINEERING_REPORT.md
 ## 9. Команды
 
 ```bash
-# Поднять зависимости
-docker compose -f infra/docker-compose.yml up -d postgres redis fixtures
+# Поднять зависимости. Порты привязаны к 127.0.0.1; фикстура на 8081, потому что 8080
+# на машине разработки занят другим сервисом.
+docker compose -f infra/docker-compose.yml up -d --wait
 
 # Backend
 cd api && uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy app
-uv run pytest -q                      # unit + integration на фикстурах, без сети
-uv run pytest -q -m network           # тесты против реальной сети, только локально
+uv run pytest -q -m "not integration and not network"   # unit, без сети и БД
+uv run pytest -q -m integration                          # БД + фикстура + Chromium
 uv run alembic upgrade head
-uv run sitewarrant audit https://example.com --max-pages 50 --out report.json
-uv run sitewarrant audit http://localhost:8080 --no-llm          # детерминированный слой
-uv run sitewarrant crawl https://example.com --max-pages 50 --out pages.json
-uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
-uv run sitewarrant reaudit <audit_id> --against-report old.json
-uv run sitewarrant-mcp                # MCP-сервер, stdio
+
+# Аудит одной страницы (P0). Без --allow-private гейт SSRF отклонит localhost.
+# --allow-private освобождает только проверяемый хост: редирект с него на приватный адрес всё равно режется.
+uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+uv run sitewarrant audit https://example.com --out report.json
+uv run sitewarrant audit https://example.com --ignore-robots --out report.json
+uv run sitewarrant version
+
+# Дальше — команды будущих фаз, сейчас их нет:
+# uv run sitewarrant crawl https://example.com --max-pages 50 --out pages.json   [P1]
+# uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json        [P5]
+# uv run sitewarrant reaudit <audit_id> --against-report old.json                [P6]
+# uv run sitewarrant-mcp                                                          [P3]
 
 # Frontend
 cd web && bun install
@@ -323,19 +331,28 @@ export const groupByRootCause = (findings: Finding[]): RootCauseGroup[] =>
 
 Восемь фаз; каждая заканчивается работающим срезом от URL до отчёта, а не слоем «на будущее».
 
-### P0 — каркас и вертикальный срез (неделя 1)
+### P0 — каркас и вертикальный срез (неделя 1) — **выполнено 2026-11-12**
 
 Репозиторий, `README.md`, `AGENTS.md`, CI, docker-compose, Postgres+pgvector. CLI `sitewarrant audit`:
 URL → одна страница → axe → находки по правилам → `report.json`.
 
+Что фактически сделано: 9 правил в каталоге (6 от axe, 3 от DOM-пробы), гейт SSRF на каждом запросе
+браузера через CDP Fetch — включая каждый редирект, с закреплением IP проверенного хоста; robots.txt
+соблюдается по умолчанию (RFC 9309: 4xx — нет правил, 5xx и сеть — отказ, редиректы до 3 с проверкой
+каждого шага), флаг `--ignore-robots`; Alembic-миграция на 6 таблиц с отказом от разрушительного
+downgrade без явного подтверждения; 46 unit-тестов и 13 интеграционных на фикстуре; CI из трёх job'ов.
+Фикстура на порту 8081 (8080 занят на машине разработки), порты привязаны к `127.0.0.1`.
+
 - Acceptance: на фикстуре находит все заложенные дефекты своей выборки, `blocker` даёт exit code 1.
-- Verify: `docker compose -f infra/docker-compose.yml up -d && cd api && uv run sitewarrant audit http://localhost:8080 --out /tmp/r.json && jq '.findings | length' /tmp/r.json`
+  Подтверждено: 9 находок (`blocker=2 major=6 minor=1`), exit code 1, agent `sha256:4aa361ad4176c48c`.
+- Verify: `docker compose -f infra/docker-compose.yml up -d --wait && cd api && uv run alembic upgrade head && uv run sitewarrant audit http://localhost:8081/ --allow-private --out /tmp/r.json && jq '.summary.findings_total' /tmp/r.json`
 - Files: `api/`, `web/` (заглушка), `infra/`, `.github/workflows/ci.yml`, `README.md`, `AGENTS.md`
 
 ### P1 — обход и обнаружение (неделя 1–2)
 
-BFS с лимитами, robots.txt, sitemap.xml, JS-рендеринг при пустом теле, кластеризация шаблонов,
-лимит «2 страницы на шаблон».
+BFS с лимитами, sitemap.xml, JS-рендеринг при пустом теле, кластеризация шаблонов,
+лимит «2 страницы на шаблон». Robots.txt уже соблюдается в P0 для одной страницы; в P1 он
+распространяется на обход и каждый редирект.
 
 - Acceptance: сайт на 50 страниц даёт список шаблонов и покрытие в отчёте; на фикстуре с 3 шаблонами
   выбрано ≤2 страниц на шаблон.
