@@ -57,6 +57,8 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.jso
 uv run sitewarrant audit https://example.com --out report.json
 uv run sitewarrant audit https://example.com --ignore-robots --out report.json
 uv run sitewarrant version
+uv run sitewarrant index-rules                        # corpus into Postgres (pgvector)
+uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --out report.json
 
 # Crawl [P1, verified]
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
@@ -101,8 +103,10 @@ api/app/storage/   repository functions over the ORM
 api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
                    performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
 api/migrations/    Alembic environment and revisions
-api/tests/         unit tests (math, thresholds, merge), tests/crawl (in-memory sites) and
-                   tests/integration (fixture site, database, browser, three viewports)
+api/tests/         unit tests (math, thresholds, merge, validator, runner on cassettes),
+                   tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
+                   and tests/integration (fixture site, database, browser, MCP, agents)
+rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
 web/app/           Next.js report page
 benchmark/fixtures/  static site with planted defects, expected.json, robots.txt, sitemap.xml
 infra/             docker-compose: Postgres with pgvector, Redis, fixture site
@@ -174,6 +178,36 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   `390x844,768x1024,1440x900`, mobile first. Discovery renders at the first entry, so the viewport
   that decides which pages are found is inside the hashed set — there is no second viewport setting. Comparing two agent versions needs identical conditions, so
   a per-site viewport would make the comparison meaningless.
+- **Commit the facts before the agents run.** The MCP server is a separate process and reads only
+  committed rows, so an agent started inside the audit's open transaction sees an empty audit.
+  `run_audit` commits before `run_agents`; without that the agent fails with an empty audit.
+- **`mcp>=2.0` is a real floor, not a preference.** `Client` is not exported from `mcp.client` in
+  1.9, and the server uses `MCPServer`; the pin is what keeps a fresh install working.
+- **MCP 2.x renamed things.** The server class is `MCPServer` (`mcp.server.mcpserver`), `FastMCP`
+  is gone, and the tool schema field is `input_schema` on the model while OpenAI clients expect
+  `inputSchema`. `app/mcp/client.py` reads both.
+- **The model gateway is not a plain OpenAI endpoint.** Cloudflare answers 1010 to a request with
+  no User-Agent, the Go plan requires an `x-opencode-session` header on every call, and the base URL
+  is `https://opencode.ai/zen/go/v1`. `deepseek-v4.1-flash` does support tool calling.
+- **Cassettes cannot contain observation ids**, because ids are generated per audit. A cassette
+  writes `{{first:contrast_violation}}` and `CassetteClient` substitutes the first id of that channel
+  or kind in the audit under test; a missing channel fails the call instead of inventing an id. A
+  cassette is also a fixed conversation: if the loop needs one more exchange than was recorded, the
+  run ends with `llm_error` naming the cassette, which is how a validator change shows up as a test
+  failure instead of a silent pass.
+- **Grouped numbers can carry decimals**: `1,000.50` is one token, the comma groups and the dot
+  is the decimal point; `to_float` strips commas before parsing, and the claimed precision comes
+  from the part after the dot.
+- **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
+  constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
+  allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
+- **Both destructive downgrades ask for the flag.** The P3 one also documents how to keep the call
+  log: `pg_dump --data-only --table=llm_calls` before the downgrade, restore after re-upgrade. The P3 downgrade drops `llm_calls`, which
+  cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.
+- **`pages_count` becomes 1 only after a commit persisted the page.** The failure handler reports
+  what is in the database, so a run that dies before the commit says 0 and one that dies after says 1.
+- **Agent names are resolved before anything is written.** An unknown name raises before the
+  audit row exists, so a failed audit never claims zero pages while its facts are committed.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
@@ -189,6 +223,41 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
   against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
   fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
+- **The agent budget is 12 tool calls, 60k tokens and 180 s**, and the loop warns at 70 % of the
+  tokens: after the warning a read is refused and the only way forward is `submit_findings`. Without
+  that, a thorough agent reads until the budget dies and contributes nothing. The token number is a
+  warning threshold, not a hard cap: two more calls are allowed past it so the submission fits, which
+  is why a real a11y run can report ~92k input tokens. The deadline is a real cap on awaited work and
+  has to stay above the client's own `SITEWARRANT_LLM_TIMEOUT_S` (120 s), or it preempts it.
+- **An agent's failure is the agent's, never the audit's.** Client construction, the MCP
+  subprocess and the conversation all sit inside the per-agent boundary; a broken cassette or a
+  missing key yields one `failed` run and a `partial` report with the deterministic findings.
+- **The deadline covers awaited work.** Loading the tool schemas, each model call and each tool call
+  run under `asyncio.timeout` with the time the agent has left, and a call that would start with no
+  time left is a timeout instead of a 100 ms grant. A slow reply cannot end the agent after its
+  budget in `ok`.
+- **Accepted findings survive a rejected sibling.** A retry usually resubmits only the candidate
+  that failed validation, so accepted candidates are kept across rounds; identical resubmissions
+  are dropped by their text and evidence.
+- **`evidence.kind` must name the channel** (`dom`, `contrast`, …) or the stored observation kind
+  (`contrast_violation`); a DOM observation labelled `axe` is rejected, because the kind is copied
+  into the report.
+- **A subject must be a string *value* from the payload, never a field name.** `canonical` is a
+  key, so it distinguishes nothing and the copies collapse; a selector or a URL does distinguish.
+- **`subject` is what makes two findings on one observation distinct.** Two small targets in one
+  responsive report are two findings, so the candidate carries what it is about; without a subject
+  the cited evidence is the identity, and the same claim twice in one submission is one finding.
+- **An excerpt is evidence, so its numbers are checked** against the observation it names — not
+  against the union of everything the finding cites, and not against the claim's constants: "24 by
+  24 pixels" is the rule, and a quote that contains it is a fabricated measurement.
+- **The validator is the only path from a candidate to a finding.** An agent proposes; the
+  validator checks the claim exists in the corpus, the category matches, severity is not lowered,
+  every cited observation belongs to this audit, the channel is allowed for that claim, and every
+  number in the text is either in a cited payload, in the cited observation's viewport, or a
+  constant from the claim itself. Rejected candidates go back to the
+  model with reasons, which is how the loop fixes itself.
+- **Prompts, the corpus and the model id are in `agent_version`.** A different brief or a
+  different model is a different agent, and its numbers are not comparable with the old one.
 - **A channel must report that it ran, even with nothing to report.** Each tool writes a run
   observation (`axe_run`, `contrast_run`) next to its findings. Without it, "the tool found nothing"
   and "the tool never executed" look identical in the database, and the report would score a category

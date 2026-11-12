@@ -1,0 +1,56 @@
+{
+  "model": "deepseek-v4.1-flash",
+  "note": "Recorded exchange: the first submission invents an observation id, the second cites the contrast channel.",
+  "interactions": [
+    {
+      "response": {
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "tool_calls",
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_a11y_fabricated",
+                  "type": "function",
+                  "function": {
+                    "name": "submit_findings",
+                    "arguments": "{\"findings\":[{\"rule_id\":\"A11Y-TEXT-CONTRAST-ALPHA\",\"category\":\"a11y\",\"severity\":\"major\",\"title\":\"Translucent text falls below the contrast minimum\",\"summary\":\"The measured pair uses alpha and the composited colour is below the threshold for its size.\",\"suggested_fix\":\"Raise the text opacity until the composited pair reaches the threshold.\",\"impact\":{\"ux\":2},\"confidence\":0.8,\"criterion\":\"WCAG-1.4.3\",\"evidence\":[{\"observation_id\":\"00000000-0000-0000-0000-000000000000\",\"kind\":\"contrast_violation\"}]}]}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {"prompt_tokens": 2050, "completion_tokens": 190}
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "tool_calls",
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_a11y_fixed",
+                  "type": "function",
+                  "function": {
+                    "name": "submit_findings",
+                    "arguments": "{\"findings\":[{\"rule_id\":\"A11Y-TEXT-CONTRAST-ALPHA\",\"category\":\"a11y\",\"severity\":\"major\",\"title\":\"Translucent text falls below the contrast minimum\",\"summary\":\"The measured pair uses alpha and the composited colour is below the threshold for its size.\",\"suggested_fix\":\"Raise the text opacity until the composited pair reaches the threshold.\",\"impact\":{\"ux\":2},\"confidence\":0.8,\"criterion\":\"WCAG-1.4.3\",\"evidence\":[{\"observation_id\":\"{{first:contrast_violation}}\",\"kind\":\"contrast_violation\"}]}]}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "usage": {"prompt_tokens": 2400, "completion_tokens": 200}
+      }
+    }
+  ]
+}

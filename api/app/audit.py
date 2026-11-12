@@ -1,14 +1,26 @@
 import asyncio
 import time
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from app.agents.orchestrator import observation_index, run_agents
+from app.agents.specs import parse_agent_names, spec_for
+from app.agents.validator import validate
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.core.report import EvidenceOut, FindingOut, ImpactOut, Report, build_report
+from app.core.report import (
+    AgentSummaryOut,
+    EvidenceOut,
+    FindingOut,
+    ImpactOut,
+    Report,
+    build_report,
+)
 from app.core.urls import page_key
 from app.core.version import AUDIT_TOOLS, compute_agent_version
+from app.rules import corpus
 from app.rules.catalog import RULES
 from app.rules.engine import FindingDraft, NewObservation, draft_findings
 from app.storage import repo
@@ -173,6 +185,10 @@ def measured_categories(tools_ran: set[str]) -> set[str]:
 def to_finding_out(
     finding_id: uuid.UUID, draft: FindingDraft, page_url: str, key: str
 ) -> FindingOut:
+    criterion = corpus.claim_by_id(draft.rule_id)
+    criterion_entry = (
+        corpus.criterion_by_id(criterion.wcag) if criterion and criterion.wcag else None
+    )
     return FindingOut(
         id=str(finding_id),
         rule_id=draft.rule_id,
@@ -190,6 +206,8 @@ def to_finding_out(
         agent=draft.agent,
         page_url=page_url,
         page_key=key,
+        criterion=criterion_entry.id if criterion_entry else None,
+        criterion_title=criterion_entry.title if criterion_entry else None,
         evidence=[
             EvidenceOut(kind=item.kind, observation_id=item.observation_id, excerpt=item.excerpt)
             for item in draft.evidence
@@ -247,13 +265,20 @@ def store_artifacts(
 
 
 async def run_audit(
-    url: str, *, allow_private: bool = False, ignore_robots: bool = False
+    url: str,
+    *,
+    allow_private: bool = False,
+    ignore_robots: bool = False,
+    agents: Sequence[str] = (),
 ) -> Report:
     """Audit one page at every configured viewport: facts first, findings from facts.
 
     Agents and root causes arrive in later phases; this is the deterministic fact layer.
     """
     settings = get_settings()
+    # Resolve the names first: an unknown agent must fail before anything is written, not after
+    # the facts are committed and the audit has to be marked failed with no pages.
+    agent_names = parse_agent_names(",".join(agents)) if agents else []
     started = time.monotonic()
     allowed_private_hosts = settings.allowed_private_host_set
     if allow_private:
@@ -266,6 +291,7 @@ async def run_audit(
         page_timeout_ms=settings.page_timeout_ms,
         capture_timeout_ms=settings.capture_timeout_ms,
         user_agent=settings.user_agent,
+        llm_model=settings.llm_model,
     )
     async with session_scope() as session:
         audit_id = await repo.create_audit(
@@ -277,6 +303,7 @@ async def run_audit(
                 "tools": list(AUDIT_TOOLS),
                 "pages_limit": 1,
                 "robots": "ignored" if ignore_robots else "enforced",
+                "agents": agent_names,
             },
         )
         try:
@@ -354,22 +381,65 @@ async def run_audit(
                 observations_by_tool[observation.tool] = (
                     observations_by_tool.get(observation.tool, 0) + 1
                 )
+            measured = measured_categories(MEASURED_TOOLS)
+            agent_summaries: list[AgentSummaryOut] = []
+            status = "completed"
+            pages_committed = 0
+            if agent_names:
+                # The agents read the facts through a separate process, so the facts have to
+                # be committed before the MCP server can serve them.
+                await session.commit()
+                pages_committed = 1
+                orchestration = await run_agents(audit_id, names=agent_names, settings=settings)
+                index = await observation_index(audit_id)
+                agent_drafts: list[FindingDraft] = []
+                for run in orchestration.runs:
+                    for candidate in run.accepted:
+                        draft, _ = validate(candidate, observations=index, agent=run.name)
+                        if draft is not None:
+                            agent_drafts.append(draft)
+                    if run.status == "ok":
+                        measured.add(spec_for(run.name).category)
+                    agent_summaries.append(
+                        AgentSummaryOut(
+                            name=run.name,
+                            status=run.status,
+                            findings=len(run.accepted),
+                            rejected=len(run.rejected),
+                            tool_calls=run.tool_calls,
+                            llm_calls=run.llm_calls,
+                            tokens_in=run.tokens_in,
+                            tokens_out=run.tokens_out,
+                            latency_ms=run.latency_ms,
+                            error=run.error,
+                        )
+                    )
+                if agent_drafts:
+                    stored_agents = await repo.save_findings(
+                        session, audit_id=audit_id, page_id=page_id, drafts=agent_drafts
+                    )
+                    findings.extend(
+                        to_finding_out(finding_id, draft, capture.url, key)
+                        for finding_id, draft in stored_agents
+                    )
+                status = orchestration.status
             report = build_report(
                 audit_id=str(audit_id),
                 site=url,
                 agent_version=agent_version,
-                status="completed",
+                status=status,
                 findings=findings,
                 pages_audited=1,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                measured_categories=measured_categories(MEASURED_TOOLS),
+                measured_categories=measured,
                 observations_by_tool=observations_by_tool,
+                agents=agent_summaries,
             )
             report_key = write_artifact(audit_id, "report.json", report.model_dump_json(indent=2))
             await repo.finish_audit(
                 session,
                 audit_id=audit_id,
-                status="completed",
+                status=report.status,
                 pages_count=1,
                 report_key=report_key,
             )
@@ -381,7 +451,9 @@ async def run_audit(
                 session,
                 audit_id=audit_id,
                 status="failed",
-                pages_count=0,
+                # The facts may already be committed when a later step fails; the page count has
+                # to describe what is in the database, not what this call managed to finish.
+                pages_count=pages_committed if "pages_committed" in locals() else 0,
                 report_key=None,
                 error=str(error)[:2000],
             )

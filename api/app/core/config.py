@@ -50,6 +50,28 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SITEWARRANT_CAPTURE_TIMEOUT_MS", "capture_timeout_ms"),
     )
     user_agent: str = "SiteWarrant/0.1 (+https://github.com/i-Living/SiteWarrant)"
+    llm_base_url: str = Field(
+        default="https://opencode.ai/zen/go/v1",
+        validation_alias=AliasChoices("SITEWARRANT_LLM_BASE_URL", "llm_base_url"),
+    )
+    llm_model: str = Field(
+        default="deepseek-v4.1-flash",
+        validation_alias=AliasChoices("SITEWARRANT_LLM_MODEL", "llm_model"),
+    )
+    llm_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "SITEWARRANT_LLM_API_KEY", "OPENCODE_GO_API_KEY", "llm_api_key"
+        ),
+    )
+    llm_cassette: str = Field(
+        default="",
+        validation_alias=AliasChoices("SITEWARRANT_LLM_CASSETTE", "llm_cassette"),
+    )
+    llm_timeout_s: float = Field(
+        default=120.0,
+        validation_alias=AliasChoices("SITEWARRANT_LLM_TIMEOUT_S", "llm_timeout_s"),
+    )
 
     @property
     def viewport_list(self) -> tuple[str, ...]:
@@ -60,6 +82,11 @@ class Settings(BaseSettings):
         """
         parsed = tuple(item.strip() for item in self.viewports.split(",") if item.strip())
         return parsed or ("1440x900",)
+
+    @property
+    def llm_cassette_path(self) -> Path:
+        """Where a recorded conversation lives; tests replay it instead of calling a model."""
+        return Path(self.llm_cassette)
 
     @property
     def allowed_private_host_set(self) -> frozenset[str]:

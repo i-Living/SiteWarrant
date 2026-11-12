@@ -6,7 +6,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import Audit, Finding, FindingEvidence, Observation, Page, Snapshot
+from app.core.models import (
+    Audit,
+    Finding,
+    FindingEvidence,
+    LlmCall,
+    Observation,
+    Page,
+    Snapshot,
+)
 from app.rules.engine import FindingDraft, NewObservation
 
 
@@ -150,3 +158,31 @@ async def finish_audit(
 async def get_audit(session: AsyncSession, audit_id: uuid.UUID) -> Audit | None:
     result = await session.execute(select(Audit).where(Audit.id == audit_id))
     return result.scalar_one_or_none()
+
+
+async def save_llm_calls(
+    session: AsyncSession, *, audit_id: uuid.UUID, run: Any, model: str
+) -> None:
+    """One row per model call, from the per-call stats the runner kept."""
+    for stat in run.calls:
+        session.add(
+            LlmCall(
+                audit_id=audit_id,
+                agent=run.name,
+                model=model,
+                tokens_in=stat.tokens_in,
+                tokens_out=stat.tokens_out,
+                latency_ms=stat.latency_ms,
+            )
+        )
+
+
+async def add_audit_usage(
+    session: AsyncSession, *, audit_id: uuid.UUID, tokens_in: int, tokens_out: int, llm_calls: int
+) -> None:
+    audit = await session.get(Audit, audit_id)
+    if audit is None:
+        return
+    audit.tokens_in += tokens_in
+    audit.tokens_out += tokens_out
+    audit.llm_calls += llm_calls

@@ -1,7 +1,9 @@
 import hashlib
 import json
 
+from app.agents.prompts import prompts_digest
 from app.crawl.version import crawl_digest
+from app.rules import corpus
 from app.rules.catalog import RULES
 from app.tools import contrast, dom_probe, occlusion, performance, responsive
 from app.tools.axe import AXE_VERSION
@@ -28,13 +30,14 @@ def compute_agent_version(
     page_timeout_ms: int,
     capture_timeout_ms: int,
     user_agent: str,
+    llm_model: str = "",
 ) -> str:
     """Hash of everything that changes what an audit claims.
 
     The user agent matters because a site can serve different HTML to different agents, the
     probe digests matter because a change to a probe changes the facts a finding rests on,
-    and the crawl digest matters because discovery decides which pages are audited at all.
-    Prompts, models and the rule corpus join this payload in P3 and P4.
+    the crawl digest matters because discovery decides which pages are audited at all, and the
+    prompts, the rule corpus and the model id decide what the agents claim.
     """
     payload = {
         "rules": [rule.model_dump(mode="json") for rule in RULES],
@@ -47,6 +50,9 @@ def compute_agent_version(
             "performance": probe_digest(performance.INIT_SCRIPT + performance.PROBE_SCRIPT),
         },
         "crawl": crawl_digest(),
+        "corpus": corpus.corpus_digest(),
+        "prompts": prompts_digest(),
+        "llm_model": llm_model,
         "viewports": list(viewports),
         "page_timeout_ms": page_timeout_ms,
         "capture_timeout_ms": capture_timeout_ms,
