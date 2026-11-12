@@ -384,11 +384,12 @@ async def run_audit(
             measured = measured_categories(MEASURED_TOOLS)
             agent_summaries: list[AgentSummaryOut] = []
             status = "completed"
-            pages_committed = 1
+            pages_committed = 0
             if agent_names:
                 # The agents read the facts through a separate process, so the facts have to
                 # be committed before the MCP server can serve them.
                 await session.commit()
+                pages_committed = 1
                 orchestration = await run_agents(audit_id, names=agent_names, settings=settings)
                 index = await observation_index(audit_id)
                 agent_drafts: list[FindingDraft] = []

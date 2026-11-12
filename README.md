@@ -128,7 +128,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:77ad5403f8fe400f`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 230 tests green (197 unit, 33 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 237 tests green (202 unit, 35 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -154,7 +154,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:77ad5403f8fe400f`
 - A real run with `--agents a11y` against the fixture reported `a11y=ok(1)` — one finding citing
   WCAG 2.2 SC 2.5.8 with two evidence items — after the validator rejected one earlier attempt,
   at 37 929 input and 3 646 output tokens in 40 s. With `--agents seo,a11y` the same fixture yields
-  19 findings: the nine deterministic ones, three from seo and seven `A11Y-TARGET-SIZE` findings, one
+  18 findings: the nine deterministic ones, three from seo and six `A11Y-TARGET-SIZE` findings, one
   per small target, each citing the viewports where it appears and distinguished by its `subject`.
 - A failed agent does not fail the audit: the report carries `status: partial` and the deterministic
   findings stay. `tests/integration/test_agents_audit.py` pins both behaviours on cassettes.

@@ -140,9 +140,6 @@ async def run_agent(
         {"role": "system", "content": system_prompt(spec, facts_digest=digest)},
         {"role": "user", "content": user_prompt()},
     ]
-    schemas = await tools.schemas(spec.tools)
-    schemas.append(SUBMIT_FINDINGS_TOOL)
-
     tool_calls = 0
     tokens_in = 0
     tokens_out = 0
@@ -177,6 +174,17 @@ async def run_agent(
 
     def remaining() -> float:
         return spec.budget.timeout_s - (time.monotonic() - started)
+
+    # Loading the tool schemas is awaited work like any other and is bounded the same way.
+    try:
+        async with asyncio.timeout(spec.budget.timeout_s):
+            schemas = await tools.schemas(spec.tools)
+    except TimeoutError:
+        return run(
+            status="timeout",
+            error=f"exceeded {spec.budget.timeout_s:.0f} s loading tool schemas",
+        )
+    schemas.append(SUBMIT_FINDINGS_TOOL)
 
     while True:
         # The deadline covers the awaited work, not just the gap between calls: one slow
@@ -280,8 +288,13 @@ async def run_agent(
                         status="budget_exhausted",
                         error=f"exceeded {spec.budget.max_tool_calls} tool calls",
                     )
+                if remaining() <= 0:
+                    return run(
+                        status="timeout",
+                        error=f"exceeded {spec.budget.timeout_s:.0f} s before tool {call.name}",
+                    )
                 try:
-                    async with asyncio.timeout(max(remaining(), 0.1)):
+                    async with asyncio.timeout(remaining()):
                         text = await tools.call(call.name, call.arguments)
                 except TimeoutError:
                     return run(

@@ -75,6 +75,14 @@ def downgrade() -> None:
 
     The corpus is regenerated from rules/claims.jsonl, but the call log is not: it is the only
     record of what the agents spent, so dropping it is destructive and needs an explicit flag.
+
+    Rollback plan that keeps the history: dump the table first and restore it after the next
+    upgrade recreates it, which is enough because the rows have no dependencies outside the audit.
+
+        pg_dump --data-only --table=llm_calls sitewarrant > llm_calls.dump
+        SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1 alembic downgrade 91e29cb856c4
+        alembic upgrade 4b7c1f9d2a10
+        psql sitewarrant < llm_calls.dump
     """
     if os.environ.get("SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE") != "1":
         raise RuntimeError(

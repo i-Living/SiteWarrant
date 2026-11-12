@@ -362,30 +362,93 @@ async def test_a_slow_reply_hits_the_deadline() -> None:
     assert "waiting for the model" in (run.error or "")
 
 
+RESPONSIVE_ID = str(uuid.uuid4())
+
+
+def responsive_observations() -> dict[str, ObservationFacts]:
+    return {
+        RESPONSIVE_ID: ObservationFacts(
+            tool="responsive",
+            kind="responsive_report",
+            viewport="390x844",
+            payload={
+                "viewport_width": 390,
+                "small_targets": [
+                    {"selector": "header > a.cta", "width_px": 16.0, "height_px": 20.0},
+                    {"selector": "footer > a.legal", "width_px": 12.0, "height_px": 12.0},
+                ],
+            },
+        )
+    }
+
+
 async def test_two_targets_survive_a_retry(tmp_path: Path) -> None:
     """The retry dedupe must not drop a second target that shares the rule and the wording."""
     base = {
-        "rule_id": "SEO-CANONICAL",
-        "category": "seo",
-        "severity": "minor",
-        "title": "Page declares no canonical URL",
-        "summary": "The DOM snapshot has no canonical link.",
-        "suggested_fix": "Add a canonical link pointing at the preferred URL.",
-        "impact": {"seo": 2},
-        "confidence": 0.9,
-        "evidence": [{"observation_id": DOM_ID, "kind": "dom"}],
+        "rule_id": "A11Y-TARGET-SIZE",
+        "category": "a11y",
+        "severity": "major",
+        "title": "Interactive target is smaller than the minimum",
+        "summary": "The measured target is below the minimum for its viewport.",
+        "suggested_fix": "Increase the target to at least 24 by 24 CSS pixels.",
+        "impact": {"ux": 2},
+        "confidence": 0.8,
+        "criterion": "WCAG-2.5.8",
+        "evidence": [{"observation_id": RESPONSIVE_ID, "kind": "responsive"}],
     }
-    first = {**base, "subject": "canonical"}
-    second = {**base, "subject": "meta_description"}
-    fabricated = {**base, "title": "Page declares 900 canonical URLs"}
+    header = {**base, "subject": "header > a.cta"}
+    footer = {**base, "subject": "footer > a.legal"}
+    fabricated = {**base, "title": "Interactive target is 9000 pixels wide"}
     llm = cassette(
         tmp_path,
         [
-            reply(tool_calls=[submit("c1", [first, fabricated])]),
-            reply(tool_calls=[submit("c2", [first, second])]),
+            reply(tool_calls=[submit("c1", [header, fabricated])]),
+            reply(tool_calls=[submit("c2", [header, footer])]),
         ],
     )
-    run = await run_agent(spec(), llm=llm, tools=FakeTools(), observations=observations())
+    run = await run_agent(
+        spec(), llm=llm, tools=FakeTools(), observations=responsive_observations()
+    )
 
     assert run.status == "ok"
     assert len(run.accepted) == 2, [candidate.subject for candidate in run.accepted]
+
+
+class SlowSchemasTools(FakeTools):
+    async def schemas(self, names):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(0.5)
+        return await super().schemas(names)
+
+
+class NeverCalledLlm:
+    async def complete(self, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("the model must not be called before the schemas load")
+
+
+async def test_slow_tool_schema_loading_hits_the_deadline() -> None:
+    run = await run_agent(
+        spec(budget=AgentBudget(timeout_s=0.05)),
+        llm=NeverCalledLlm(),
+        tools=SlowSchemasTools(),
+        observations=observations(),
+    )
+    assert run.status == "timeout"
+    assert "tool schemas" in (run.error or "")
+
+
+class SlowCallTools(FakeTools):
+    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+        await asyncio.sleep(0.5)
+        return await super().call(name, arguments)
+
+
+async def test_a_slow_tool_call_hits_the_deadline(tmp_path: Path) -> None:
+    llm = cassette(tmp_path, [reply(tool_calls=[fetch("c1")])])
+    run = await run_agent(
+        spec(budget=AgentBudget(timeout_s=0.2)),
+        llm=llm,
+        tools=SlowCallTools(),
+        observations=observations(),
+    )
+    assert run.status == "timeout"
+    assert "in tool" in (run.error or "")

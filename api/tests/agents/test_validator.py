@@ -433,3 +433,46 @@ def test_evidence_kind_must_match_the_cited_observation() -> None:
     assert draft is None
     assert rejection is not None
     assert any("evidence kind axe does not match" in reason for reason in rejection.reasons)
+
+
+def test_a_subject_that_is_only_a_field_name_does_not_split_a_finding() -> None:
+    """'canonical' is a key in the payload, not a target: two copies stay one finding."""
+    result = validate_all(
+        [candidate(subject="canonical"), candidate(subject="meta_description")],
+        observations=observations(),
+        agent="seo",
+    )
+    assert len(result.accepted) == 1
+
+
+def test_a_grouped_million_is_one_number() -> None:
+    assert claimed_numbers("1,000,000 pages") == ["1,000,000"]
+    assert not number_is_corroborated("1,000,000", [1000.0, 0.0])
+    assert number_is_corroborated("1,000,000", [1_000_000.0])
+
+
+def test_an_excerpt_cannot_borrow_a_standard_constant() -> None:
+    """'target measures 24 by 24 pixels' is a fabricated measurement, not a citation."""
+    draft, rejection = validate(
+        candidate(
+            rule_id="A11Y-TARGET-SIZE",
+            category="a11y",
+            severity="major",
+            title="Interactive target is smaller than the minimum",
+            summary="The measured target is below the minimum for its viewport.",
+            suggested_fix="Increase the target to at least 24 by 24 CSS pixels.",
+            criterion="WCAG-2.5.8",
+            evidence=[
+                EvidenceRef(
+                    observation_id=RESPONSIVE_ID,
+                    kind="responsive",
+                    excerpt="target measures 24 by 24 pixels",
+                )
+            ],
+        ),
+        observations=observations(),
+        agent="a11y",
+    )
+    assert draft is None
+    assert rejection is not None
+    assert any("excerpt number" in reason for reason in rejection.reasons)

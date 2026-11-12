@@ -16,7 +16,8 @@ from app.rules.engine import EvidenceDraft, FindingDraft
 
 # A claim id or a criterion id contains digits, and those digits are not measurements.
 IDENTIFIER = re.compile(r"\b(?:WCAG|SC)\s*\d+(?:\.\d+)+\b|\b[A-Z][A-Z0-9]*(?:-[A-Z0-9.]+)+\b")
-NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+# Grouped thousands first: "1,000,000" is one number, not "1,000" and "000".
+NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
 DECIMALS = re.compile(r"[.,](\d+)")
 # "1,000" is a thousand and "4,5" is four and a half; the comma means different things.
 GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+")
@@ -169,8 +170,10 @@ def validate(
         own = payload_numbers(facts.payload)
         if facts.viewport:
             own.extend(payload_numbers({"viewport": facts.viewport}))
+        # No claim constants here: an excerpt says what the observation measured, and "24 by 24
+        # pixels" is the rule, not a measurement of this page.
         for claimed in claimed_numbers(evidence.excerpt):
-            if not number_is_corroborated(claimed, own + constants):
+            if not number_is_corroborated(claimed, own):
                 reasons.append(
                     f"excerpt number {claimed} is not in observation {evidence.observation_id}"
                 )
@@ -214,12 +217,27 @@ def validate(
     return draft, None
 
 
+def string_leaves(value: Any) -> list[str]:
+    """Every string value in a payload, without the keys.
+
+    Keys are not facts: "canonical" is a field name, and a subject that only matches a field
+    name would split one defect into two findings.
+    """
+    if isinstance(value, str):
+        return [value.lower()]
+    if isinstance(value, dict):
+        return [leaf for item in value.values() for leaf in string_leaves(item)]
+    if isinstance(value, (list, tuple)):
+        return [leaf for item in value for leaf in string_leaves(item)]
+    return []
+
+
 def finding_identity(candidate: CandidateFinding, observations: ObservationIndex) -> str:
     """What the finding is about: a subject the evidence contains, or the evidence itself."""
     subject = (candidate.subject or "").strip().lower()
     if subject:
         cited = " ".join(
-            json.dumps(observations[item.observation_id].payload, ensure_ascii=False).lower()
+            " ".join(string_leaves(observations[item.observation_id].payload))
             for item in candidate.evidence
             if item.observation_id in observations
         )

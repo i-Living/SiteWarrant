@@ -149,3 +149,43 @@ async def test_a_broken_cassette_is_one_failed_agent_not_a_failed_audit(
     assert report.status == "partial"
     assert report.summary.agents[0].status == "failed"
     assert report.summary.findings_total >= 9
+
+
+async def test_a_failure_before_the_facts_commit_records_no_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing was persisted, so the failed audit must not claim a page."""
+
+    async def failing_capture(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("capture exploded")
+
+    monkeypatch.setattr("app.audit.capture_page", failing_capture)
+    with pytest.raises(RuntimeError, match="capture exploded"):
+        await run_audit(URL, allow_private=True)
+
+    async with session_scope() as session:
+        audit = (
+            await session.execute(select(Audit).order_by(Audit.started_at.desc()).limit(1))
+        ).scalar_one()
+        assert audit.status == "failed"
+        assert audit.pages_count == 0
+
+
+async def test_a_failure_after_the_facts_commit_records_the_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The facts are in the database; a count of zero would describe a state that is not there."""
+
+    async def failing_agents(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("agents exploded")
+
+    monkeypatch.setattr("app.audit.run_agents", failing_agents)
+    with pytest.raises(RuntimeError, match="agents exploded"):
+        await run_audit(URL, allow_private=True, agents=["a11y"])
+
+    async with session_scope() as session:
+        audit = (
+            await session.execute(select(Audit).order_by(Audit.started_at.desc()).limit(1))
+        ).scalar_one()
+        assert audit.status == "failed"
+        assert audit.pages_count == 1

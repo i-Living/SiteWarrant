@@ -198,8 +198,11 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
-- **Both destructive downgrades ask for the flag.** The P3 downgrade drops `llm_calls`, which
+- **Both destructive downgrades ask for the flag.** The P3 one also documents how to keep the call
+  log: `pg_dump --data-only --table=llm_calls` before the downgrade, restore after re-upgrade. The P3 downgrade drops `llm_calls`, which
   cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.
+- **`pages_count` becomes 1 only after a commit persisted the page.** The failure handler reports
+  what is in the database, so a run that dies before the commit says 0 and one that dies after says 1.
 - **Agent names are resolved before anything is written.** An unknown name raises before the
   audit row exists, so a failed audit never claims zero pages while its facts are committed.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
@@ -226,20 +229,24 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **An agent's failure is the agent's, never the audit's.** Client construction, the MCP
   subprocess and the conversation all sit inside the per-agent boundary; a broken cassette or a
   missing key yields one `failed` run and a `partial` report with the deterministic findings.
-- **The deadline covers awaited work.** Each model call and each tool call runs under
-  `asyncio.timeout` with the time the agent has left, so a slow reply cannot end the agent after
-  its budget in `ok`.
+- **The deadline covers awaited work.** Loading the tool schemas, each model call and each tool call
+  run under `asyncio.timeout` with the time the agent has left, and a call that would start with no
+  time left is a timeout instead of a 100 ms grant. A slow reply cannot end the agent after its
+  budget in `ok`.
 - **Accepted findings survive a rejected sibling.** A retry usually resubmits only the candidate
   that failed validation, so accepted candidates are kept across rounds; identical resubmissions
   are dropped by their text and evidence.
 - **`evidence.kind` must name the channel** (`dom`, `contrast`, …) or the stored observation kind
   (`contrast_violation`); a DOM observation labelled `axe` is rejected, because the kind is copied
   into the report.
+- **A subject must be a string *value* from the payload, never a field name.** `canonical` is a
+  key, so it distinguishes nothing and the copies collapse; a selector or a URL does distinguish.
 - **`subject` is what makes two findings on one observation distinct.** Two small targets in one
   responsive report are two findings, so the candidate carries what it is about; without a subject
   the cited evidence is the identity, and the same claim twice in one submission is one finding.
 - **An excerpt is evidence, so its numbers are checked** against the observation it names — not
-  against the union of everything the finding cites.
+  against the union of everything the finding cites, and not against the claim's constants: "24 by
+  24 pixels" is the rule, and a quote that contains it is a fabricated measurement.
 - **The validator is the only path from a candidate to a finding.** An agent proposes; the
   validator checks the claim exists in the corpus, the category matches, severity is not lowered,
   every cited observation belongs to this audit, the channel is allowed for that claim, and every
