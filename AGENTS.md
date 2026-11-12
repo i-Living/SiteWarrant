@@ -190,8 +190,11 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   no User-Agent, the Go plan requires an `x-opencode-session` header on every call, and the base URL
   is `https://opencode.ai/zen/go/v1`. `deepseek-v4.1-flash` does support tool calling.
 - **Cassettes cannot contain observation ids**, because ids are generated per audit. A cassette
-  writes `{{first:contrast}}` and `CassetteClient` substitutes the first id of that channel in the
-  audit under test; a missing channel fails the call instead of inventing an id.
+  writes `{{first:contrast_violation}}` and `CassetteClient` substitutes the first id of that channel
+  or kind in the audit under test; a missing channel fails the call instead of inventing an id. A
+  cassette is also a fixed conversation: if the loop needs one more exchange than was recorded, the
+  run ends with `llm_error` naming the cassette, which is how a validator change shows up as a test
+  failure instead of a silent pass.
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
@@ -214,9 +217,12 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
   against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
   fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
-- **The agent budget is 12 tool calls, 60k tokens and 90 s**, and the loop warns at 70 % of the
+- **The agent budget is 12 tool calls, 60k tokens and 180 s**, and the loop warns at 70 % of the
   tokens: after the warning a read is refused and the only way forward is `submit_findings`. Without
-  that, a thorough agent reads until the budget dies and contributes nothing.
+  that, a thorough agent reads until the budget dies and contributes nothing. The token number is a
+  warning threshold, not a hard cap: two more calls are allowed past it so the submission fits, which
+  is why a real a11y run can report ~92k input tokens. The deadline is a real cap on awaited work and
+  has to stay above the client's own `SITEWARRANT_LLM_TIMEOUT_S` (120 s), or it preempts it.
 - **An agent's failure is the agent's, never the audit's.** Client construction, the MCP
   subprocess and the conversation all sit inside the per-agent boundary; a broken cassette or a
   missing key yields one `failed` run and a `partial` report with the deterministic findings.
@@ -226,6 +232,9 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Accepted findings survive a rejected sibling.** A retry usually resubmits only the candidate
   that failed validation, so accepted candidates are kept across rounds; identical resubmissions
   are dropped by their text and evidence.
+- **`evidence.kind` must name the channel** (`dom`, `contrast`, …) or the stored observation kind
+  (`contrast_violation`); a DOM observation labelled `axe` is rejected, because the kind is copied
+  into the report.
 - **`subject` is what makes two findings on one observation distinct.** Two small targets in one
   responsive report are two findings, so the candidate carries what it is about; without a subject
   the cited evidence is the identity, and the same claim twice in one submission is one finding.

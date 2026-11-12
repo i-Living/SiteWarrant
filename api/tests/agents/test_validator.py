@@ -411,3 +411,25 @@ def test_a_number_that_is_neither_measured_nor_in_the_claim_is_rejected() -> Non
     assert draft is None
     assert rejection is not None
     assert any("number 17" in reason for reason in rejection.reasons)
+
+
+def test_the_stored_observation_kind_is_also_accepted() -> None:
+    draft, rejection = validate(
+        candidate(evidence=[EvidenceRef(observation_id=DOM_ID, kind="dom_snapshot")]),
+        observations=observations(),
+        agent="seo",
+    )
+    assert rejection is None, rejection.reasons if rejection else None
+    assert draft is not None
+
+
+def test_evidence_kind_must_match_the_cited_observation() -> None:
+    """A DOM observation cited as 'axe' would put a false channel in the report."""
+    draft, rejection = validate(
+        candidate(evidence=[EvidenceRef(observation_id=DOM_ID, kind="axe")]),
+        observations=observations(),
+        agent="seo",
+    )
+    assert draft is None
+    assert rejection is not None
+    assert any("evidence kind axe does not match" in reason for reason in rejection.reasons)

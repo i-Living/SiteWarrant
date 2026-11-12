@@ -17,7 +17,7 @@ from app.agents.models import (
     Rejection,
 )
 from app.agents.prompts import system_prompt, user_prompt
-from app.agents.validator import validate_all
+from app.agents.validator import finding_identity, validate_all
 
 MAX_TOOL_RESULT_CHARS = 2500
 BUDGET_WARNING_SHARE = 0.7
@@ -153,7 +153,7 @@ async def run_agent(
     warned = False
     warned_calls = 0
     accepted_so_far: list[CandidateFinding] = []
-    seen_candidates: set[tuple[str, ...]] = set()
+    seen_candidates: set[tuple[str, str]] = set()
 
     def run(
         *,
@@ -304,12 +304,9 @@ async def run_agent(
             # survive the round. Identical resubmissions are dropped; distinct findings that
             # happen to share an observation are not, because that is the chief auditor's call.
             for candidate in result.accepted:
-                key = (
-                    candidate.rule_id,
-                    candidate.title,
-                    candidate.summary,
-                    *(sorted(item.observation_id for item in candidate.evidence)),
-                )
+                # Same identity rule as the validator: a subject the evidence contains, or the
+                # evidence itself. Two distinct targets keep both findings across retries.
+                key = (candidate.rule_id, finding_identity(candidate, observations))
                 if key in seen_candidates:
                     continue
                 seen_candidates.add(key)

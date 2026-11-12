@@ -360,3 +360,32 @@ async def test_a_slow_reply_hits_the_deadline() -> None:
     )
     assert run.status == "timeout"
     assert "waiting for the model" in (run.error or "")
+
+
+async def test_two_targets_survive_a_retry(tmp_path: Path) -> None:
+    """The retry dedupe must not drop a second target that shares the rule and the wording."""
+    base = {
+        "rule_id": "SEO-CANONICAL",
+        "category": "seo",
+        "severity": "minor",
+        "title": "Page declares no canonical URL",
+        "summary": "The DOM snapshot has no canonical link.",
+        "suggested_fix": "Add a canonical link pointing at the preferred URL.",
+        "impact": {"seo": 2},
+        "confidence": 0.9,
+        "evidence": [{"observation_id": DOM_ID, "kind": "dom"}],
+    }
+    first = {**base, "subject": "canonical"}
+    second = {**base, "subject": "meta_description"}
+    fabricated = {**base, "title": "Page declares 900 canonical URLs"}
+    llm = cassette(
+        tmp_path,
+        [
+            reply(tool_calls=[submit("c1", [first, fabricated])]),
+            reply(tool_calls=[submit("c2", [first, second])]),
+        ],
+    )
+    run = await run_agent(spec(), llm=llm, tools=FakeTools(), observations=observations())
+
+    assert run.status == "ok"
+    assert len(run.accepted) == 2, [candidate.subject for candidate in run.accepted]

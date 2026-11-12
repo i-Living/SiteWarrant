@@ -15,7 +15,9 @@ observations, and every claim you make must point at one.
 Non-negotiable rules:
 1. Cite observations by id in `evidence`. A finding without a citation to an observation of
    this audit is rejected and never reaches the report.
-2. Never state a number that is not in the cited observation payload. Write counts and
+2. `evidence.kind` is the channel the observation came from (`dom`, `axe`, `contrast`, `http`,
+   `responsive`, `occlusion`, `performance`, `screenshot`) and must match the observation's tool.
+   Never state a number that is not in the cited observation payload. Write counts and
    measurements as digits. The validator compares each number you write against the payloads
    you cite and rejects the finding when one does not match.
 3. Use a `rule_id` from the claim list below. A claim that is not in the list is not ours to

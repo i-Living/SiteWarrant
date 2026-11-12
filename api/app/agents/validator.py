@@ -122,6 +122,14 @@ def validate(
         if facts is None:
             reasons.append(f"observation {evidence.observation_id} does not exist in this audit")
             continue
+        # The kind may name the channel ("dom") or the stored observation kind ("dom_snapshot");
+        # both are the truth about where the fact came from. Anything else is a false channel.
+        if evidence.kind not in (facts.tool, facts.kind):
+            reasons.append(
+                f"evidence kind {evidence.kind} does not match observation "
+                f"{evidence.observation_id} from {facts.tool}"
+            )
+            continue
         if claim.observation_tools and facts.tool not in claim.observation_tools:
             reasons.append(
                 f"claim {claim.id} may only cite {'/'.join(claim.observation_tools)}, "

@@ -69,7 +69,7 @@ class AgentBudget(BaseModel):
 
     max_tool_calls: int = 12
     max_tokens: int = 60_000
-    timeout_s: float = 90.0
+    timeout_s: float = 180.0
 
 
 class AgentSpec(BaseModel):

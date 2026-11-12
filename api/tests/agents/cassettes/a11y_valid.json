@@ -17,7 +17,7 @@
                   "type": "function",
                   "function": {
                     "name": "submit_findings",
-                    "arguments": "{\"findings\":[{\"rule_id\":\"A11Y-TEXT-CONTRAST-ALPHA\",\"category\":\"a11y\",\"severity\":\"major\",\"title\":\"Translucent text falls below the contrast minimum\",\"summary\":\"The measured pair uses alpha and the composited colour is below the threshold for its size, so low-vision readers lose the text.\",\"suggested_fix\":\"Raise the text opacity until the composited pair reaches the threshold.\",\"impact\":{\"ux\":2,\"conversion\":1},\"confidence\":0.8,\"criterion\":\"WCAG-1.4.3\",\"evidence\":[{\"observation_id\":\"{{first:contrast}}\",\"kind\":\"contrast_violation\",\"excerpt\":\"composited pair below the threshold\"}]}]}"
+                    "arguments": "{\"findings\":[{\"rule_id\":\"A11Y-TEXT-CONTRAST-ALPHA\",\"category\":\"a11y\",\"severity\":\"major\",\"title\":\"Translucent text falls below the contrast minimum\",\"summary\":\"The measured pair uses alpha and the composited colour is below the threshold for its size, so low-vision readers lose the text.\",\"suggested_fix\":\"Raise the text opacity until the composited pair reaches the threshold.\",\"impact\":{\"ux\":2,\"conversion\":1},\"confidence\":0.8,\"criterion\":\"WCAG-1.4.3\",\"evidence\":[{\"observation_id\":\"{{first:contrast_violation}}\",\"kind\":\"contrast_violation\",\"excerpt\":\"composited pair below the threshold\"}]}]}"
                   }
                 }
               ]

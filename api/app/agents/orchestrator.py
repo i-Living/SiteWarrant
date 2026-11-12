@@ -36,8 +36,9 @@ async def observation_index(audit_id: uuid.UUID) -> dict[str, ObservationFacts]:
 
 
 def first_observation_of(observations: dict[str, ObservationFacts], channel: str) -> str:
+    """The first observation of a channel, or of a stored kind (``contrast_violation``)."""
     for observation_id, facts in observations.items():
-        if facts.tool == channel:
+        if channel in (facts.tool, facts.kind):
             return observation_id
     raise ValueError(f"this audit has no {channel} observation to cite")
 
