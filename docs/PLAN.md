@@ -258,8 +258,11 @@ uv run sitewarrant audit https://example.com --out report.json
 uv run sitewarrant audit https://example.com --ignore-robots --out report.json
 uv run sitewarrant version
 
+# Обход сайта (P1). Тот же гейт SSRF и тот же robots.txt, что у аудита.
+uv run sitewarrant crawl http://localhost:8081/ --allow-private --max-pages 50 --out pages.json
+uv run sitewarrant crawl https://example.com --max-depth 3 --pages-per-template 2 --out pages.json
+
 # Дальше — команды будущих фаз, сейчас их нет:
-# uv run sitewarrant crawl https://example.com --max-pages 50 --out pages.json   [P1]
 # uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json        [P5]
 # uv run sitewarrant reaudit <audit_id> --against-report old.json                [P6]
 # uv run sitewarrant-mcp                                                          [P3]
@@ -344,19 +347,29 @@ downgrade без явного подтверждения; 46 unit-тестов �
 Фикстура на порту 8081 (8080 занят на машине разработки), порты привязаны к `127.0.0.1`.
 
 - Acceptance: на фикстуре находит все заложенные дефекты своей выборки, `blocker` даёт exit code 1.
-  Подтверждено: 9 находок (`blocker=2 major=6 minor=1`), exit code 1, agent `sha256:4aa361ad4176c48c`.
+  Подтверждено: 9 находок (`blocker=2 major=6 minor=1`), exit code 1, agent `sha256:175599c616dc911b`.
 - Verify: `docker compose -f infra/docker-compose.yml up -d --wait && cd api && uv run alembic upgrade head && uv run sitewarrant audit http://localhost:8081/ --allow-private --out /tmp/r.json && jq '.summary.findings_total' /tmp/r.json`
 - Files: `api/`, `web/` (заглушка), `infra/`, `.github/workflows/ci.yml`, `README.md`, `AGENTS.md`
 
 ### P1 — обход и обнаружение (неделя 1–2)
 
 BFS с лимитами, sitemap.xml, JS-рендеринг при пустом теле, кластеризация шаблонов,
-лимит «2 страницы на шаблон». Robots.txt уже соблюдается в P0 для одной страницы; в P1 он
-распространяется на обход и каждый редирект.
+лимит «2 страницы на шаблон». Robots.txt соблюдается на каждом URL обхода и на каждом редиректе.
+
+**Выполнено 2026-11-12.** `sitewarrant crawl <url>` — BFS в ширину с лимитами на глубину, число
+страниц и число страниц на шаблон; `sitemap.xml` (включая один уровень `sitemapindex`) как источник
+засева; страницы с пустым телом перечитываются через браузер; шаблон считается детерминированно по
+пути (ids → `*`), без вызова модели. Каждый URL проходит robots.txt (кэш на хост, 5xx — отказ),
+гейт SSRF и фильтр по хосту; стартовая страница обязательна, иначе обход падает с кодом 2.
+Лимиты записываются в отчёт, а дайджест кода обхода входит в `agent_version`.
 
 - Acceptance: сайт на 50 страниц даёт список шаблонов и покрытие в отчёте; на фикстуре с 3 шаблонами
-  выбрано ≤2 страниц на шаблон.
-- Verify: `uv run sitewarrant crawl https://example.com --max-pages 50 --out pages.json` + `uv run pytest tests/crawl -q`
+  выбрано ≤2 страниц на шаблон. Подтверждено: фикстура — 13 страниц найдено, 9 выбрано, `/blog/post-*.html`
+  3 найдено / 2 выбрано, `/blocked.html` отсечён robots, `/about` и `/contact` — `http_404`,
+  `/spa.html` перечитан браузером; в тесте на локальном сайте из трёх шаблонов по 3 страницы выбрано
+  по 2 (7 страниц из 10, `template_limit=3`).
+- Verify: `uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json` +
+  `uv run pytest tests/crawl -q`
 
 ### P2 — детерминированный слой фактов (неделя 2–3)
 
@@ -364,7 +377,7 @@ BFS с лимитами, sitemap.xml, JS-рендеринг при пустом 
 
 - Acceptance: каждый из 8 каналов даёт ≥1 observation на тестовой странице; два прогона подряд
   (кроме чисел производительности) дают идентичный набор наблюдений.
-- Verify: `uv run pytest tests/tools -q` и `uv run sitewarrant audit http://localhost:8080 --no-llm` дважды с `diff`
+- Verify: `uv run pytest tests/tools -q` и `uv run sitewarrant audit http://localhost:8081/ --allow-private --no-llm` дважды с `diff`
 
 ### P3 — MCP, оркестратор, агенты, RAG (неделя 3–4)
 
@@ -373,7 +386,7 @@ MCP-сервер инструментов, оркестратор как MCP-к�
 
 - Acceptance: findings без валидной улики отбиваются (тест на подсунутой выдумке обязателен);
   минимум одна находка с цитатой критерия WCAG; отказ одного агента даёт отчёт с пометкой `partial`.
-- Verify: `uv run pytest tests/agents -q` (на кассетах) и `uv run sitewarrant audit http://localhost:8080 --agents seo,a11y`
+- Verify: `uv run pytest tests/agents -q` (на кассетах) и `uv run sitewarrant audit http://localhost:8081/ --allow-private --agents seo,a11y`
 
 ### P4 — Chief Auditor, отчёт, интерфейс (неделя 4–5)
 

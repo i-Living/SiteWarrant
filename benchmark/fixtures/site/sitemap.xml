@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>http://localhost:8081/</loc></url>
+  <url><loc>http://localhost:8081/about.html</loc></url>
+  <url><loc>http://localhost:8081/blog/</loc></url>
+  <url><loc>http://localhost:8081/blog/post-1.html</loc></url>
+  <url><loc>http://localhost:8081/blog/post-2.html</loc></url>
+  <url><loc>http://localhost:8081/blog/post-3.html</loc></url>
+  <url><loc>http://localhost:8081/products/</loc></url>
+  <url><loc>http://localhost:8081/products/item-1.html</loc></url>
+  <url><loc>http://localhost:8081/products/item-2.html</loc></url>
+  <!-- Listed on purpose: robots.txt disallows it, so the crawl must skip it. -->
+  <url><loc>http://localhost:8081/blocked.html</loc></url>
+  <!-- Listed on purpose: another host, so the crawl must not follow it. -->
+  <url><loc>http://elsewhere.example/page</loc></url>
+</urlset>

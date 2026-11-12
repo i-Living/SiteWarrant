@@ -3,6 +3,7 @@ import ipaddress
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from playwright.async_api import CDPSession, Page
 
 BLOCKED_SCHEMES = ("data:", "blob:", "about:", "chrome:")
@@ -64,13 +65,38 @@ async def is_blocked(url: str, *, allowed_private_hosts: frozenset[str]) -> bool
     return any(is_private_address(address) for address in addresses)
 
 
+def peer_address(response: httpx.Response) -> str | None:
+    """Peer of the finished connection, as httpx reports it."""
+    stream = response.extensions.get("network_stream")
+    if stream is None:
+        return None
+    server = stream.get_extra_info("server_addr")
+    if not server:
+        return None
+    return str(server[0])
+
+
+def peer_is_blocked(peer: str | None, host: str, allowed_private_hosts: frozenset[str]) -> bool:
+    """Detect a connection that landed on a private address the pre-check did not see.
+
+    The name is resolved once for the guard and again by the transport, so a DNS answer
+    that changes in between (rebinding) reaches a private address. httpx exposes the peer
+    of the finished connection, which turns that into a refusal instead of a silently
+    accepted response. Only the allowlisted hosts are exempt.
+    """
+    if peer is None or host.lower() in allowed_private_hosts:
+        return False
+    return is_private_address(peer)
+
+
 async def pinning_argument(url: str) -> list[str]:
-    """Chromium argument that pins the audited host to the address we validated.
+    """Chromium argument that pins a host to the address we validated.
 
     Without it the browser resolves the name again at connection time, so a DNS answer
     that changes between the check and the request (DNS rebinding) reaches an address the
-    guard never saw. Subresource hosts cannot be pinned here because the crawl does not
-    know them yet; P1 pins the whole validated host set.
+    guard never saw. The crawl keeps to one host, so on that path the pinned set is the
+    audited host. Third-party subresources are still resolved by the browser and are
+    covered only by the per-request guard check, so do not describe the window as closed.
     """
     host = urlsplit(url).hostname
     if not host or host in LOCAL_HOSTNAMES:
