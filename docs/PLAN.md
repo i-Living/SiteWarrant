@@ -252,6 +252,7 @@ uv run pytest -q -m integration                          # БД + фикстур
 uv run alembic upgrade head
 
 # Аудит одной страницы (P0). Без --allow-private гейт SSRF отклонит localhost.
+# --allow-private освобождает только проверяемый хост: редирект с него на приватный адрес всё равно режется.
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
 uv run sitewarrant audit https://example.com --out report.json
 uv run sitewarrant audit https://example.com --ignore-robots --out report.json
@@ -336,12 +337,14 @@ export const groupByRootCause = (findings: Finding[]): RootCauseGroup[] =>
 URL → одна страница → axe → находки по правилам → `report.json`.
 
 Что фактически сделано: 9 правил в каталоге (6 от axe, 3 от DOM-пробы), гейт SSRF на каждом запросе
-браузера, соблюдение robots.txt по умолчанию с флагом `--ignore-robots`, Alembic-миграция на 6 таблиц,
-32 unit-теста и 11 интеграционных на фикстуре, CI из трёх job'ов. Фикстура на порту 8081 (8080 занят
-на машине разработки), порты привязаны к `127.0.0.1`.
+браузера через CDP Fetch — включая каждый редирект, с закреплением IP проверенного хоста; robots.txt
+соблюдается по умолчанию (RFC 9309: 4xx — нет правил, 5xx и сеть — отказ, редиректы до 3 с проверкой
+каждого шага), флаг `--ignore-robots`; Alembic-миграция на 6 таблиц с отказом от разрушительного
+downgrade без явного подтверждения; 42 unit-теста и 13 интеграционных на фикстуре; CI из трёх job'ов.
+Фикстура на порту 8081 (8080 занят на машине разработки), порты привязаны к `127.0.0.1`.
 
 - Acceptance: на фикстуре находит все заложенные дефекты своей выборки, `blocker` даёт exit code 1.
-  Подтверждено: 9 находок (`blocker=2 major=6 minor=1`), exit code 1, agent `sha256:bad8b4ff6428d618`.
+  Подтверждено: 9 находок (`blocker=2 major=6 minor=1`), exit code 1, agent `sha256:4aa361ad4176c48c`.
 - Verify: `docker compose -f infra/docker-compose.yml up -d --wait && cd api && uv run alembic upgrade head && uv run sitewarrant audit http://localhost:8081/ --allow-private --out /tmp/r.json && jq '.summary.findings_total' /tmp/r.json`
 - Files: `api/`, `web/` (заглушка), `infra/`, `.github/workflows/ci.yml`, `README.md`, `AGENTS.md`
 

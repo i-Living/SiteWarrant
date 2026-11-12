@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
@@ -41,8 +42,18 @@ class AxeViolation(BaseModel):
     nodes: list[AxeNode]
 
 
+@lru_cache(maxsize=1)
+def axe_source() -> str:
+    return AXE_SOURCE_PATH.read_text(encoding="utf-8")
+
+
 async def run_axe(page: Page) -> list[AxeViolation]:
-    """Inject the vendored axe-core build and return its violations."""
-    await page.add_script_tag(content=AXE_SOURCE_PATH.read_text(encoding="utf-8"))
+    """Inject the vendored axe-core build and return its violations.
+
+    The build goes in through Runtime.evaluate, not through add_script_tag: a page with a
+    strict script-src policy rejects an inline script element and the whole audit would
+    fail, while Runtime.evaluate is not subject to that policy. Pinned by the CSP fixture.
+    """
+    await page.evaluate(axe_source())
     raw = await page.evaluate(RUN_SCRIPT)
     return [AxeViolation.model_validate(item) for item in cast(list[Any], raw)]

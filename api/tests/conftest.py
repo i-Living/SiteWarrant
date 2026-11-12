@@ -13,8 +13,9 @@ def artifacts_dir(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     # Each test case gets its own event loop, so the engine must not pool connections.
     os.environ["SITEWARRANT_DB_NULL_POOL"] = "1"
     # Integration tests audit the fixture site on loopback. The HTTP API has no per-request
-    # switch for this on purpose, so the permission comes from the deployment environment.
-    os.environ["SITEWARRANT_ALLOW_PRIVATE_HOSTS"] = "1"
+    # switch for this on purpose, so the permission comes from the deployment environment,
+    # and it names the hosts: a redirect to a metadata address stays blocked.
+    os.environ["SITEWARRANT_ALLOW_PRIVATE_HOSTS"] = "localhost,127.0.0.1"
     from app.core.config import get_settings
 
     get_settings.cache_clear()
@@ -27,7 +28,7 @@ def private_hosts_forbidden(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Turn the deployment-level permission off for one test."""
     from app.core.config import get_settings
 
-    monkeypatch.setenv("SITEWARRANT_ALLOW_PRIVATE_HOSTS", "0")
+    monkeypatch.setenv("SITEWARRANT_ALLOW_PRIVATE_HOSTS", "")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

@@ -1,6 +1,7 @@
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from app.core.config import get_settings
 from app.core.db import session_scope
@@ -103,8 +104,17 @@ async def run_audit(
     """
     settings = get_settings()
     started = time.monotonic()
-    allow_private = allow_private or settings.allow_private_hosts
-    agent_version = compute_agent_version(settings.viewport, settings.page_timeout_ms)
+    allowed_private_hosts = settings.allowed_private_host_set
+    if allow_private:
+        audited_host = urlsplit(url).hostname
+        if audited_host:
+            allowed_private_hosts = allowed_private_hosts | {audited_host.lower()}
+    agent_version = compute_agent_version(
+        viewport=settings.viewport,
+        page_timeout_ms=settings.page_timeout_ms,
+        capture_timeout_ms=settings.capture_timeout_ms,
+        user_agent=settings.user_agent,
+    )
     async with session_scope() as session:
         audit_id = await repo.create_audit(
             session,
@@ -119,11 +129,15 @@ async def run_audit(
         )
         try:
             if not ignore_robots:
-                await ensure_allowed(url, settings.user_agent, allow_private=allow_private)
+                await ensure_allowed(
+                    url,
+                    settings.user_agent,
+                    allowed_private_hosts=allowed_private_hosts,
+                )
             capture = await capture_page(
                 url,
                 settings,
-                allow_private=allow_private,
+                allowed_private_hosts=allowed_private_hosts,
             )
             if capture.status_code >= 400:
                 raise CaptureFailed(f"{capture.url} answered with HTTP {capture.status_code}")

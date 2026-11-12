@@ -1,13 +1,11 @@
-import json
 import uuid
-from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.audit import read_artifact, run_audit
 from app.core.db import session_scope
+from app.core.report import Report
 from app.storage import repo
 
 
@@ -49,8 +47,13 @@ def create_app() -> FastAPI:
             by_severity=report.summary.by_severity,
         )
 
-    @api.get("/audits/{audit_id}/report")
-    async def get_report(audit_id: str) -> JSONResponse:
+    @api.get("/audits/{audit_id}/report", response_model=Report)
+    async def get_report(audit_id: str) -> Report:
+        """Return the stored report, validated against the report contract.
+
+        The artifact on disk is the source of truth; parsing it through the model means a
+        corrupted or outdated artifact fails loudly here instead of reaching a client.
+        """
         try:
             parsed = uuid.UUID(audit_id)
         except ValueError as error:
@@ -61,10 +64,9 @@ def create_app() -> FastAPI:
         if report_key is None:
             raise HTTPException(status_code=404, detail="report not found")
         try:
-            payload: Any = json.loads(read_artifact(report_key))
+            return Report.model_validate_json(read_artifact(report_key))
         except (ValueError, OSError) as error:
             raise HTTPException(status_code=500, detail=str(error)) from error
-        return JSONResponse(content=payload)
 
     return api
 

@@ -110,13 +110,14 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.jso
 
 The fixture site at `http://localhost:8081/` is a static page with nine defects planted on purpose,
 one per rule in `api/app/rules/catalog.py`. `--allow-private` is required because the request guard
-refuses loopback addresses by default; without the flag the audit exits with code 2.
+refuses loopback addresses by default; without the flag the audit exits with code 2. The flag exempts
+only the audited host, so a redirect from that host to a private address is still refused.
 
 Exit codes: `0` no blocker, `1` a blocker was proven, `2` the audit itself failed.
 
 ## Verification
 
-Measured on 2026-11-12 against the fixture site, agent `sha256:bad8b4ff6428d618` (axe-core 4.14.0,
+Measured on 2026-11-12 against the fixture site, agent `sha256:4aa361ad4176c48c` (axe-core 4.14.0,
 9 rules):
 
 - 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
@@ -124,10 +125,14 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:bad8b4ff6428d618`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 43 tests green (32 unit, 11 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 55 tests green (42 unit, 13 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
+- A redirect to a private address is refused: `/to-private` bounces to `169.254.169.254` and the audit
+  fails with "request guard blocked", even though the fixture host itself is allowed.
+- A page with `Content-Security-Policy: script-src 'self'` is still audited: axe runs through
+  `Runtime.evaluate`, not an injected script element.
 
 This is a single page of nine known defects. It is not precision, not recall, and not a benchmark.
 

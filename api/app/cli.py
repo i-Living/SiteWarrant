@@ -18,7 +18,12 @@ cli = typer.Typer(add_completion=False, no_args_is_help=True, help="SiteWarrant 
 def version() -> None:
     """Print the agent version and the size of the rule catalog."""
     settings = get_settings()
-    agent_version = compute_agent_version(settings.viewport, settings.page_timeout_ms)
+    agent_version = compute_agent_version(
+        viewport=settings.viewport,
+        page_timeout_ms=settings.page_timeout_ms,
+        capture_timeout_ms=settings.capture_timeout_ms,
+        user_agent=settings.user_agent,
+    )
     typer.echo(f"sitewarrant 0.1.0 agent={agent_version} rules={len(RULES)} axe={AXE_VERSION}")
 
 
@@ -31,7 +36,10 @@ def audit(
     allow_private: bool = typer.Option(
         False,
         "--allow-private",
-        help="Permit loopback and private addresses. Required for the local fixture site.",
+        help=(
+            "Permit the audited host even when it resolves to a private address. "
+            "Only that host is exempt, not every private address."
+        ),
     ),
     ignore_robots: bool = typer.Option(
         False,

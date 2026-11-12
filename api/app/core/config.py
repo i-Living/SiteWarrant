@@ -31,13 +31,17 @@ class Settings(BaseSettings):
         default=30_000,
         validation_alias=AliasChoices("SITEWARRANT_PAGE_TIMEOUT_MS", "page_timeout_ms"),
     )
-    allow_private_hosts: bool = Field(
-        default=False,
+    allow_private_hosts: str = Field(
+        default="",
         validation_alias=AliasChoices("SITEWARRANT_ALLOW_PRIVATE_HOSTS", "allow_private_hosts"),
     )
     db_null_pool: bool = Field(
         default=False,
         validation_alias=AliasChoices("SITEWARRANT_DB_NULL_POOL", "db_null_pool"),
+    )
+    capture_timeout_ms: int = Field(
+        default=60_000,
+        validation_alias=AliasChoices("SITEWARRANT_CAPTURE_TIMEOUT_MS", "capture_timeout_ms"),
     )
     user_agent: str = "SiteWarrant/0.1 (+https://github.com/i-Living/SiteWarrant)"
 
@@ -45,6 +49,17 @@ class Settings(BaseSettings):
     def viewport_size(self) -> tuple[int, int]:
         width, _, height = self.viewport.partition("x")
         return int(width), int(height)
+
+    @property
+    def allowed_private_host_set(self) -> frozenset[str]:
+        """Hosts whose private addresses may be requested.
+
+        A deployment-level allowlist, not a boolean: reaching the local fixture must not
+        also permit a redirect to a cloud metadata address.
+        """
+        return frozenset(
+            host.strip().lower() for host in self.allow_private_hosts.split(",") if host.strip()
+        )
 
 
 @lru_cache(maxsize=1)

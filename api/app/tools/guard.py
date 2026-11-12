@@ -1,71 +1,128 @@
+import asyncio
 import ipaddress
-import socket
-from functools import lru_cache
-from urllib.parse import urlparse
+from typing import Any
+from urllib.parse import urlsplit
 
-from playwright.async_api import BrowserContext, Route
+from playwright.async_api import CDPSession, Page
 
-LOCAL_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "127.0.0.1", "::1"})
+BLOCKED_SCHEMES = ("data:", "blob:", "about:", "chrome:")
+LOCAL_HOSTNAMES = frozenset({"localhost", "localhost.localdomain"})
+
+_resolution_cache: dict[str, list[str]] = {}
 
 
-@lru_cache(maxsize=1024)
-def resolves_to_private(host: str) -> bool:
-    """True when any resolved address is not publicly routable.
+def clear_resolution_cache() -> None:
+    _resolution_cache.clear()
 
-    Unresolvable hosts return False: the browser fails on its own and the error is
-    reported as a capture failure, which is the honest outcome.
-    """
+
+async def resolve_host(host: str) -> list[str]:
+    """Resolve a hostname without blocking the event loop."""
+    if host in _resolution_cache:
+        return _resolution_cache[host]
+    loop = asyncio.get_running_loop()
     try:
-        addresses = socket.getaddrinfo(host, None)
+        infos = await loop.getaddrinfo(host, None)
     except OSError:
-        return False
-    for info in addresses:
-        raw = info[4][0]
-        try:
-            address = ipaddress.ip_address(raw)
-        except ValueError:
-            return True
-        if (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_multicast
-            or address.is_reserved
-            or address.is_unspecified
-        ):
-            return True
-    return False
+        _resolution_cache[host] = []
+        return []
+    addresses = sorted({str(info[4][0]) for info in infos})
+    _resolution_cache[host] = addresses
+    return addresses
 
 
-def is_blocked(url: str, *, allow_private: bool) -> bool:
-    if allow_private:
-        return False
-    host = urlparse(url).hostname
+def is_private_address(address: str) -> bool:
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return True
+    return (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_multicast
+        or parsed.is_reserved
+        or parsed.is_unspecified
+    )
+
+
+async def is_blocked(url: str, *, allowed_private_hosts: frozenset[str]) -> bool:
+    """True when the URL must not be requested.
+
+    A host on the allowlist is exempt, so the local fixture can be audited without also
+    permitting a redirect to a metadata address. Unresolvable hosts are not blocked here:
+    the browser fails on its own and the capture reports that failure. A name that does
+    not resolve cannot reach a private address.
+    """
+    host = urlsplit(url).hostname
     if host is None:
         return True
+    if host.lower() in allowed_private_hosts:
+        return False
     if host in LOCAL_HOSTNAMES:
         return True
-    return resolves_to_private(host)
+    addresses = await resolve_host(host)
+    return any(is_private_address(address) for address in addresses)
 
 
-async def install_request_guard(context: BrowserContext, *, allow_private: bool) -> list[str]:
-    """Block every request that leaves for a private address.
+async def pinning_argument(url: str) -> list[str]:
+    """Chromium argument that pins the audited host to the address we validated.
 
-    The guard runs on each request, so redirect hops and subresources are validated too,
-    not only the URL the user typed.
+    Without it the browser resolves the name again at connection time, so a DNS answer
+    that changes between the check and the request (DNS rebinding) reaches an address the
+    guard never saw. Subresource hosts cannot be pinned here because the crawl does not
+    know them yet; P1 pins the whole validated host set.
+    """
+    host = urlsplit(url).hostname
+    if not host or host in LOCAL_HOSTNAMES:
+        return []
+    try:
+        ipaddress.ip_address(host)
+        return []
+    except ValueError:
+        pass
+    addresses = await resolve_host(host)
+    if not addresses:
+        return []
+    return [f"--host-resolver-rules=MAP {host} {addresses[0]}"]
+
+
+async def install_request_guard(
+    page: Page, *, allowed_private_hosts: frozenset[str]
+) -> tuple[CDPSession, list[str]]:
+    """Validate every request the page makes, including each redirect hop.
+
+    Playwright's own route handler sees only the original request: the browser follows a
+    redirect without calling it again, so a public URL can reach a private address
+    unchecked. CDP's Fetch domain pauses every request, redirect targets included, and
+    the decision is made per hop. Pinned by tests/integration/test_guard_redirects.py.
     """
     blocked: list[str] = []
+    session = await page.context.new_cdp_session(page)
+    await session.send("Fetch.enable", {"patterns": [{"urlPattern": "*"}]})
+    tasks: set[asyncio.Task[None]] = set()
 
-    async def handle(route: Route) -> None:
-        url = route.request.url
-        if url.startswith(("data:", "blob:", "about:")):
-            await route.continue_()
+    async def decide(event: dict[str, Any]) -> None:
+        request_id = event["requestId"]
+        url = str(event["request"]["url"])
+        try:
+            if url.startswith(BLOCKED_SCHEMES):
+                await session.send("Fetch.continueRequest", {"requestId": request_id})
+                return
+            if await is_blocked(url, allowed_private_hosts=allowed_private_hosts):
+                blocked.append(url)
+                await session.send(
+                    "Fetch.failRequest",
+                    {"requestId": request_id, "errorReason": "BlockedByClient"},
+                )
+                return
+            await session.send("Fetch.continueRequest", {"requestId": request_id})
+        except Exception:
             return
-        if is_blocked(url, allow_private=allow_private):
-            blocked.append(url)
-            await route.abort("blockedbyclient")
-            return
-        await route.continue_()
 
-    await context.route("**/*", handle)
-    return blocked
+    def on_paused(event: dict[str, Any]) -> None:
+        task = asyncio.create_task(decide(event))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+
+    session.on("Fetch.requestPaused", on_paused)
+    return session, blocked

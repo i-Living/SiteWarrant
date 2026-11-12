@@ -176,7 +176,19 @@ What later phases add: `api/app/crawl/`, `api/app/agents/`, `api/app/mcp/`, `api
 - **Playwright must run against a Chromium that exists.** `uv run playwright install chromium` is a
   separate step from `uv sync`, and CI does it explicitly.
 - **Alembic autogenerate omits the `postgresql` import for JSONB columns.** The generated revision fails
-  with `NameError` until `from sqlalchemy.dialects import postgresql` is added.
+  with `NameError` until the template renders `${imports}` (it now does) or the import is added by hand.
+- **Playwright's route handler never sees a redirect hop.** The browser follows a redirect without calling
+  the handler again, so `context.route` cannot guard redirects; CDP `Fetch.requestPaused` fires for each
+  hop. `tests/integration/test_guard_redirects.py` pins the difference — do not "simplify" the guard back
+  to `context.route`.
+- **`add_script_tag` fails under a strict CSP.** Inject axe through `Runtime.evaluate` instead; the
+  `csp.html` fixture fails if anyone switches it back.
+- **Private access is an allowlist of hosts, not a boolean.** `SITEWARRANT_ALLOW_PRIVATE_HOSTS` names the
+  hosts that may resolve to private addresses, so auditing the local fixture does not also permit a
+  redirect to a cloud metadata address.
+- **The initial migration refuses a silent downgrade.** It drops every table, so it raises unless
+  `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` is set. That is deliberate; do not remove the guard to
+  make a reset script shorter.
 
 ## Where decisions live
 
