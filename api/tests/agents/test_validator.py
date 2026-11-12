@@ -1,7 +1,14 @@
 import uuid
 
 from app.agents.models import CandidateFinding, EvidenceRef, ObservationFacts
-from app.agents.validator import claimed_numbers, number_is_corroborated, validate, validate_all
+from app.agents.validator import (
+    claimed_numbers,
+    number_is_corroborated,
+    payload_numbers,
+    to_float,
+    validate,
+    validate_all,
+)
 from app.rules.catalog import Impact
 
 DOM_ID = str(uuid.uuid4())
@@ -476,3 +483,16 @@ def test_an_excerpt_cannot_borrow_a_standard_constant() -> None:
     assert draft is None
     assert rejection is not None
     assert any("excerpt number" in reason for reason in rejection.reasons)
+
+
+def test_a_grouped_decimal_is_read_with_its_precision() -> None:
+    """'1,000.50' is a thousand and a half, and the two decimals are the claimed precision."""
+    assert claimed_numbers("1,000.50 pages") == ["1,000.50"]
+    assert number_is_corroborated("1,000.50", [1000.504])
+    assert not number_is_corroborated("1,000.50", [1000.4])
+
+
+def test_a_grouped_decimal_in_a_payload_does_not_raise() -> None:
+    """A payload can carry '1,000.50' as a string, and it used to crash the validator."""
+    assert payload_numbers({"value": "1,000.50"}) == [1000.5]
+    assert to_float("1,000.50") == 1000.5

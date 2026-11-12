@@ -189,3 +189,25 @@ async def test_a_failure_after_the_facts_commit_records_the_pages(
         ).scalar_one()
         assert audit.status == "failed"
         assert audit.pages_count == 1
+
+
+async def test_a_report_write_failure_rolls_the_page_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without agents the page is not committed yet, so the failed audit holds no pages."""
+
+    def failing_write(*args: object, **kwargs: object) -> str:
+        raise RuntimeError("report write exploded")
+
+    monkeypatch.setattr("app.audit.write_artifact", failing_write)
+    with pytest.raises(RuntimeError, match="report write exploded"):
+        await run_audit(URL, allow_private=True)
+
+    async with session_scope() as session:
+        audit = (
+            await session.execute(select(Audit).order_by(Audit.started_at.desc()).limit(1))
+        ).scalar_one()
+        assert audit.status == "failed"
+        assert audit.pages_count == 0
+        pages = (
+            (await session.execute(select(Page).where(Page.audit_id == audit.id))).scalars().all()
+        )
+        assert pages == []

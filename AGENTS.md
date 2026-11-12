@@ -195,6 +195,9 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   cassette is also a fixed conversation: if the loop needs one more exchange than was recorded, the
   run ends with `llm_error` naming the cassette, which is how a validator change shows up as a test
   failure instead of a silent pass.
+- **Grouped numbers can carry decimals**: `1,000.50` is one token, the comma groups and the dot
+  is the decimal point; `to_float` strips commas before parsing, and the claimed precision comes
+  from the part after the dot.
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.

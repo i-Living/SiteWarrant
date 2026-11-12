@@ -175,9 +175,12 @@ async def run_agent(
     def remaining() -> float:
         return spec.budget.timeout_s - (time.monotonic() - started)
 
-    # Loading the tool schemas is awaited work like any other and is bounded the same way.
+    # Loading the tool schemas is awaited work like any other and is bounded by what is left,
+    # not by the whole budget: the digest and the prompt were built before this point.
+    if remaining() <= 0:
+        return run(status="timeout", error=f"exceeded {spec.budget.timeout_s:.0f} s before setup")
     try:
-        async with asyncio.timeout(spec.budget.timeout_s):
+        async with asyncio.timeout(remaining()):
             schemas = await tools.schemas(spec.tools)
     except TimeoutError:
         return run(

@@ -20,7 +20,8 @@ IDENTIFIER = re.compile(r"\b(?:WCAG|SC)\s*\d+(?:\.\d+)+\b|\b[A-Z][A-Z0-9]*(?:-[A
 NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
 DECIMALS = re.compile(r"[.,](\d+)")
 # "1,000" is a thousand and "4,5" is four and a half; the comma means different things.
-GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+")
+GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+GROUPED_PLACES = re.compile(r"\.(\d+)$")
 # An agent that writes "nine images" is making the same claim as one that writes "9".
 NUMBER_WORDS: dict[str, int] = {
     "two": 2,
@@ -86,7 +87,8 @@ def number_is_corroborated(claimed: str, observed: Sequence[float]) -> bool:
     is exactly the move the validator exists to stop.
     """
     value = to_float(claimed)
-    decimals = None if GROUPED.fullmatch(claimed) else DECIMALS.search(claimed)
+    grouped = GROUPED.fullmatch(claimed)
+    decimals = GROUPED_PLACES.search(claimed) if grouped else DECIMALS.search(claimed)
     places = len(decimals.group(1)) if decimals else 0
     return any(round(observed_value, places) == round(value, places) for observed_value in observed)
 
