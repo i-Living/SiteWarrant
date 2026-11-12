@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>App shell — Northwind</title>
+    <meta name="description" content="A page that builds its links in the browser." />
+  </head>
+  <body>
+    <!-- The body ships empty: the crawler has to render this page to find its links. -->
+    <div id="root"></div>
+    <script>
+      const root = document.getElementById("root");
+      root.innerHTML =
+        '<h1>App shell</h1><a href="/blog/post-1.html">Tide tables</a><a href="/products/">Prints</a>';
+    </script>
+  </body>
+</html>

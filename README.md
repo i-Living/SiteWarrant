@@ -3,10 +3,11 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: phase P0 complete. The vertical slice runs; the platform does not exist yet.**
-> `sitewarrant audit <url>` crawls one page, runs axe-core and a DOM probe, and writes a JSON report
-> where every finding cites a stored observation. Crawling, the eight audit agents, root-cause
-> clustering, evals and re-audits are still ahead — see the phase table below.
+> **Stage: phases P0 and P1 complete. The vertical slice and the crawler run; the platform does not exist yet.**
+> `sitewarrant crawl <url>` discovers the pages of a site and picks at most two per template;
+> `sitewarrant audit <url>` audits one page with axe-core and a DOM probe and writes a JSON report
+> where every finding cites a stored observation. The eight audit agents, root-cause clustering,
+> evals and re-audits are still ahead — see the phase table below.
 >
 > The quality metrics are `null`: there is no eval run yet, and no number here was produced by a
 > benchmark. The only measured facts in this repository are the fixture results described under
@@ -83,7 +84,7 @@ Planned for 8 weeks of evening work, roughly 80 hours. That is an estimate, not 
 | Phase | Weeks | Deliverable | State |
 | --- | --- | --- | --- |
 | P0 | 1 | repository skeleton, CLI, one page to one report | **done** |
-| P1 | 1–2 | crawl, discovery, page templates | not started |
+| P1 | 1–2 | crawl, discovery, page templates | **done** |
 | P2 | 2–3 | deterministic fact layer, three viewports | not started |
 | P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | not started |
 | P4 | 4–5 | chief auditor, root causes, web report | not started |
@@ -105,19 +106,21 @@ cause, and verifying that a fix actually fixed something.
 ```bash
 docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, Redis, fixture site
 cd api && uv sync && uv run alembic upgrade head
+uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
 ```
 
 The fixture site at `http://localhost:8081/` is a static page with nine defects planted on purpose,
-one per rule in `api/app/rules/catalog.py`. `--allow-private` is required because the request guard
-refuses loopback addresses by default; without the flag the audit exits with code 2. The flag exempts
-only the audited host, so a redirect from that host to a private address is still refused.
+one per rule in `api/app/rules/catalog.py`, plus a journal, a product list, an app shell and a
+sitemap for the crawler. `--allow-private` is required because the request guard refuses loopback
+addresses by default; without the flag both commands exit with code 2. The flag exempts only the
+named host, so a redirect from that host to a private address is still refused.
 
-Exit codes: `0` no blocker, `1` a blocker was proven, `2` the audit itself failed.
+Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-12 against the fixture site, agent `sha256:4aa361ad4176c48c` (axe-core 4.14.0,
+Measured on 2026-11-12 against the fixture site, agent `sha256:175599c616dc911b` (axe-core 4.14.0,
 9 rules):
 
 - 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
@@ -125,7 +128,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:4aa361ad4176c48c`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 59 tests green (46 unit, 13 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 115 tests green (98 unit, 17 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -133,6 +136,11 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:4aa361ad4176c48c`
   fails with "request guard blocked", even though the fixture host itself is allowed.
 - A page with `Content-Security-Policy: script-src 'self'` is still audited: axe runs through
   `Runtime.evaluate`, not an injected script element.
+- The crawl of the fixture finds 13 pages and selects 9: `/blog/post-*.html` has 3 pages and keeps 2,
+  `/blocked.html` is skipped by robots, `/about` and `/contact` are recorded as `http_404`, and
+  `/spa.html` is re-read through the browser because its body ships empty.
+- A sitemap entry on another host is not followed, and a sitemap entry that robots.txt disallows is not
+  fetched.
 
 This is a single page of nine known defects. It is not precision, not recall, and not a benchmark.
 

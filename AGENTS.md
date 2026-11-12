@@ -58,8 +58,11 @@ uv run sitewarrant audit https://example.com --out report.json
 uv run sitewarrant audit https://example.com --ignore-robots --out report.json
 uv run sitewarrant version
 
+# Crawl [P1, verified]
+uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
+uv run sitewarrant crawl https://example.com --max-pages 50 --max-depth 3 --out pages.json
+
 # Not implemented yet, do not present as working
-# uv run sitewarrant crawl <url> --max-pages 50 --out pages.json    [P1]
 # uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json  [P5]
 # uv run sitewarrant reaudit <audit_id> --against-report old.json   [P6]
 # uv run sitewarrant-mcp                                            [P3]
@@ -92,18 +95,19 @@ What exists today:
 ```
 api/app/api/       FastAPI app: health, create audit, fetch stored report
 api/app/core/      config, database engine, ORM models, report schema, agent_version, page_key
+api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report
 api/app/rules/     catalog.py (what we claim) and engine.py (facts to findings)
 api/app/storage/   repository functions over the ORM
-api/app/tools/     axe, dom_probe, fetch (Playwright), guard (SSRF), robots; vendor/axe.min.js
+api/app/tools/     axe, dom_probe, fetch (Playwright), http_get (httpx), guard (SSRF), robots; vendor/axe.min.js
 api/migrations/    Alembic environment and revisions
-api/tests/         unit tests and tests/integration (fixture site, database, browser)
+api/tests/         unit tests, tests/crawl (in-memory sites) and tests/integration (fixture site, database, browser)
 web/app/           Next.js report page
-benchmark/fixtures/  static site with planted defects, expected.json, robots.txt
+benchmark/fixtures/  static site with planted defects, expected.json, robots.txt, sitemap.xml
 infra/             docker-compose: Postgres with pgvector, Redis, fixture site
 ```
 
-What later phases add: `api/app/crawl/`, `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`,
-`api/app/worker/`, `rules/` (the WCAG and header corpus).
+What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api/app/worker/`,
+`rules/` (the WCAG and header corpus).
 
 ## Code conventions
 
@@ -170,6 +174,18 @@ What later phases add: `api/app/crawl/`, `api/app/agents/`, `api/app/mcp/`, `api
 - **The stdlib `robotparser` does not implement longest-match precedence.** `Allow: /` before
   `Disallow: /private` allows everything, because the first matching rule wins. `app/tools/robots.py` uses
   protego and `tests/test_robots.py` pins that case; do not "simplify" it back to the stdlib.
+- **A crawl without its start page is not a crawl.** The start URL is required: if robots.txt refuses it,
+  the guard blocks it or it answers 4xx, `crawl` raises `CrawlFailed` and exits 2. Recording it as a
+  skipped page would produce a report that looks like a successful run of an empty site.
+- **Template clustering is deterministic on purpose.** `app/crawl/templates.py` maps ids to `*` by path
+  shape, with no model call and no heuristic on link text. The cluster key reaches published metrics, so
+  a change here is an "ask first" change like `page_key`.
+- **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
+  against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
+  fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
+- **The crawl digest is part of `agent_version`.** `app/crawl/version.py` hashes the discovery sources,
+  because which pages get audited changes the report. Editing the crawler changes every version string
+  and every published number — expected, not a bug.
 - **`pytest-asyncio` gives each test its own event loop.** A pooled SQLAlchemy engine then hands a
   connection from a dead loop to the next test and fails with "Event loop is closed". Tests set
   `SITEWARRANT_DB_NULL_POOL=1`; do not remove it to make tests "faster".
