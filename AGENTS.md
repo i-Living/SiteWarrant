@@ -171,7 +171,8 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Scope is the real risk, not difficulty.** Eight directions plus evals in eighty hours is tight. If time
   runs out, cut P6 (fix diffs), never P5 (evals) — a platform without measured quality is a demo.
 - **The viewport set is configuration, not a per-site choice.** `SITEWARRANT_VIEWPORTS` defaults to
-  `390x844,768x1024,1440x900`, mobile first. Comparing two agent versions needs identical conditions, so
+  `390x844,768x1024,1440x900`, mobile first. Discovery renders at the first entry, so the viewport
+  that decides which pages are found is inside the hashed set — there is no second viewport setting. Comparing two agent versions needs identical conditions, so
   a per-site viewport would make the comparison meaningless.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
@@ -201,6 +202,18 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **LCP is not in `performance.getEntriesByType`.** It only exists through a
   `PerformanceObserver({type: 'largest-contentful-paint', buffered: true})` created before the first
   paint, which is why the observer is installed as an init script before navigation.
+- **Never round a value before comparing it to a threshold.** A contrast ratio of 4.496 stored as
+  4.5 claims a pass WCAG does not give, and a 23.999 px target stored as 24 hides the reason it was
+  reported. Keep full precision in the fact and in the comparison; round only for display.
+- **Alpha is part of the colour.** `rgb()` has three channels and is opaque; only `rgba()` and the
+  slash syntax carry alpha. Composite a translucent colour over its resolved backdrop before
+  measuring, or the probe reports a colour the user never sees.
+- **CLS is the largest session window, not the sum of shifts**, and TBT only counts long tasks after
+  the first paint and before the measurement window closes. The window closes before the geometry
+  probes run, because their long tasks are the auditor's work.
+- **robots.txt applies to every redirect hop.** A redirect target is a URL the tool fetches;
+  `http_get` takes a `hop_check` callback and `robots.robots_hop_check` is what the audit and the
+  crawler pass. The browser navigation is checked for the start URL only.
 - **Performance numbers are excluded from the determinism check.** TTFB, FCP, LCP, CLS and TBT move
   between runs on the same machine; `tests/integration/test_fact_layer.py` compares every other channel
   and says so. Do not "fix" the comparison by loosening it for other tools.

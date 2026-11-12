@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 from pathlib import Path
@@ -14,13 +15,22 @@ from app.storage import repo
 from app.tools import http_probe
 from app.tools.fetch import PageCapture, ViewportCapture, capture_page
 from app.tools.http_probe import SECURITY_HEADERS, HttpFacts
-from app.tools.robots import ensure_allowed
+from app.tools.robots import ensure_allowed, robots_hop_check
 
 MEASURED_TOOLS = {"axe", "dom"}
 
 
 class CaptureFailed(RuntimeError):
     """The page answered with an error status, so there is nothing to audit."""
+
+
+class ProbeTimeout(RuntimeError):
+    """The HTTP probe did not finish inside its budget.
+
+    httpx applies its timeout to each read, not to the request: a server that drips a byte
+    before every read timeout keeps a stream open indefinitely. The aggregate deadline is
+    what bounds the probe.
+    """
 
 
 def http_observations(facts: HttpFacts) -> list[NewObservation]:
@@ -276,12 +286,26 @@ async def run_audit(
                     settings.user_agent,
                     allowed_private_hosts=allowed_private_hosts,
                 )
-            facts = await http_probe.probe(
-                url,
-                user_agent=settings.user_agent,
-                allowed_private_hosts=allowed_private_hosts,
-                timeout_s=settings.page_timeout_ms / 1000,
+            hop_check = (
+                None
+                if ignore_robots
+                else robots_hop_check(
+                    settings.user_agent, allowed_private_hosts=allowed_private_hosts
+                )
             )
+            try:
+                async with asyncio.timeout(settings.page_timeout_ms / 1000):
+                    facts = await http_probe.probe(
+                        url,
+                        user_agent=settings.user_agent,
+                        allowed_private_hosts=allowed_private_hosts,
+                        timeout_s=settings.page_timeout_ms / 1000,
+                        hop_check=hop_check,
+                    )
+            except TimeoutError as error:
+                raise ProbeTimeout(
+                    f"HTTP probe of {url} exceeded {settings.page_timeout_ms} ms"
+                ) from error
             capture = await capture_page(
                 url,
                 settings,

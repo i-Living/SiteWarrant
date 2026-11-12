@@ -77,6 +77,9 @@ async def collect(page: Page, timeout_s: float) -> Collected:
 
     async def gather() -> Collected:
         html = await page.content()
+        # The interval closes here: every probe below executes script, and its long tasks are
+        # the auditor's work rather than the page's.
+        await performance.mark_measurement_end(page)
         dom = await dom_probe.probe(page)
         contrast_report = await contrast.probe(page)
         responsive_report = await responsive.probe(page)

@@ -25,6 +25,10 @@ PROBE_SCRIPT = f"""() => {{
   }};
   const hits = [];
   for (const element of document.querySelectorAll("{INTERACTIVE}")) {{
+    const style = getComputedStyle(element);
+    if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) {{
+      continue;
+    }}
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) continue;
     const x = rect.left + rect.width / 2;

@@ -29,10 +29,6 @@ class Settings(BaseSettings):
         default=Path("artifacts"),
         validation_alias=AliasChoices("ARTIFACTS_DIR", "artifacts_dir"),
     )
-    viewport: str = Field(
-        default="1440x900",
-        validation_alias=AliasChoices("SITEWARRANT_VIEWPORT", "viewport"),
-    )
     viewports: str = Field(
         default="390x844,768x1024,1440x900",
         validation_alias=AliasChoices("SITEWARRANT_VIEWPORTS", "viewports"),
@@ -56,10 +52,6 @@ class Settings(BaseSettings):
     user_agent: str = "SiteWarrant/0.1 (+https://github.com/i-Living/SiteWarrant)"
 
     @property
-    def viewport_size(self) -> tuple[int, int]:
-        return viewport_size(self.viewport)
-
-    @property
     def viewport_list(self) -> tuple[str, ...]:
         """The measured viewports, fixed rather than adaptive.
 
@@ -67,7 +59,7 @@ class Settings(BaseSettings):
         configuration with a default, not a per-site decision.
         """
         parsed = tuple(item.strip() for item in self.viewports.split(",") if item.strip())
-        return parsed or (self.viewport,)
+        return parsed or ("1440x900",)
 
     @property
     def allowed_private_host_set(self) -> frozenset[str]:

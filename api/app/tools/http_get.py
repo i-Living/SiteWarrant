@@ -1,7 +1,13 @@
+from collections.abc import Awaitable, Callable
+
 import httpx
 from pydantic import BaseModel
 
 from app.tools.guard import is_blocked, peer_address, peer_is_blocked
+
+# Called for every hop before its request is sent: robots.txt applies to a redirect target
+# too, and the caller is the only one that knows the policy.
+HopCheck = Callable[[str], Awaitable[None]]
 
 DEFAULT_TIMEOUT_S = 10.0
 MAX_REDIRECTS = 5
@@ -43,6 +49,7 @@ async def http_get(
     allowed_private_hosts: frozenset[str],
     timeout_s: float = DEFAULT_TIMEOUT_S,
     max_bytes: int = MAX_BODY_BYTES,
+    hop_check: HopCheck | None = None,
 ) -> LightResponse:
     """Fetch a document with the SSRF guard on every hop and a hard body cap.
 
@@ -58,6 +65,8 @@ async def http_get(
             chain.append(target)
             if await is_blocked(target, allowed_private_hosts=allowed_private_hosts):
                 raise HttpGetBlocked(f"{target} is not a public address")
+            if hop_check is not None:
+                await hop_check(target)
             try:
                 async with client.stream("GET", target, headers={"User-Agent": user_agent}) as res:
                     host = httpx.URL(target).host or ""

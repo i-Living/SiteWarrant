@@ -36,8 +36,8 @@ PROBE_SCRIPT = f"""() => {{
       overflowing.push({{
         selector: path(element),
         tag: element.tagName.toLowerCase(),
-        right_px: Math.round(rect.right),
-        width_px: Math.round(rect.width),
+        right_px: rect.right,
+        width_px: rect.width,
       }});
     }}
     if (element.matches("{INTERACTIVE}") && small.length < MAX) {{
@@ -45,8 +45,8 @@ PROBE_SCRIPT = f"""() => {{
         small.push({{
           selector: path(element),
           tag: element.tagName.toLowerCase(),
-          width_px: Math.round(rect.width * 100) / 100,
-          height_px: Math.round(rect.height * 100) / 100,
+          width_px: rect.width,
+          height_px: rect.height,
         }});
       }}
     }}
@@ -61,10 +61,12 @@ PROBE_SCRIPT = f"""() => {{
 
 
 class OverflowItem(BaseModel):
+    """A measured box, unrounded: rounding 390.4 to 391 would invent an overflow."""
+
     selector: str
     tag: str
-    right_px: int
-    width_px: int
+    right_px: float
+    width_px: float
 
 
 class TouchTarget(BaseModel):

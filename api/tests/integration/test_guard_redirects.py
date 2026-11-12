@@ -25,6 +25,7 @@ def test_redirect_to_a_metadata_address_is_blocked(tmp_path: Path) -> None:
     # The HTTP probe runs before the browser, so the hop is refused there first. The
     # browser guard is pinned separately below, because it must refuse the hop on its own.
     assert "169.254.169.254" in result.output
+    assert "is not a public address" in result.output, result.output
     assert not out.exists()
 
 

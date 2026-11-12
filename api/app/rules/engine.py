@@ -124,21 +124,37 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
 
 
 def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
-    merged: dict[str, FindingDraft] = {}
+    """One draft per rule, with evidence pooled across viewports.
+
+    Evidence is taken round-robin by position within each draft, so a viewport that reports
+    ten nodes cannot fill the cap and hide the two later viewports. Items are deduplicated
+    by observation and excerpt: the same node twice is one item, two nodes of one observation
+    stay two items.
+    """
+    groups: dict[str, list[FindingDraft]] = {}
     for draft in drafts:
-        existing = merged.get(draft.rule_id)
-        if existing is None:
-            merged[draft.rule_id] = draft
-            continue
-        seen = {item.observation_id for item in existing.evidence}
-        for item in draft.evidence:
-            if len(existing.evidence) >= MAX_EVIDENCE_ITEMS:
-                break
-            if item.observation_id in seen:
+        groups.setdefault(draft.rule_id, []).append(draft)
+
+    merged: list[FindingDraft] = []
+    for group in groups.values():
+        head = group[0]
+        pooled = sorted(
+            ((index, item) for draft in group for index, item in enumerate(draft.evidence)),
+            key=lambda pair: pair[0],
+        )
+        seen: set[tuple[str, str, str | None]] = set()
+        evidence: list[EvidenceDraft] = []
+        for _, item in pooled:
+            key = (item.observation_id, item.kind, item.excerpt)
+            if key in seen:
                 continue
-            existing.evidence.append(item)
-            seen.add(item.observation_id)
-    return list(merged.values())
+            seen.add(key)
+            evidence.append(item)
+            if len(evidence) >= MAX_EVIDENCE_ITEMS:
+                break
+        head.evidence = evidence
+        merged.append(head)
+    return merged
 
 
 def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDraft:

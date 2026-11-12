@@ -1,3 +1,5 @@
+from collections.abc import Awaitable, Callable
+
 from pydantic import BaseModel
 
 from app.tools.http_get import http_get
@@ -44,7 +46,12 @@ class HttpFacts(BaseModel):
 
 
 async def probe(
-    url: str, *, user_agent: str, allowed_private_hosts: frozenset[str], timeout_s: float
+    url: str,
+    *,
+    user_agent: str,
+    allowed_private_hosts: frozenset[str],
+    timeout_s: float,
+    hop_check: Callable[[str], Awaitable[None]] | None = None,
 ) -> HttpFacts:
     response = await http_get(
         url,
@@ -52,6 +59,7 @@ async def probe(
         allowed_private_hosts=allowed_private_hosts,
         timeout_s=timeout_s,
         max_bytes=HEADER_BYTES,
+        hop_check=hop_check,
     )
     return HttpFacts(
         url=response.url,

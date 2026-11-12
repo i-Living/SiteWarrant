@@ -31,12 +31,19 @@ COLLECT_SCRIPT = """() => {
     }
     return parts.join(' > ');
   };
+  // Only rgba() carries alpha: the fourth number of rgb() is the blue channel. Splitting on
+  // non-numeric characters avoids a regex whose escaping is easy to get wrong.
+  const alphaOf = (value) => {
+    const numbers = value.replace(/[^0-9.%]/g, ' ').trim().split(/ +/);
+    if (numbers.length < 4) return 1;
+    const last = numbers[numbers.length - 1];
+    return last.endsWith('%') ? Number(last.slice(0, -1)) / 100 : Number(last);
+  };
   const background = (el) => {
     let node = el;
     while (node && node.nodeType === 1) {
       const value = getComputedStyle(node).backgroundColor;
-      const alpha = /rgba?\\([^)]*,\\s*([0-9.]+)\\s*\\)/.exec(value);
-      if (value && value !== 'transparent' && !(alpha && Number(alpha[1]) === 0)) {
+      if (value && value !== 'transparent' && alphaOf(value) > 0) {
         return value;
       }
       node = node.parentElement;
@@ -71,7 +78,13 @@ COLLECT_SCRIPT = """() => {
 }"""
 
 RGB = tuple[int, int, int]
-COLOR = re.compile(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)")
+# Red, green, blue and alpha: the alpha has to survive parsing, because a translucent
+# colour renders as a different colour than the same channels at full opacity.
+RGBA = tuple[int, int, int, float]
+WHITE: RGB = (255, 255, 255)
+COLOR = re.compile(
+    r"rgba?\(\s*(\d+)\s*[,\s]\s*(\d+)\s*[,\s]\s*(\d+)\s*(?:[,/]\s*([\d.]+)(%?)\s*)?\)"
+)
 
 
 class ColorSample(BaseModel):
@@ -91,7 +104,11 @@ class ContrastReport(BaseModel):
 
 
 class ContrastViolation(BaseModel):
-    """A measured pair below the WCAG threshold, with the threshold that applies."""
+    """A measured pair below the WCAG threshold, with the threshold that applies.
+
+    `ratio` keeps full precision: WCAG forbids rounding before the comparison, and a stored
+    4.5 for a pair that measured 4.496 would claim a pass the page does not have.
+    """
 
     selector: str
     text: str
@@ -103,11 +120,35 @@ class ContrastViolation(BaseModel):
     background: str
 
 
-def parse_color(value: str) -> RGB | None:
+def parse_color(value: str) -> RGBA | None:
+    """Parse a computed colour, keeping its alpha.
+
+    `rgb()` has three channels and is opaque; only `rgba()` and the slash syntax carry alpha.
+    """
     match = COLOR.search(value)
     if match is None:
         return None
-    return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+    red, green, blue = (int(part) for part in match.groups()[:3])
+    alpha_text = match.group(4)
+    alpha = 1.0
+    if alpha_text is not None:
+        alpha = float(alpha_text)
+        if match.group(5) == "%":
+            alpha /= 100
+        alpha = min(max(alpha, 0.0), 1.0)
+    return (red, green, blue, alpha)
+
+
+def composite(color: RGBA, backdrop: RGB) -> RGB:
+    """Flatten a translucent colour onto its backdrop, as the screen does."""
+    red, green, blue, alpha = color
+    if alpha >= 1.0:
+        return (red, green, blue)
+    return (
+        round(red * alpha + backdrop[0] * (1 - alpha)),
+        round(green * alpha + backdrop[1] * (1 - alpha)),
+        round(blue * alpha + backdrop[2] * (1 - alpha)),
+    )
 
 
 def channel_luminance(channel: int) -> float:
@@ -120,12 +161,16 @@ def relative_luminance(rgb: RGB) -> float:
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 
 
-def contrast_ratio(foreground: RGB, background: RGB) -> float:
-    """WCAG 2.2 relative contrast ratio, rounded to two decimals."""
-    light, dark = sorted(
-        (relative_luminance(foreground), relative_luminance(background)), reverse=True
-    )
-    return round((light + 0.05) / (dark + 0.05), 2)
+def contrast_ratio(foreground: RGBA, background: RGBA) -> float:
+    """WCAG 2.2 relative contrast ratio of the rendered pair, unrounded.
+
+    Both colours are composited before measuring: the page shows the composited pair, so
+    dropping alpha would measure a colour the user never sees.
+    """
+    base = composite(background, WHITE)
+    shown = composite(foreground, base)
+    light, dark = sorted((relative_luminance(shown), relative_luminance(base)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
 
 
 def required_ratio(font_size_px: float, bold: bool) -> float:

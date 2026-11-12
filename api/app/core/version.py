@@ -44,7 +44,7 @@ def compute_agent_version(
             "contrast": probe_digest(contrast.COLLECT_SCRIPT),
             "responsive": probe_digest(responsive.PROBE_SCRIPT),
             "occlusion": probe_digest(occlusion.PROBE_SCRIPT),
-            "performance": probe_digest(performance.PROBE_SCRIPT),
+            "performance": probe_digest(performance.INIT_SCRIPT + performance.PROBE_SCRIPT),
         },
         "crawl": crawl_digest(),
         "viewports": list(viewports),

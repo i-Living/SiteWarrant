@@ -63,11 +63,25 @@ def test_the_same_rule_at_three_viewports_is_one_finding() -> None:
     assert len({item.observation_id for item in drafts[0].evidence}) == 3
 
 
-def test_evidence_is_deduplicated_by_observation() -> None:
+def test_the_same_node_twice_is_one_item() -> None:
     one = axe_observation(2)
     drafts = draft_findings([one, one])
     assert len(drafts) == 1
     assert len(drafts[0].evidence) == 2
+
+
+def test_the_first_viewport_cannot_fill_the_cap_alone() -> None:
+    """Ten nodes at 390 px must not hide the one node found at 768 and 1440 px."""
+    observations = [axe_observation(MAX_EVIDENCE_ITEMS)]
+    observations.append(axe_observation(1))
+    observations.append(axe_observation(1))
+
+    drafts = draft_findings(observations)
+
+    assert len(drafts) == 1
+    assert len(drafts[0].evidence) == MAX_EVIDENCE_ITEMS
+    observation_ids = {item.observation_id for item in drafts[0].evidence}
+    assert len(observation_ids) == 3, "every viewport must appear in the evidence"
 
 
 def test_evidence_is_capped() -> None:

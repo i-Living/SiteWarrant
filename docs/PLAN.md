@@ -390,10 +390,17 @@ LCP, CLS, TBT как прокси INP, ресурсы) и `screenshot` (полн
 - Acceptance: каждый из 8 каналов даёт ≥1 observation на тестовой странице; два прогона подряд
   (кроме чисел производительности) дают идентичный набор наблюдений. Подтверждено: 56 наблюдений на
   фикстуре (`http=8 dom=3 axe=27 contrast=6 responsive=3 occlusion=3 performance=3 screenshot=3`),
+  `agent_version = sha256:333f5e44c8864ee5`,
   3 snapshot'а с PNG на диске, 9 находок по 3 улики, `tests/integration/test_fact_layer.py`
   сравнивает набор наблюдений двух прогонов и исключает `performance` и `screenshot`.
 - Verify: `uv run pytest -m integration -k fact_layer -q` и
   `uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json`
+- Правки по ревью PR #4: агрегатный дедлайн на HTTP-пробу (httpx ограничивает чтение, не запрос),
+  robots.txt проверяется на каждом хопу редиректа, alpha композитится перед расчётом контраста и
+  отношение не округляется до сравнения, CLS считается по session windows, TBT — только после FCP и
+  до конца окна измерения, скрытые (`visibility: hidden`) цели не проходят hit-test, размеры целей
+  хранятся без округления, `INIT_SCRIPT` наблюдателя входит в `agent_version`, discovery рендерится на
+  первом из измеряемых viewport'ов (второй источник viewport'а удалён из конфига).
 
 ### P3 — MCP, оркестратор, агенты, RAG (неделя 3–4)
 
