@@ -3,7 +3,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from protego import Protego
 
-from app.tools.guard import is_blocked
+from app.tools.guard import is_blocked, is_private_address
 
 ROBOTS_TIMEOUT_S = 5.0
 MAX_ROBOTS_REDIRECTS = 3
@@ -32,6 +32,29 @@ def parse_robots(text: str) -> Protego:
     return Protego.parse(text)
 
 
+def peer_is_blocked(peer: str | None, host: str, allowed_private_hosts: frozenset[str]) -> bool:
+    """Detect a connection that landed on a private address the pre-check did not see.
+
+    The name is resolved once for the guard and again by the transport, so a DNS answer
+    that changes in between (rebinding) reaches a private address. httpx exposes the peer
+    of the finished connection, which turns that into a refusal instead of a silently
+    accepted response.
+    """
+    if peer is None or host.lower() in allowed_private_hosts:
+        return False
+    return is_private_address(peer)
+
+
+def peer_address(response: httpx.Response) -> str | None:
+    stream = response.extensions.get("network_stream")
+    if stream is None:
+        return None
+    server = stream.get_extra_info("server_addr")
+    if not server:
+        return None
+    return str(server[0])
+
+
 async def fetch_robots(
     url: str, user_agent: str, *, allowed_private_hosts: frozenset[str]
 ) -> Protego | None:
@@ -57,6 +80,11 @@ async def fetch_robots(
                     raise RobotsUnavailable(f"robots.txt redirect without a location at {target}")
                 target = urljoin(target, location)
                 continue
+            host = urlsplit(target).hostname or ""
+            if peer_is_blocked(peer_address(response), host, allowed_private_hosts):
+                raise RobotsUnavailable(
+                    f"robots.txt connection to {target} landed on a private address"
+                )
             if response.status_code >= 500:
                 raise RobotsUnavailable(
                     f"robots.txt answered HTTP {response.status_code} at {target}"

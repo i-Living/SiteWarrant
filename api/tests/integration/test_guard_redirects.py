@@ -20,7 +20,7 @@ def test_redirect_to_a_metadata_address_is_blocked(tmp_path: Path) -> None:
     out = tmp_path / "redirect.json"
     result = CliRunner().invoke(cli, ["audit", f"{FIXTURE}to-private", "--out", str(out)])
     assert result.exit_code == 2, result.output
-    assert "blocked" in result.output.lower()
+    assert "request guard blocked" in result.output
     assert not out.exists()
 
 
