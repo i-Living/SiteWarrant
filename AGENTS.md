@@ -57,6 +57,8 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.jso
 uv run sitewarrant audit https://example.com --out report.json
 uv run sitewarrant audit https://example.com --ignore-robots --out report.json
 uv run sitewarrant version
+uv run sitewarrant index-rules                        # corpus into Postgres (pgvector)
+uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --out report.json
 
 # Crawl [P1, verified]
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
@@ -101,8 +103,10 @@ api/app/storage/   repository functions over the ORM
 api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
                    performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
 api/migrations/    Alembic environment and revisions
-api/tests/         unit tests (math, thresholds, merge), tests/crawl (in-memory sites) and
-                   tests/integration (fixture site, database, browser, three viewports)
+api/tests/         unit tests (math, thresholds, merge, validator, runner on cassettes),
+                   tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
+                   and tests/integration (fixture site, database, browser, MCP, agents)
+rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
 web/app/           Next.js report page
 benchmark/fixtures/  static site with planted defects, expected.json, robots.txt, sitemap.xml
 infra/             docker-compose: Postgres with pgvector, Redis, fixture site
@@ -174,6 +178,21 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   `390x844,768x1024,1440x900`, mobile first. Discovery renders at the first entry, so the viewport
   that decides which pages are found is inside the hashed set — there is no second viewport setting. Comparing two agent versions needs identical conditions, so
   a per-site viewport would make the comparison meaningless.
+- **Commit the facts before the agents run.** The MCP server is a separate process and reads only
+  committed rows, so an agent started inside the audit's open transaction sees an empty audit.
+  `run_audit` commits before `run_agents`; without that the agent fails with an empty audit.
+- **MCP 2.x renamed things.** The server class is `MCPServer` (`mcp.server.mcpserver`), `FastMCP`
+  is gone, and the tool schema field is `input_schema` on the model while OpenAI clients expect
+  `inputSchema`. `app/mcp/client.py` reads both.
+- **The model gateway is not a plain OpenAI endpoint.** Cloudflare answers 1010 to a request with
+  no User-Agent, the Go plan requires an `x-opencode-session` header on every call, and the base URL
+  is `https://opencode.ai/zen/go/v1`. `deepseek-v4.1-flash` does support tool calling.
+- **Cassettes cannot contain observation ids**, because ids are generated per audit. A cassette
+  writes `{{first:contrast}}` and `CassetteClient` substitutes the first id of that channel in the
+  audit under test; a missing channel fails the call instead of inventing an id.
+- **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
+  constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
+  allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
@@ -189,6 +208,17 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
   against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
   fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
+- **The agent budget is 12 tool calls, 60k tokens and 90 s**, and the loop warns at 70 % of the
+  tokens: after the warning a read is refused and the only way forward is `submit_findings`. Without
+  that, a thorough agent reads until the budget dies and contributes nothing.
+- **The validator is the only path from a candidate to a finding.** An agent proposes; the
+  validator checks the claim exists in the corpus, the category matches, severity is not lowered,
+  every cited observation belongs to this audit, the channel is allowed for that claim, and every
+  number in the text is either in a cited payload, in the cited observation's viewport, or a
+  constant from the claim itself. Rejected candidates go back to the
+  model with reasons, which is how the loop fixes itself.
+- **Prompts, the corpus and the model id are in `agent_version`.** A different brief or a
+  different model is a different agent, and its numbers are not comparable with the old one.
 - **A channel must report that it ran, even with nothing to report.** Each tool writes a run
   observation (`axe_run`, `contrast_run`) next to its findings. Without it, "the tool found nothing"
   and "the tool never executed" look identical in the database, and the report would score a category

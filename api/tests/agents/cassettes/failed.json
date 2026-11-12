@@ -1,0 +1,5 @@
+{
+  "model": "deepseek-v4.1-flash",
+  "note": "An agent that never answered: the provider failed before the first reply.",
+  "interactions": []
+}

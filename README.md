@@ -3,7 +3,7 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: phases P0–P2 complete. The crawler and the deterministic fact layer run; the agents do not exist yet.**
+> **Stage: phases P0–P3 complete. The crawler, the deterministic fact layer and the eight auditor agents run; root causes and evals are still ahead.**
 > `sitewarrant crawl <url>` discovers the pages of a site and picks at most two per template;
 > `sitewarrant audit <url>` measures one page at three viewports through eight deterministic channels
 > and writes a JSON report where every finding cites a stored observation. The eight audit agents,
@@ -86,7 +86,7 @@ Planned for 8 weeks of evening work, roughly 80 hours. That is an estimate, not 
 | P0 | 1 | repository skeleton, CLI, one page to one report | **done** |
 | P1 | 1–2 | crawl, discovery, page templates | **done** |
 | P2 | 2–3 | deterministic fact layer, three viewports | **done** |
-| P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | not started |
+| P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | **done** |
 | P4 | 4–5 | chief auditor, root causes, web report | not started |
 | P5 | 5–6 | benchmark, gold labels, eval runner | not started |
 | P6 | 6–7 | fixes and re-audit with diff | not started |
@@ -120,7 +120,7 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-12 against the fixture site, agent `sha256:333f5e44c8864ee5` (axe-core 4.14.0,
+Measured on 2026-11-12 against the fixture site, agent `sha256:49eab0d923783c84` (axe-core 4.14.0,
 9 rules):
 
 - 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
@@ -128,7 +128,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:333f5e44c8864ee5`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 165 tests green (143 unit, 22 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 212 tests green (181 unit, 31 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -148,6 +148,14 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:333f5e44c8864ee5`
 - Three snapshots per page, one per viewport, with HTML, DOM JSON and a full-page PNG on disk.
 - Two consecutive audits produce an identical observation set once timings and artifact keys are
   excluded; `tests/integration/test_fact_layer.py` asserts that.
+- Eight agents share one budgeted loop (12 tool calls, 30k tokens, 90 s) and read facts through an
+  MCP server scoped to their audit; the validator rejects a finding whose observation does not exist,
+  whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
+- A real run with `--agents a11y` against the fixture reported `a11y=ok(1)` — one finding citing
+  WCAG 2.2 SC 2.5.8 with two evidence items — after the validator rejected one earlier attempt,
+  at 37 929 input and 3 646 output tokens in 40 s.
+- A failed agent does not fail the audit: the report carries `status: partial` and the deterministic
+  findings stay. `tests/integration/test_agents_audit.py` pins both behaviours on cassettes.
 
 This is a single page of nine known defects. It is not precision, not recall, and not a benchmark.
 

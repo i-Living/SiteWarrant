@@ -22,6 +22,21 @@ class ImpactOut(BaseModel):
     ux: int
 
 
+class AgentSummaryOut(BaseModel):
+    """What one agent did. `status` other than ok is why the report says partial."""
+
+    name: str
+    status: str
+    findings: int = 0
+    rejected: int = 0
+    tool_calls: int = 0
+    llm_calls: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    latency_ms: int = 0
+    error: str | None = None
+
+
 class FindingOut(BaseModel):
     id: str
     rule_id: str
@@ -35,6 +50,8 @@ class FindingOut(BaseModel):
     agent: str
     page_url: str
     page_key: str
+    criterion: str | None = None
+    criterion_title: str | None = None
     evidence: list[EvidenceOut]
 
 
@@ -45,6 +62,7 @@ class SummaryOut(BaseModel):
     scores: dict[str, float]
     duration_ms: int
     observations_by_tool: dict[str, int]
+    agents: list[AgentSummaryOut] = []
 
 
 class Report(BaseModel):
@@ -76,6 +94,7 @@ def build_report(
     duration_ms: int,
     measured_categories: set[str],
     observations_by_tool: dict[str, int],
+    agents: Sequence[AgentSummaryOut] = (),
 ) -> Report:
     counts = Counter(finding.severity for finding in findings)
     by_severity = {severity: counts.get(severity, 0) for severity in SEVERITIES}
@@ -102,6 +121,7 @@ def build_report(
             scores=scores,
             duration_ms=duration_ms,
             observations_by_tool=observations_by_tool,
+            agents=list(agents),
         ),
         findings=list(findings),
     )

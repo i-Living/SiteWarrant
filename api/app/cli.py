@@ -5,12 +5,15 @@ from urllib.parse import urlsplit
 
 import typer
 
+from app.agents.specs import parse_agent_names
 from app.audit import run_audit
 from app.core.config import get_settings
+from app.core.db import session_scope
 from app.core.report import exit_code_for
 from app.core.version import compute_agent_version
 from app.crawl.crawler import crawl as crawl_site
 from app.crawl.models import CrawlLimits
+from app.rules import store
 from app.rules.catalog import RULES
 from app.tools.axe import AXE_VERSION
 
@@ -26,6 +29,7 @@ def version() -> None:
         page_timeout_ms=settings.page_timeout_ms,
         capture_timeout_ms=settings.capture_timeout_ms,
         user_agent=settings.user_agent,
+        llm_model=settings.llm_model,
     )
     typer.echo(f"sitewarrant 0.1.0 agent={agent_version} rules={len(RULES)} axe={AXE_VERSION}")
 
@@ -49,14 +53,30 @@ def audit(
         "--ignore-robots",
         help="Audit even when robots.txt disallows this user agent. Use only on sites you own.",
     ),
+    agents: str = typer.Option(
+        "",
+        "--agents",
+        help="Comma-separated auditor agents (seo,a11y,...) or 'all'. Empty runs only the "
+        "deterministic layer.",
+    ),
 ) -> None:
     """Audit a single page and write a JSON report.
 
     Exit codes: 0 clean, 1 a blocker was proven, 2 the audit itself failed.
     """
     try:
+        names = parse_agent_names(agents) if agents.strip() else []
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+    try:
         report = asyncio.run(
-            run_audit(url, allow_private=allow_private, ignore_robots=ignore_robots)
+            run_audit(
+                url,
+                allow_private=allow_private,
+                ignore_robots=ignore_robots,
+                agents=names,
+            )
         )
     except Exception as error:
         typer.echo(f"audit failed: {error}", err=True)
@@ -71,6 +91,13 @@ def audit(
     severities = " ".join(f"{name}={count}" for name, count in summary.by_severity.items())
     typer.echo(f"{summary.findings_total} finding(s) on {summary.pages_audited} page(s)")
     typer.echo(f"severities: {severities}")
+    if summary.agents:
+        typer.echo(
+            "agents: "
+            + " ".join(f"{run.name}={run.status}({run.findings})" for run in summary.agents)
+        )
+        if report.status != "completed":
+            typer.echo(f"status: {report.status}")
     typer.echo(f"report written to {out}")
     raise typer.Exit(code=exit_code_for(report))
 
@@ -145,6 +172,22 @@ def crawl(
             "skipped: " + " ".join(f"{name}={count}" for name, count in report.skipped.items())
         )
     typer.echo(f"crawl report written to {out}")
+    raise typer.Exit(code=0)
+
+
+@cli.command("index-rules")
+def index_rules() -> None:
+    """Load the rule corpus into Postgres with its embeddings.
+
+    Idempotent: the corpus digest decides whether anything is rewritten.
+    """
+
+    async def run() -> int:
+        async with session_scope() as session:
+            return await store.ensure_indexed(session)
+
+    count = asyncio.run(run())
+    typer.echo(f"indexed {count} corpus chunk(s)")
     raise typer.Exit(code=0)
 
 

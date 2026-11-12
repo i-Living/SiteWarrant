@@ -2,8 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -115,3 +116,49 @@ class FindingEvidence(Base):
     )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     excerpt: Mapped[str | None] = mapped_column(Text)
+
+
+class RuleRecord(Base):
+    """One corpus chunk, with its deterministic embedding.
+
+    The corpus lives in a file because a reviewer has to read it, and in this table because
+    retrieval is a database query: pgvector is the plan's choice, and the embedding function
+    is swappable without touching the schema.
+    """
+
+    __tablename__ = "rules"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(16))
+    severity: Mapped[str | None] = mapped_column(String(16))
+    suggested_fix: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    wcag: Mapped[str | None] = mapped_column(String(32))
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    observation_tools: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    corpus_digest: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class LlmCall(Base):
+    """One model call, for cost and for tracing what an agent actually did."""
+
+    __tablename__ = "llm_calls"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("audits.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    agent: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(64), nullable=False)
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

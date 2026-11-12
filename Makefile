@@ -1,4 +1,4 @@
-.PHONY: check lint types test integration up down migrate audit-fixture web-build
+.PHONY: check lint types test integration up down migrate audit-fixture agents-fixture index-rules web-build
 
 # The single gate. AGENTS.md promises exactly this.
 check: lint types test web-check
@@ -30,6 +30,14 @@ migrate:
 # The acceptance command from docs/PLAN.md P0. Exits 1 while a blocker exists.
 audit-fixture:
 	cd api && uv run sitewarrant audit http://localhost:8081/ --allow-private --out ../report.json
+
+# The acceptance command from docs/PLAN.md P3: one agent, recorded facts, real model.
+agents-fixture:
+	cd api && uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --out ../report-agents.json
+
+# Load the rule corpus into Postgres. Idempotent.
+index-rules:
+	cd api && uv run sitewarrant index-rules
 
 web-build:
 	cd web && bun install --frozen-lockfile && bun run build

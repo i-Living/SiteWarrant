@@ -311,6 +311,7 @@ async def crawl(
             page_timeout_ms=settings.page_timeout_ms,
             capture_timeout_ms=settings.capture_timeout_ms,
             user_agent=settings.user_agent,
+            llm_model=settings.llm_model,
         ),
         generated_at=datetime.now(UTC),
         limits=limits,
