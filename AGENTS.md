@@ -113,6 +113,11 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant crawl https://example.com --max-pages 50 --max-depth 3 --out pages.json
 
+# Survey [P1 + DoD §16.1, verified 2026-11-13]: crawl, audit every selected page, merge into one report
+uv run sitewarrant survey https://docs.python.org/3/ --max-pages 60 --pages-per-template 50 \
+  --out ../evals/surveys/2026-11-13-docs-python.json
+uv run sitewarrant survey http://localhost:8081/ --allow-private --max-pages 4 --out /tmp/survey.json
+
 # Evals [P5, verified 2026-11-13]
 python3 ../benchmark/generate.py --check          # the corpus still matches its generator
 uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
@@ -158,6 +163,7 @@ What exists today:
 api/app/api/       FastAPI app: health, create audit, fetch stored report
 api/app/core/      config, database engine, ORM models, report schema, agent_version, page_key
 api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report, digest
+api/app/survey.py  a site-level audit: crawl, audit every selected page, merge into one report
 api/app/rules/     catalog.py (10 rules), engine.py (facts to findings), corpus, store (pgvector)
 api/app/agents/    specs, prompts/, runner (budgeted loop), validator, orchestrator, llm client
 api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes, priority) and
@@ -296,6 +302,18 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 - **The chief prompt is in `agent_version`.** `app/chief/prompts/chief.md` is hashed by
   `compute_agent_version` next to the agent prompts, so editing the brief moves every published
   number and the eval baseline has to be re-run.
+- **A survey is N audits and one report.** `app/survey.py` discovers with the crawler, runs
+  `run_audit` per selected page and merges findings, causes, observations and durations into a
+  report whose `pages_audited` is the number of pages that were actually audited. A page that fails
+  makes the survey `partial` and is listed in the CLI output — a shorter report with no failure
+  line would read like a clean site.
+- **A survey does not re-cluster across pages.** `root_cause_id` already carries `page_key`, and a
+  cause is a block on a page: two pages with a `header` are two causes, and merging them would
+  claim one fix for two different blocks. `merge_reports` concatenates each page's causes as they
+  came.
+- **The template limit decides a survey's coverage.** Every page of one template counts against
+  `--pages-per-template`, so a single-template site yields that many pages however high
+  `--max-pages` is; a documentation site is a handful of templates and needs both raised.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.

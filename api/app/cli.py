@@ -22,6 +22,7 @@ from app.fixes.reaudit import ReauditError, reaudit
 from app.fixes.recommend import FixBuildError, build_fixes, write_fix_files
 from app.rules import store
 from app.rules.catalog import RULES
+from app.survey import run_survey
 from app.tools.axe import AXE_VERSION
 
 cli = typer.Typer(add_completion=False, no_args_is_help=True, help="SiteWarrant command line.")
@@ -180,6 +181,91 @@ def crawl(
         )
     typer.echo(f"crawl report written to {out}")
     raise typer.Exit(code=0)
+
+
+@cli.command()
+def survey(
+    url: str = typer.Argument(..., help="Start URL of the site to survey."),
+    out: Path = typer.Option(
+        Path("survey.json"), "--out", "-o", help="Where to write the merged report."
+    ),
+    max_pages: int = typer.Option(50, "--max-pages", min=1, max=2000),
+    max_depth: int = typer.Option(3, "--max-depth", min=0, max=10),
+    pages_per_template: int = typer.Option(
+        2,
+        "--pages-per-template",
+        min=1,
+        max=50,
+        help=(
+            "How many pages of one template to audit. A documentation site is a handful of "
+            "templates, so this cap and --max-pages decide the coverage together."
+        ),
+    ),
+    allow_private: bool = typer.Option(
+        False,
+        "--allow-private",
+        help="Permit the surveyed host even when it resolves to a private address.",
+    ),
+    ignore_robots: bool = typer.Option(
+        False,
+        "--ignore-robots",
+        help="Survey even where robots.txt disallows this user agent. Use only on sites you own.",
+    ),
+    agents: str = typer.Option(
+        "", "--agents", help="Comma-separated auditor agents, or 'all'. Empty is deterministic."
+    ),
+) -> None:
+    """Audit every page a crawl selects and write one report for the site.
+
+    Exit codes: 0 no blocker found, 1 a blocker was proven, 2 the survey itself failed.
+    """
+    settings = get_settings()
+    allowed_private_hosts = settings.allowed_private_host_set
+    if allow_private:
+        surveyed_host = urlsplit(url).hostname
+        if surveyed_host:
+            allowed_private_hosts = allowed_private_hosts | {surveyed_host.lower()}
+    try:
+        names = parse_agent_names(agents) if agents.strip() else []
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+    limits = CrawlLimits(
+        max_pages=max_pages, max_depth=max_depth, pages_per_template=pages_per_template
+    )
+    try:
+        result = asyncio.run(
+            run_survey(
+                url,
+                limits=limits,
+                settings=settings,
+                allowed_private_hosts=allowed_private_hosts,
+                allow_private=allow_private,
+                ignore_robots=ignore_robots,
+                agents=names,
+            )
+        )
+    except Exception as error:
+        typer.echo(f"survey failed: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    report = result.report
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    typer.echo(
+        f"{result.crawl.pages_discovered} page(s) discovered, "
+        f"{report.summary.pages_audited} audited, {len(result.failures)} failed"
+    )
+    typer.echo(
+        f"{len(report.findings)} finding(s) in {len(report.root_causes)} root cause(s) "
+        f"over {report.summary.pages_audited} page(s)"
+    )
+    severities = " ".join(f"{name}={count}" for name, count in report.summary.by_severity.items())
+    typer.echo(f"severities: {severities}")
+    for page, reason in result.failures:
+        typer.echo(f"  failed {page}: {reason}", err=True)
+    typer.echo(f"report written to {out}")
+    raise typer.Exit(code=exit_code_for(report))
 
 
 @cli.command("eval")
