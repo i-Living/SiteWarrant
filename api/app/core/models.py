@@ -124,7 +124,7 @@ class Finding(Base):
     impact_ux: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     agent: Mapped[str] = mapped_column(String(32), nullable=False)
-    subject: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     root_cause_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("root_causes.id", ondelete="SET NULL"), nullable=True, index=True
     )

@@ -108,3 +108,42 @@ def test_a_rule_outside_the_catalog_is_not_a_claim() -> None:
 def test_an_observation_from_another_tool_is_ignored() -> None:
     responsive = observation(tool="responsive", kind="responsive_report", payload={})
     assert draft_findings([responsive]) == []
+
+
+def occlusion_observation(*targets: str) -> ObservationView:
+    return observation(
+        tool="occlusion",
+        kind="occlusion_report",
+        payload={
+            "hits": [
+                {"selector": target, "occluder_selector": "header > div.banner"}
+                for target in targets
+            ]
+        },
+    )
+
+
+def test_two_covered_targets_are_two_findings() -> None:
+    """Two links under one banner are two defects; AGENTS.md forbids collapsing them."""
+    drafts = draft_findings([occlusion_observation("header > a.one", "header > a.two")])
+    assert len(drafts) == 2
+    assert sorted(item.subject or "" for item in drafts) == ["header > a.one", "header > a.two"]
+
+
+def test_one_covered_target_at_three_viewports_is_one_finding() -> None:
+    """The same link covered at every viewport is one defect with three citations."""
+    observations = [occlusion_observation("header > a.one") for _ in range(3)]
+    drafts = draft_findings(observations)
+    assert len(drafts) == 1
+    assert len(drafts[0].evidence) == 3
+
+
+def test_two_targets_in_different_blocks_stay_separate_through_the_merge() -> None:
+    drafts = draft_findings(
+        [
+            occlusion_observation("header > a.one"),
+            occlusion_observation("main > section > button.two"),
+        ]
+    )
+    assert len(drafts) == 2
+    assert all(len(item.evidence) == 1 for item in drafts)

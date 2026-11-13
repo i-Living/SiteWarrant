@@ -58,6 +58,19 @@ def _evidence_ids(finding: FindingOut) -> set[str]:
     return {item.observation_id for item in finding.evidence}
 
 
+def _same_thing(first: FindingOut, second: FindingOut) -> bool:
+    """Same subject, or no subject and a shared citation.
+
+    A subject is compared as written: CSS selectors are case-sensitive, so `#CTA` and `#cta` are
+    two elements, and two targets in one block must not collapse into one finding.
+    """
+    left = (first.subject or "").strip()
+    right = (second.subject or "").strip()
+    if left or right:
+        return bool(left) and left == right
+    return bool(_evidence_ids(first) & _evidence_ids(second))
+
+
 def _merge(first: FindingOut, second: FindingOut) -> FindingOut:
     """Keep the harsher claim and pool the evidence: two agents saw the same defect."""
     primary, other = (
@@ -83,32 +96,27 @@ def dedupe(
     findings: Sequence[FindingOut], observations: dict[str, dict[str, Any]]
 ) -> tuple[list[FindingOut], int]:
     """Collapse the same claim about the same place, keeping one finding with all its evidence."""
-    kept: dict[tuple[str, str, str], FindingOut] = {}
-    order: list[tuple[str, str, str]] = []
+    buckets: dict[tuple[str, str], list[FindingOut]] = {}
+    order: list[tuple[str, str]] = []
     duplicates = 0
     for finding in findings:
         anchor = anchor_for_evidence(
             (item.observation_id for item in finding.evidence), observations
         )
-        place = _place(finding, anchor)
-        subject = (finding.subject or "").strip().lower()
-        key = (finding.rule_id, place, subject)
-        existing = kept.get(key)
-        mergeable = existing is not None and (
-            bool(subject) or bool(_evidence_ids(existing) & _evidence_ids(finding))
+        base = (finding.rule_id, _place(finding, anchor))
+        candidates = buckets.setdefault(base, [])
+        if not candidates:
+            order.append(base)
+        index = next(
+            (position for position, item in enumerate(candidates) if _same_thing(item, finding)),
+            None,
         )
-        if not mergeable:
-            # Two findings with one rule in one block are still two targets unless they talk
-            # about the same subject or cite the same fact.
-            suffix = "" if existing is None else f"#{len(order)}"
-            key = (finding.rule_id, place + suffix, subject)
-            kept[key] = finding
-            order.append(key)
+        if index is None:
+            candidates.append(finding)
             continue
-        assert existing is not None  # mergeable is only true when it exists
-        kept[key] = _merge(existing, finding)
+        candidates[index] = _merge(candidates[index], finding)
         duplicates += 1
-    return [kept[key] for key in order], duplicates
+    return [item for key in order for item in buckets[key]], duplicates
 
 
 def root_cause_id(page_key: str, anchor: str) -> str:

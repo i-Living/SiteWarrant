@@ -1,7 +1,7 @@
 {
   "url": "http://localhost:8081/",
   "page_key": "localhost",
-  "notes": "Ten planted defects: one per catalogued rule, plus the banner that covers header links at 390 px.",
+  "notes": "Ten planted defects, one per catalogued rule. The banner counts once as a defect but covers five header links, and each covered target is its own finding.",
   "rule_ids": [
     "A11Y-BUTTON-NAME",
     "A11Y-CONTRAST",
@@ -17,5 +17,7 @@
   "blockers": [
     "A11Y-BUTTON-NAME",
     "A11Y-LABEL"
-  ]
+  ],
+  "findings_total": 14,
+  "root_causes": 1
 }

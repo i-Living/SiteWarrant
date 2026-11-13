@@ -35,6 +35,25 @@ def test_a_bare_element_selector_is_not_a_place() -> None:
     assert anchor_for_selectors([".icon-link", "#cta"]) is None
 
 
+def test_free_text_is_not_a_selector() -> None:
+    """A note that happens to look like a path must not strip the real anchor."""
+    payload = {
+        "selector": HEADER_LINK,
+        "note": "main > pricing",
+        "html": '<h2 class="a > b">',
+    }
+    assert selectors_in(payload) == [HEADER_LINK]
+    assert anchor_for_selectors(selectors_in(payload)) == "header"
+
+
+def test_two_sections_are_two_blocks() -> None:
+    """`section:nth-of-type(1)` and `section:nth-of-type(2)` share a tag, not a place."""
+    first = "main:nth-of-type(1) > section:nth-of-type(1) > p"
+    second = "main:nth-of-type(1) > section:nth-of-type(2) > p"
+    assert anchor_for_selectors([first]) == "section"
+    assert anchor_for_selectors([first, second]) is None
+
+
 def test_selectors_are_read_from_payload_values_not_keys() -> None:
     payload = {
         "selector": HEADER_LINK,

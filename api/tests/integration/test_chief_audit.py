@@ -26,6 +26,11 @@ async def test_the_banner_is_one_root_cause_with_symptoms_from_two_categories() 
 
     grouped = [finding for finding in report.findings if finding.root_cause_id == cause.id]
     assert {finding.rule_id for finding in grouped} == {"LAYOUT-OCCLUSION", "A11Y-LINK-NAME"}
+    # The banner covers five links, and each covered target is its own finding: collapsing them
+    # into one would hide four defects behind the first one's summary.
+    covered = [finding for finding in grouped if finding.rule_id == "LAYOUT-OCCLUSION"]
+    assert len(covered) == 5
+    assert len({finding.subject for finding in covered}) == 5
     assert all(finding.priority > 0 for finding in report.findings)
     assert report.summary.duplicate_rate == 0.0
 

@@ -28,7 +28,11 @@ def test_fixture_reports_every_planted_defect(tmp_path: Path) -> None:
     assert result.exit_code == 1, result.output
     report = json.loads(out.read_text(encoding="utf-8"))
 
-    assert sorted(finding["rule_id"] for finding in report["findings"]) == EXPECTED["rule_ids"]
+    assert sorted({finding["rule_id"] for finding in report["findings"]}) == EXPECTED["rule_ids"]
+    # One defect per rule, except the banner: it covers five links, and each is its own finding.
+    assert len(report["findings"]) == EXPECTED["findings_total"]
+    assert report["summary"]["root_causes"] == EXPECTED["root_causes"]
+    assert report["summary"]["duplicate_rate"] == 0.0
     blockers = sorted(
         finding["rule_id"] for finding in report["findings"] if finding["severity"] == "blocker"
     )

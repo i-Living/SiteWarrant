@@ -26,12 +26,12 @@ def selectors_in(value: Any, *, under_selector_key: bool = False) -> list[str]:
         for item in value:
             found.extend(selectors_in(item, under_selector_key=under_selector_key))
         return found
-    if isinstance(value, str) and SEPARATOR in value:
+    if isinstance(value, str) and under_selector_key and SEPARATOR in value:
         text = value.strip()
         if text:
-            # Only paths count. axe also emits single-segment selectors (".icon-link"), which
-            # name no place on the page, and splitting a path here would compare "html" with
-            # "body" instead of comparing paths.
+            # Only paths under a selector key count. Free text ("main > pricing" in a note, a
+            # heading in an attribute) names no element, and axe also emits single-segment
+            # selectors (".icon-link"), which name no place at all.
             found.append(text)
     return found
 
@@ -79,10 +79,12 @@ def anchor_for_selectors(selectors: Iterable[str]) -> str | None:
     for path in paths:
         if len(path) < 2:
             return None
-        heads.append(_normalize(path[0]))
+        heads.append(path[0])
     if len(set(heads)) != 1:
         return None
-    return heads[0]
+    # Agreement is decided on the raw segment: section:nth-of-type(1) and section:nth-of-type(2)
+    # are different blocks even though both are called "section". Only the label is normalized.
+    return _normalize(heads[0])
 
 
 def anchor_for_evidence(

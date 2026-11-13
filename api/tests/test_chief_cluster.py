@@ -65,6 +65,29 @@ def test_merged_duplicates_pool_their_evidence() -> None:
     assert [item.observation_id for item in kept[0].evidence] == ["obs-header", "obs-banner"]
 
 
+def test_subjects_keep_their_case() -> None:
+    """`#CTA` and `#cta` are different elements, so their findings must not merge."""
+    kept, duplicates = dedupe(
+        [finding(subject="header > a#CTA"), finding(subject="header > a#cta")], observations()
+    )
+    assert duplicates == 0
+    assert len(kept) == 2
+
+
+def test_every_retained_candidate_is_searched_for_a_duplicate() -> None:
+    """Three findings citing A, B, B: the third matches the retained B, not only the first."""
+    kept, duplicates = dedupe(
+        [
+            finding(observation="obs-main"),
+            finding(observation="obs-header"),
+            finding(observation="obs-header"),
+        ],
+        observations(),
+    )
+    assert duplicates == 1
+    assert len(kept) == 2
+
+
 def test_one_rule_in_one_block_without_a_subject_stays_two_targets() -> None:
     """A header can hold two small targets; only a shared citation or subject makes them one."""
     first = finding(observation="obs-header")

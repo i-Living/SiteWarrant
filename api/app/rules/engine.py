@@ -128,6 +128,7 @@ def occlusion_drafts(observation: ObservationView) -> list[FindingDraft]:
                     )
                 ],
                 f"{rule.summary} Observed: {selector} is covered by {occluder}.",
+                subject=selector,
             )
         )
     return drafts
@@ -157,16 +158,19 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
 
 
 def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
-    """One draft per rule, with evidence pooled across viewports.
+    """One draft per rule and subject, with evidence pooled across viewports.
 
     Evidence is taken round-robin by position within each draft, so a viewport that reports
     ten nodes cannot fill the cap and hide the two later viewports. Items are deduplicated
     by observation and excerpt: the same node twice is one item, two nodes of one observation
     stay two items.
     """
-    groups: dict[str, list[FindingDraft]] = {}
+    groups: dict[tuple[str, str | None], list[FindingDraft]] = {}
     for draft in drafts:
-        groups.setdefault(draft.rule_id, []).append(draft)
+        # The subject separates targets: two covered links are two defects, the same link
+        # measured at three viewports is one. Drafts without a subject, like axe and dom
+        # drafts, keep merging by rule alone.
+        groups.setdefault((draft.rule_id, draft.subject), []).append(draft)
 
     merged: list[FindingDraft] = []
     for group in groups.values():
@@ -190,7 +194,13 @@ def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
     return merged
 
 
-def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDraft:
+def _draft(
+    rule: Rule,
+    evidence: list[EvidenceDraft],
+    summary: str,
+    *,
+    subject: str | None = None,
+) -> FindingDraft:
     return FindingDraft(
         rule_id=rule.id,
         category=rule.category,
@@ -203,6 +213,7 @@ def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDr
         impact_ux=rule.impact.ux,
         confidence=DETERMINISTIC_CONFIDENCE,
         agent=RULES_AGENT,
+        subject=subject,
         evidence=evidence,
     )
 

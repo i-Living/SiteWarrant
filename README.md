@@ -121,9 +121,11 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 ## Verification
 
 Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2` (axe-core 4.14.0,
-9 rules):
+10 SiteWarrant rules):
 
-- 9 findings, one per planted defect: `blocker=2 major=6 minor=1 info=0`.
+- 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
+  covers five separate links, and each covered target is its own finding — collapsing them would
+  hide four defects behind the first one's summary.
 - Exit code `1`, because two blockers were proven.
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
@@ -151,20 +153,21 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - Eight agents share one budgeted loop (12 tool calls, 30k tokens, 90 s) and read facts through an
   MCP server scoped to their audit; the validator rejects a finding whose observation does not exist,
   whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
-- A real run with `--agents a11y` against the fixture reported `a11y=ok(1)` — one finding citing
-  WCAG 2.2 SC 2.5.8 with two evidence items — after the validator rejected one earlier attempt,
-  at 37 929 input and 3 646 output tokens in 40 s. With `--agents seo,a11y` the same fixture yields
-  18 findings: the nine deterministic ones, three from seo and six `A11Y-TARGET-SIZE` findings, one
-  per small target, each citing the viewports where it appears and distinguished by its `subject`.
+- A real run with `--agents a11y` against the fixture reports 15 findings — the 14 deterministic
+  ones plus one `A11Y-TARGET-SIZE` citing WCAG 2.2 SC 2.5.8 — and the same single root cause.
+  On the pre-P4 revision (`agent sha256:77ad5403f8fe400f`, 9 deterministic rules) the same fixture
+  produced 18 findings with `--agents seo,a11y`: nine deterministic, three from seo and six
+  `A11Y-TARGET-SIZE`, one per small target, each distinguished by its `subject`.
 - A failed agent does not fail the audit: the report carries `status: partial` and the deterministic
   findings stay. `tests/integration/test_agents_audit.py` pins both behaviours on cassettes.
 - The fixture's banner — which covers the header navigation at 390 px and carries a nameless link —
-  is one root cause (`header`) with symptoms from `responsive` and `a11y`, not two unrelated findings:
-  `summary.root_causes` is 1 and `duplicate_rate` is 0 on the deterministic run.
-- Duplicates merge only when the findings share a subject or a citation, so two small targets in one
-  block stay two findings.
+  is one root cause (`header`) with six symptoms from `responsive` and `a11y`, not unrelated
+  findings: `summary.root_causes` is 1 and `duplicate_rate` is 0 on the deterministic run.
+- Duplicates merge only when the findings share a subject (compared as written, CSS selectors are
+  case-sensitive) or a citation, so two targets in one block stay two findings and the same target
+  measured at three viewports is one.
 
-This is a single page of nine known defects. It is not precision, not recall, and not a benchmark.
+This is a single page of ten known defects. It is not precision, not recall, and not a benchmark.
 
 ## Layout
 

@@ -17,7 +17,7 @@ RUN_SCRIPT = f"""async () => {{
     if (!element) return null;
     const parts = [];
     let node = element;
-    while (node && node.nodeType === 1 && parts.length < 6) {{
+    while (node && node.nodeType === 1) {{
       const parent = node.parentElement;
       let index = 1;
       if (parent) {{

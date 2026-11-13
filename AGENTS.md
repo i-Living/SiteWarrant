@@ -254,10 +254,16 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   observations: the first path segment that is not a page wrapper. A finding whose evidence spans two
   blocks has no place and joins no cluster, and a group needs two findings from two categories before
   it is called a cause (docs/PLAN.md invariant 4).
-- **Dedupe merges only what is the same thing.** Identity is claim + place + subject, and without a
-  subject the findings must share a cited observation; two targets in one block stay two findings.
+- **Dedupe merges only what is the same thing.** Identity is claim + place + subject (compared as
+  written: CSS selectors are case-sensitive), and without a subject the findings must share a cited
+  observation. Every retained candidate is searched, not just the first one, because a block can
+  hold several findings of one rule.
 - **axe nodes carry `path`.** axe reports `.icon-link`, which names no place, so `run_axe` adds the
-  element's nth-of-type path in the same evaluate.
+  element's full nth-of-type path in the same evaluate — the whole path, because the anchor reads the
+  outermost block and a depth cap would hide it.
+- **A selector is only a selector under a selector key.** `selectors_in` ignores free text that
+  happens to contain ` > `, and agreement between two paths is decided on the raw segment:
+  `section:nth-of-type(1)` and `section:nth-of-type(2)` are different blocks.
 - **The validator is the only path from a candidate to a finding.** An agent proposes; the
   validator checks the claim exists in the corpus, the category matches, severity is not lowered,
   every cited observation belongs to this audit, the channel is allowed for that claim, and every
