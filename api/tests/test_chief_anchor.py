@@ -1,7 +1,7 @@
 import uuid
 
 from app.agents.models import EvidenceRef
-from app.chief.anchor import anchor_for_selectors, selectors_in
+from app.chief.anchor import anchor_for_evidence, anchor_for_selectors, selectors_in
 from app.core.report import EvidenceOut, FindingOut, ImpactOut
 
 HEADER_LINK = "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2)"
@@ -62,6 +62,31 @@ def test_selectors_are_read_from_payload_values_not_keys() -> None:
         "note": "not a path",
     }
     assert selectors_in(payload) == [HEADER_LINK, HEADER_BANNER]
+
+
+def test_the_subject_wins_over_the_rest_of_its_observation() -> None:
+    """One occlusion report holds hits from the whole page; a finding is about one of them."""
+    header_hit = "html > body > header:nth-of-type(1) > a:nth-of-type(1)"
+    footer_hit = "html > body > footer:nth-of-type(1) > a:nth-of-type(1)"
+    observations = {
+        "obs-occlusion": {
+            "hits": [
+                {"selector": header_hit, "occluder_selector": "html > body > div:nth-of-type(2)"},
+                {"selector": footer_hit, "occluder_selector": "html > body > div:nth-of-type(2)"},
+            ]
+        }
+    }
+    # Without a subject the payload disagrees with itself, so the finding has no place.
+    assert anchor_for_evidence(["obs-occlusion"], observations) is None
+    # The subject names the covered element, so the finding keeps its block.
+    assert anchor_for_evidence(["obs-occlusion"], observations, subject=header_hit) == "header"
+    assert anchor_for_evidence(["obs-occlusion"], observations, subject=footer_hit) == "footer"
+
+
+def test_a_subject_that_is_not_a_path_falls_back_to_the_evidence() -> None:
+    observations = {"obs": {"selector": HEADER_LINK}}
+    assert anchor_for_evidence(["obs"], observations, subject="header > a") == "header"
+    assert anchor_for_evidence(["obs"], observations, subject="Navigation link") == "header"
 
 
 def test_evidence_refs_and_report_evidence_share_one_shape() -> None:

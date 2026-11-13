@@ -78,7 +78,7 @@ def test_every_retained_candidate_is_searched_for_a_duplicate() -> None:
     """Three findings citing A, B, B: the third matches the retained B, not only the first."""
     kept, duplicates = dedupe(
         [
-            finding(observation="obs-main"),
+            finding(observation="obs-banner"),
             finding(observation="obs-header"),
             finding(observation="obs-header"),
         ],
@@ -110,6 +110,43 @@ def test_page_level_findings_have_no_place_and_dedupe_by_evidence() -> None:
     )
     assert duplicates == 1
     assert len(kept) == 1
+
+
+def test_two_hits_from_one_observation_keep_their_own_blocks() -> None:
+    """A mixed occlusion report must not make its findings place-less."""
+    header_hit = "html > body > header:nth-of-type(1) > a:nth-of-type(1)"
+    footer_hit = "html > body > footer:nth-of-type(1) > a:nth-of-type(1)"
+    mixed = {
+        "hits": [
+            {
+                "selector": header_hit,
+                "occluder_selector": "html > body > header:nth-of-type(1) > div",
+            },
+            {
+                "selector": footer_hit,
+                "occluder_selector": "html > body > header:nth-of-type(1) > div",
+            },
+        ]
+    }
+    kept, duplicates = dedupe(
+        [
+            finding(
+                rule_id="LAYOUT-OCCLUSION",
+                category="responsive",
+                observation="obs-mixed",
+                subject=header_hit,
+            ),
+            finding(
+                rule_id="LAYOUT-OCCLUSION",
+                category="responsive",
+                observation="obs-mixed",
+                subject=footer_hit,
+            ),
+        ],
+        {"obs-mixed": mixed},
+    )
+    assert duplicates == 0
+    assert len(kept) == 2
 
 
 def test_a_cross_category_cluster_becomes_a_root_cause() -> None:

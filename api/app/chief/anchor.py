@@ -88,8 +88,23 @@ def anchor_for_selectors(selectors: Iterable[str]) -> str | None:
 
 
 def anchor_for_evidence(
-    observation_ids: Iterable[str], observations: dict[str, dict[str, Any]]
+    observation_ids: Iterable[str],
+    observations: dict[str, dict[str, Any]],
+    *,
+    subject: str | None = None,
 ) -> str | None:
+    """Where the finding lives, resolved from its own target when it names one.
+
+    An observation can cover many elements: an occlusion report holds up to twenty hits from
+    across the page, and one finding per hit cites that same report. Reading every selector in
+    the payload would collect the footer's hits too, so the heads disagree and the finding would
+    lose its place. The subject names the element the finding is about, so it wins when it is a
+    path; otherwise the cited payloads decide.
+    """
+    if subject is not None and SEPARATOR in subject:
+        own = anchor_for_selectors([subject.strip()])
+        if own is not None:
+            return own
     selectors: list[str] = []
     for observation_id in observation_ids:
         payload = observations.get(observation_id)

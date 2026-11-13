@@ -101,7 +101,9 @@ def dedupe(
     duplicates = 0
     for finding in findings:
         anchor = anchor_for_evidence(
-            (item.observation_id for item in finding.evidence), observations
+            (item.observation_id for item in finding.evidence),
+            observations,
+            subject=finding.subject,
         )
         base = (finding.rule_id, _place(finding, anchor))
         candidates = buckets.setdefault(base, [])
@@ -135,7 +137,9 @@ def cluster(
     groups: dict[str, list[FindingOut]] = {}
     for finding in findings:
         anchor = anchor_for_evidence(
-            (item.observation_id for item in finding.evidence), observations
+            (item.observation_id for item in finding.evidence),
+            observations,
+            subject=finding.subject,
         )
         if anchor is None:
             continue

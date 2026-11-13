@@ -251,7 +251,9 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
   against the union of everything the finding cites, and not against the claim's constants: "24 by
   24 pixels" is the rule, and a quote that contains it is a fabricated measurement.
 - **A root cause is a place, not a rule family.** The anchor is read from the selectors in the cited
-  observations: the first path segment that is not a page wrapper. A finding whose evidence spans two
+  observations: the first path segment that is not a page wrapper. A finding that names its own
+  target (the subject is a selector) resolves its anchor from that target alone, because one
+  occlusion report can hold hits from across the whole page. A finding whose evidence spans two
   blocks has no place and joins no cluster, and a group needs two findings from two categories before
   it is called a cause (docs/PLAN.md invariant 4).
 - **Dedupe merges only what is the same thing.** Identity is claim + place + subject (compared as
