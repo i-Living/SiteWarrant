@@ -285,7 +285,7 @@ def test_a_failed_narration_is_a_failed_span() -> None:
             explain_causes(
                 [item],
                 list(findings.values()),
-                settings=Settings(chief_narration=True, llm_api_key="test-key"),
+                settings=Settings(chief_narration=True, llm_api_key="test-key", llm_cassette=""),
                 trace=trace,
                 audit_id=uuid.uuid4(),
             )
