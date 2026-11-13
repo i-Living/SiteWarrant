@@ -113,12 +113,13 @@ The same page without agents yields 14 findings and `llm_calls: 0`, `cost_estima
 deterministic layer is free, and every finding it loses by adding agents would be a finding the
 facts already proved.
 
-The Chief Auditor's explanation is a ninth model call, and it is billed like the others but costs a
-fraction of them. Run `evals/audits/2026-11-13-fixture-narrated.json` — the same fixture page with
+The Chief Auditor's explanation is an additional model call, and it is billed like the others but costs
+a fraction of them. Run `evals/audits/2026-11-13-fixture-narrated.json` — the same fixture page with
 `--agents a11y` and narration on, agent `sha256:0a57261de95be73a` — carries a `chief` row: 1 call,
 1 146 tokens in, 863 out, `$0.001379` estimated, status `ok`, next to the accessibility agent's 6
-calls and `$0.028806`. The paragraph it produced names the header links and says what a visitor loses
-— and every number in it was checked against the cluster's facts before it was kept.
+calls and `$0.028806`; the same audit records seven calls in total, not the eight the table above
+describes. The paragraph it produced names the header links and says what a visitor loses — and every
+number in it was checked against the cluster's facts before it was kept.
 
 At list price this is **$3.69 per 100 pages** (`0.036854 × 100`), or about 16.5 minutes of wall time
 per page on this machine (135 s for the fixture page including three viewports and both agents). The
