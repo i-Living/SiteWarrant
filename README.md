@@ -5,11 +5,9 @@ to one root cause, and re-audits after the fix.
 
 > **Stage: phases P0–P7 have landed, except the public demo stand.** Discovery, eight deterministic
 > channels at three viewports, eight budgeted agents behind a validator, deterministic deduplication
-> and root causes, a frozen benchmark with published numbers, fixes with re-audits, and traces with
-> cost estimates all run. Still open, each with the document that says so: the Chief Auditor's LLM
-> narration (the clustering itself is deterministic — [docs/PLAN.md](docs/PLAN.md), P4), the report
-> screenshot artifact in CI, and a public URL for `infra/demo.yml`, which needs the owner's VPS and
-> domain (PLAN §17.3).
+> and root causes with the Chief Auditor's narration, a frozen benchmark with published numbers, fixes
+> with re-audits, and traces with cost estimates all run. The one item the plan still lists as open is
+> a public URL for `infra/demo.yml`, which needs the owner's VPS and domain (PLAN §17.3).
 >
 > The numbers below come from stored runs under `evals/runs/`; a metric with no run behind it is
 > `null` and says so, never `0`.
@@ -62,8 +60,8 @@ that cannot.
 
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
-`evals/runs/2026-11-13-baseline-corpus-bytes.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:668a9010f1b1e6d2`, 2026-11-13. A metric with no run behind it stays `null`.
+`evals/runs/2026-11-13-baseline-chief-prompt.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:37d4af33aee7bb8b`, 2026-11-13. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -73,7 +71,7 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 320.7 s |
+| Median audit duration | wall clock per audit | `3.09 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 326.3 s |
 | Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
 | Regression-free fix rate | re-audits with no new finding at all / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
 
@@ -90,7 +88,7 @@ Planned for 8 weeks of evening work, roughly 80 hours. That is an estimate, not 
 | P1 | 1–2 | crawl, discovery, page templates | **done** |
 | P2 | 2–3 | deterministic fact layer, three viewports | **done** |
 | P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | **done** |
-| P4 | 4–5 | chief auditor, root causes, web report | **done** (deterministic layer; LLM narration open) |
+| P4 | 4–5 | chief auditor, root causes, web report | **done** (deterministic grouping, narrated clusters, CI screenshot) |
 | P5 | 5–6 | benchmark, gold labels, eval runner | **done** |
 | P6 | 6–7 | fixes and re-audit with diff | **done** |
 | P7 | 7–8 | tracing, cost accounting, demo, engineering report | **done, except the public demo stand** |
@@ -123,7 +121,7 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2` (axe-core 4.14.0,
+Measured on 2026-11-13 against the fixture site, agent `sha256:37d4af33aee7bb8b` (axe-core 4.14.0,
 10 SiteWarrant rules):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
@@ -133,7 +131,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 342 tests green (290 unit, 52 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 354 tests green (301 unit, 53 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -146,10 +144,11 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
   `/spa.html` is re-read through the browser because its body ships empty.
 - A sitemap entry on another host is not followed, and a sitemap entry that robots.txt disallows is not
   fetched.
-- Eight channels report 56 observations on the fixture page, each viewport named in its observation:
-  `http=8 dom=3 axe=27 contrast=6 responsive=3 occlusion=3 performance=3 screenshot=3`.
-- Every finding carries three evidence items — the same defect measured at 390, 768 and 1440 px is one
-  finding, not three.
+- Eight channels report 59 observations on the fixture page, each viewport named in its observation:
+  `http=8 dom=3 axe=27 contrast=9 responsive=3 occlusion=3 performance=3 screenshot=3`.
+- A finding carries one evidence item per measurement behind it: a defect measured at three viewports
+  carries three, an axe violation reported at two viewports carries six, and a page-level finding
+  carries one. The same defect at 390, 768 and 1440 px is one finding, not three.
 - Three snapshots per page, one per viewport, with HTML, DOM JSON and a full-page PNG on disk.
 - Two consecutive audits produce an identical observation set once timings and artifact keys are
   excluded; `tests/integration/test_fact_layer.py` asserts that.
@@ -170,6 +169,11 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - The fixture's banner — which covers the header navigation at 390 px and carries a nameless link —
   is one root cause (`header`) with six symptoms from `responsive` and `a11y`, not unrelated
   findings: `summary.root_causes` is 1 and `duplicate_rate` is 0 on the deterministic run.
+- With `--agents a11y` and narration on, the report carries a `chief` row next to the agent's: one
+  model call, `tokens_in` 1010, `tokens_out` 1032, `cost_estimate_usd` 0.001541 as an estimate, and the
+  root cause's `summary` is a sentence about the header instead of the measured sentence. When the
+  reply names a number the cluster's facts do not contain, the measured sentence stays and the reason
+  is in `summary.agents[chief].error`; `tests/integration/test_chief_audit.py` pins both.
 - Duplicates merge only when the findings share a subject (compared as written, CSS selectors are
   case-sensitive) or a citation, so two targets in one block stay two findings and the same target
   measured at three viewports is one.
@@ -189,7 +193,7 @@ uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
 Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:668a9010f1b1e6d2`, 320.7 s, `evals/runs/2026-11-13-baseline-corpus-bytes.json`):
+`sha256:37d4af33aee7bb8b`, 326.3 s, `evals/runs/2026-11-13-baseline-chief-prompt.json`):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);
@@ -237,6 +241,12 @@ never silently re-priced. A model with no entry in that file gets `null`, never 
 and "free" are different claims. `SITEWARRANT_AUDIT_COST_LIMIT_USD` (default `0.25`) stops an agent
 that reaches the ceiling; it reports `budget_exceeded` instead of finishing the page.
 
+The Chief Auditor's explanation of a cluster is one more model call, recorded as the `chief` row in
+`summary.agents` and in `llm_calls`, so its tokens and estimate sit next to the agents'. It explains
+groups that already exist and never re-groups them; a sentence that names a number the cluster's
+facts do not contain is dropped and the measured wording stays, which is why the report can show a
+plain sentence when the provider is unreachable. `SITEWARRANT_CHIEF_NARRATION=0` turns it off.
+
 A proposed prompt change is accepted only if precision does not regress:
 
 ```bash
@@ -253,8 +263,14 @@ POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
   docker compose -f infra/demo.yml up -d --build
 curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
   -d '{"url": "https://example.com"}'
+# {"audit_id": "...", "status": "running"} — the run continues in the process
+curl -s http://127.0.0.1:8000/audits/<audit_id>          # poll until status is completed
 curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
 ```
+
+The Next.js interface reads the same endpoints through a server-side rewrite: `/` lists the sites
+with a report, `/audits` polls the current and recent runs, `/audits/new` starts one. Set
+`SITEWARRANT_API` (default `http://127.0.0.1:8000`) and run `bun run dev` from `web/`.
 
 The stack is not deployed on a public URL yet: that needs the VPS and a domain, which is the owner's
 call (PLAN §17.3).
@@ -263,7 +279,7 @@ call (PLAN §17.3).
 
 ```
 api/          FastAPI service, crawler, audit tools, agents, evals, MCP server
-web/          Next.js report interface
+web/          Next.js interface: audited sites, audit form, progress, report
 benchmark/    site manifest, gold labels, CI fixtures
 rules/        WCAG 2.2, SEO and HTTP security rule corpus
 infra/        docker-compose, images, egress limits

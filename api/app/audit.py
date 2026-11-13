@@ -2,14 +2,18 @@ import asyncio
 import time
 import uuid
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from app.agents.llm import OpenAiCompatibleClient
 from app.agents.orchestrator import observation_index, run_agents
 from app.agents.specs import parse_agent_names, spec_for
 from app.agents.validator import validate
 from app.chief import run_chief
-from app.core.config import get_settings
+from app.chief.narrate import NarrationCall, findings_by_id, narrate
+from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.core.report import (
     AgentSummaryOut,
@@ -17,12 +21,13 @@ from app.core.report import (
     FindingOut,
     ImpactOut,
     Report,
+    RootCauseOut,
     build_report,
 )
 from app.core.urls import page_key
 from app.core.version import AUDIT_TOOLS, compute_agent_version
 from app.pricing import BASIS as PRICING_BASIS
-from app.pricing import pricing, pricing_version
+from app.pricing import Price, pricing, pricing_version
 from app.rules import corpus
 from app.rules.catalog import RULES
 from app.rules.engine import FindingDraft, NewObservation, draft_findings
@@ -34,6 +39,60 @@ from app.tools.http_probe import SECURITY_HEADERS, HttpFacts
 from app.tools.robots import ensure_allowed, robots_hop_check
 
 MEASURED_TOOLS = {"axe", "dom"}
+
+
+def narration_summary(narration: NarrationCall, model: str, price: Price | None) -> AgentSummaryOut:
+    """The chief's model call in the per-agent table: tokens measured, cost an estimate."""
+    cost = None if price is None else price.cost(narration.tokens_in, narration.tokens_out)
+    return AgentSummaryOut(
+        name="chief",
+        status=narration.status,
+        model=model,
+        cost_estimate_usd=cost,
+        rejected=narration.rejected,
+        llm_calls=narration.llm_calls,
+        tokens_in=narration.tokens_in,
+        tokens_out=narration.tokens_out,
+        latency_ms=narration.latency_ms,
+        error=narration.error,
+    )
+
+
+async def explain_causes(
+    causes: Sequence[RootCauseOut],
+    findings: Sequence[FindingOut],
+    *,
+    settings: Settings,
+    trace: Tracer,
+    audit_id: uuid.UUID,
+) -> NarrationCall | None:
+    """One model call that explains the clusters, or None when narration is off.
+
+    Narration is presentation, never evidence: the grouping happened before this point, and every
+    number in the prose is checked against the cluster's own facts before it is kept.
+    """
+    if not causes or not settings.chief_narration:
+        return None
+    # A cassette is one recorded agent conversation. An unrecorded narration call would end the
+    # next agent run with `llm_error` naming the cassette, so narration stays off while one is
+    # in force: the recording decides what the model says, and it recorded no narration.
+    if settings.llm_cassette.strip():
+        return None
+    client = OpenAiCompatibleClient(
+        model=settings.llm_model,
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key or None,
+        session_id=f"sitewarrant-chief-{audit_id}",
+        timeout_s=settings.llm_timeout_s,
+    )
+    with trace.span("chief.narration", causes=len(causes)):
+        return await narrate(
+            causes,
+            findings_by_id(findings),
+            client=client,
+            model=settings.llm_model,
+            timeout_s=settings.llm_timeout_s,
+        )
 
 
 class CaptureFailed(RuntimeError):
@@ -481,6 +540,31 @@ async def audit_page(
             # agent's claim is visible, and a cluster can cross categories.
             payload_by_id = {str(item.id): item.payload for item in observations}
             chief = run_chief(findings, payload_by_id)
+            # The chief explains the clusters it was given; it never regroups them. A failed or
+            # rejected narration leaves the measured text, because fewer words is not fewer facts.
+            narration = (
+                await explain_causes(
+                    chief.root_causes,
+                    findings,
+                    settings=settings,
+                    trace=trace,
+                    audit_id=audit_id,
+                )
+                if agent_names
+                else None
+            )
+            if narration is not None:
+                chief = replace(chief, root_causes=narration.causes)
+                price = pricing().price_for(settings.llm_model)
+                agent_summaries.append(narration_summary(narration, settings.llm_model, price))
+                await repo.save_llm_calls(
+                    session,
+                    audit_id=audit_id,
+                    run=SimpleNamespace(name="chief", calls=narration.calls),
+                    model=settings.llm_model,
+                    trace_id=trace.trace_id,
+                    price=price,
+                )
             findings = chief.findings
             stored_causes = await repo.save_root_causes(
                 session, audit_id=audit_id, page_id=page_id, causes=chief.root_causes

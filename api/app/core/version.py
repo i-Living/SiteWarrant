@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from app.agents.prompts import prompts_digest
+from app.chief.narrate import prompt_digest_sha as chief_prompt_digest
 from app.crawl.version import crawl_digest
 from app.rules import corpus
 from app.rules.catalog import RULES
@@ -52,6 +53,7 @@ def compute_agent_version(
         "crawl": crawl_digest(),
         "corpus": corpus.corpus_digest(),
         "prompts": prompts_digest(),
+        "chief_prompt": chief_prompt_digest(),
         "llm_model": llm_model,
         "viewports": list(viewports),
         "page_timeout_ms": page_timeout_ms,

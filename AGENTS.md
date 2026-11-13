@@ -11,14 +11,13 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 **Phases P0–P7 have landed code; the plan is not closed.** `api/` holds the FastAPI service, the
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
-runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/` is
-a Next.js page that renders a stored report; `infra/` brings up Postgres, Redis and a fixture site with
-ten planted defects, and `infra/demo.yml` runs the same code on loopback.
+runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
+is a Next.js interface: the audited-site list, the audit form, the progress page and the stored
+report. `infra/` brings up Postgres, Redis and a fixture site with ten planted defects, and
+`infra/demo.yml` runs the same code on loopback.
 
 Still open, and the plan says so in each case:
 
-- the Chief Auditor's LLM narration and the report screenshot artifact in CI (`docs/PLAN.md`, P4
-  «Осталось из плана»);
 - a public URL for the demo stand — it needs the owner's VPS, domain and secrets (§17.3);
 - an audit of a public site of 50+ pages (§16.1): only single `example.com` audits and the synthetic
   corpus have been run;
@@ -59,6 +58,11 @@ phase that makes them meaningful. Do not add a command to this file that has not
 - **A patch is computed against the source, not the DOM.** Browsers serialise the DOM they were given,
   so a diff built from the captured HTML reorders attributes and fails to apply; `--site-dir` makes
   `fix` read the file that is actually served.
+- **The Chief Auditor narrates, it does not group.** `app/chief/cluster.py` decides membership,
+  anchor and priority; `app/chief/narrate.py` asks one model call for prose about those clusters and
+  keeps a sentence only when every number in it is in the cluster's facts or in the text of its rule
+  (the standard's constants). A rejected, failed or unreachable narration leaves the measured
+  sentence: fewer words, never fewer facts, never a new finding.
 - **Every new finding is a regression.** `reaudit` does not decide which new findings are acceptable;
   it lists them and exits `1`, and `diff_findings` keeps closed, remaining and new disjoint.
 
@@ -156,7 +160,8 @@ api/app/core/      config, database engine, ORM models, report schema, agent_ver
 api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report, digest
 api/app/rules/     catalog.py (10 rules), engine.py (facts to findings), corpus, store (pgvector)
 api/app/agents/    specs, prompts/, runner (budgeted loop), validator, orchestrator, llm client
-api/app/chief/     anchor (where a finding lives) and cluster (dedupe, root causes, priority)
+api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes, priority) and
+                   narrate (one model call explaining the clusters) with prompts/chief.md
 api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new)
 api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare
 api/app/mcp/       fact server (stdio, one audit per process) and the agent loop's MCP client
@@ -170,19 +175,22 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
                    and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
-web/app/           Next.js report page
+web/app/           Next.js interface: audited sites, audit form, current audits, report
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
 benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests
 evals/runs/          recorded eval runs; a number in the docs must name one of these files
 pricing/pricing.yaml  versioned price table; the audit stores the version it was priced with
 infra/             docker-compose (Postgres with pgvector, Redis, fixture site) and demo.yml
-.github/workflows/ ci.yml (gate, including the image build), eval.yml (weekly corpus run)
+scripts/           report_screenshot.py — the CI job that captures the report page
+.github/workflows/ ci.yml (gate, image build, report screenshot), eval.yml (weekly corpus run)
 docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-There is no `api/app/worker/`: an audit runs inside the API request, which is the documented
-residual — fine for a demo, wrong for a crawl of 50 pages.
+There is no `api/app/worker/`: `POST /audits` answers `202` with an id and runs the audit as an
+in-process background task, so the browser has a progress page to follow; a restart loses the task and
+leaves the row `running`. That is the documented residual — fine for a demo, wrong for a crawl of 50
+pages.
 
 ## Code conventions
 
@@ -275,8 +283,25 @@ residual — fine for a demo, wrong for a crawl of 50 pages.
   cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.
 - **`pages_count` becomes 1 only after a commit persisted the page.** The failure handler reports
   what is in the database, so a run that dies before the commit says 0 and one that dies after says 1.
+- **The API answers before the audit row exists.** `POST /audits` generates the id, starts the task
+  and returns `202`; the row is written by the task moments later, so a client that polls instantly
+  can get 404 and has to retry. The task is held in a set because an unreferenced task may be
+  collected mid-run, and a restart leaves the row `running`: closing that is a worker's job.
 - **Agent names are resolved before anything is written.** An unknown name raises before the
   audit row exists, so a failed audit never claims zero pages while its facts are committed.
+- **The narration is one call, checked before it lands.** `app/chief/narrate.py` sends the cluster's
+  facts (anchor, categories, counts, rule ids, subjects) and accepts a sentence only if no number in
+  it is missing from those facts or from the rule text quoted with them — "Six findings" is checked
+  as 6, and "4.5:1" is allowed because it is the standard, not a measurement of this page. The answer
+  is data, not a transcript: a non-JSON reply is `unusable_reply`, an overlong sentence is rejected
+  with its reason in `summary.agents[chief].error`, and both leave the deterministic text in place.
+- **A cassette owns the conversation, so narration is off while one is set.** The recording is a
+  fixed agent exchange; an unrecorded narration call would spend the next replay step and end the
+  agent with `llm_error`. A test that wants narration stubs `app.audit.explain_causes` instead of
+  recording it (`tests/integration/test_chief_audit.py`).
+- **The chief prompt is in `agent_version`.** `app/chief/prompts/chief.md` is hashed by
+  `compute_agent_version` next to the agent prompts, so editing the brief moves every published
+  number and the eval baseline has to be re-run.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
