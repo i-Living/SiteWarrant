@@ -110,7 +110,7 @@ uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
 ```
 
-The fixture site at `http://localhost:8081/` is a static page with nine defects planted on purpose,
+The fixture site at `http://localhost:8081/` is a static page with ten defects planted on purpose,
 one per rule in `api/app/rules/catalog.py`, plus a journal, a product list, an app shell and a
 sitemap for the crawler. `--allow-private` is required because the request guard refuses loopback
 addresses by default; without the flag both commands exit with code 2. The flag exempts only the

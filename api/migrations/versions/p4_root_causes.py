@@ -3,21 +3,24 @@
 Revision ID: 9c1d7e4a55b2
 Revises: 4b7c1f9d2a10
 
-Rollout. `ADD COLUMN` on `findings` without a default is metadata-only in PostgreSQL 11+, so
-`subject` and `root_cause_id` cost no table rewrite. The two operations that do take locks are the
-index and the foreign key: `create_index` builds under a SHARE lock and blocks writes for the
-duration, and `create_foreign_key` validates every existing row under SHARE ROW EXCLUSIVE. On this
-project's data — one findings row per defect per audit, thousands of rows — both finish in well under
-a second, which is why neither is built `CONCURRENTLY` (that cannot run inside the migration's
-transaction anyway). Revisit if `findings` grows past a few hundred thousand rows: build the index
-concurrently first, then run this revision.
+Rollout. `ADD COLUMN` without a default is metadata-only in PostgreSQL 11+, so `subject` and
+`root_cause_id` do not rewrite the table — but the ALTERs still take `ACCESS EXCLUSIVE` on `findings`,
+and Alembic runs this revision in one transaction, so that lock is held until commit, through the
+index build and the foreign-key validation. On this table — one findings row per defect per audit,
+thousands of rows — the whole revision takes seconds and blocks reads and writes for that long. If
+`findings` ever grows past a few hundred thousand rows, split it: a revision for the columns, one
+that builds `ix_findings_root_cause_id` with `CREATE INDEX CONCURRENTLY` (autocommit, outside the
+migration transaction), and one that adds the foreign key with `NOT VALID` followed by
+`VALIDATE CONSTRAINT`. The index cannot be built before the column exists, and this revision creates
+it, which is why the fallback has to be a split rather than a concurrent build here.
 
 Rollback. `downgrade` drops `root_causes`, `findings.root_cause_id` and `findings.subject`. The
-grouping is recomputed by the next audit. `subject` is not: it comes from the agent's accepted
-candidate, whose transcript is not stored, and deterministic findings derive it from the observation
-(the covered selector) — so subjects of agent findings survive only if the audit is re-run with the
-same agents. Accept that loss, or export `findings.subject` before a destructive downgrade
-(`pg_dump --data-only -t findings`).
+grouping is recomputed by the next audit. A `subject` is not: deterministic findings rebuild it from
+the observation, agent findings cannot — the transcript is not stored — and re-running the audit
+creates new findings, it does not restore subjects on the rows that already exist. Either accept the
+loss or export before the downgrade (`pg_dump --data-only -t findings`) and restore afterwards by
+finding id: load the dump into a staging table and
+`UPDATE findings SET subject = staging.subject FROM staging WHERE findings.id = staging.id`.
 """
 
 import os
@@ -68,7 +71,11 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_root_causes_audit_id", "root_causes", ["audit_id"])
-    op.add_column("findings", sa.Column("subject", sa.Text(), nullable=True))
+    # Idempotent on purpose: an unmerged branch database may already hold this column from an
+    # earlier form of this revision, where it was String(256). No released environment can,
+    # because the revision ships with this PR.
+    op.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS subject text")
+    op.execute("ALTER TABLE findings ALTER COLUMN subject TYPE text")
     op.add_column(
         "findings",
         sa.Column("root_cause_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -89,8 +96,9 @@ def downgrade() -> None:
 
     The findings themselves stay. The grouping goes and the next audit recomputes it. The
     per-finding `subject` goes with the column: deterministic findings rebuild it from the
-    observation, agent findings do not (their transcript is not stored), so export it first if it
-    has to survive.
+    observation, agent findings do not (their transcript is not stored), and re-running the audit
+    writes new rows instead of restoring old ones. Export it first if it has to survive, and restore
+    it by finding id after re-upgrading.
     """
     if os.environ.get("SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE") != "1":
         raise RuntimeError(
