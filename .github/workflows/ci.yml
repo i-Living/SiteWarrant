@@ -119,9 +119,20 @@ jobs:
       - run: uv run playwright install --with-deps chromium
       - run: uv run alembic upgrade head
       # Deterministic audit: no agents, no API key, the same page and the same cause every time.
+      # Exit 1 means a blocker was proven, which the fixture has by design; only 2 is a failure.
       - name: Audit the fixture
-        run: uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
-      - name: Serve the API and the report page
+        run: |
+          set +e
+          uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            exit "$code"
+          fi
+          echo "audit exit $code (0 clean, 1 blocker proven — the fixture carries two)"
+      # One step: a background process does not outlive the shell that started it, so serving and
+      # capturing happen together.
+      - name: Serve the API and capture the report page
         run: |
           (cd ../web && bun install --frozen-lockfile \
             && SITEWARRANT_API=http://127.0.0.1:8000 bun run build)
@@ -136,8 +147,6 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8000/health > /dev/null
           curl -fsS -o /dev/null http://127.0.0.1:3000/
-      - name: Screenshot the report page
-        run: |
           audit=$(python3 -c "import json;print(json.load(open('report.json'))['audit_id'])")
           uv run python ../scripts/report_screenshot.py \
             --url "http://127.0.0.1:3000/?audit=$audit" --out ../report-page.png
