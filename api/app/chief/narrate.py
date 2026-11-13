@@ -100,11 +100,18 @@ def _rule_text(rule_ids: Sequence[str]) -> list[dict[str, str]]:
 
     The model is told that a number has to come from the cluster or from the rule; without the rule
     text it could only guess which constants exist, and the validator would reject a number it was
-    allowed to use.
+    allowed to use. The fix is part of the claim — `SEO-TITLE` says "between 30 and 60 characters" —
+    and `allowed_numbers` reads it too, so omitting it here would permit a number the model cannot
+    see.
     """
     wanted = set(rule_ids)
     entries = [
-        {"id": rule.id, "title": rule.title, "text": rule.summary}
+        {
+            "id": rule.id,
+            "title": rule.title,
+            "text": rule.summary,
+            "fix": rule.suggested_fix,
+        }
         for rule in RULES
         if rule.id in wanted
     ]

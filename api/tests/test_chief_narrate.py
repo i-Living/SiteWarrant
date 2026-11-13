@@ -320,6 +320,24 @@ def test_the_rejection_count_is_recorded_when_every_cause_is_rejected() -> None:
     assert result.rejected == 1, "a rejected narration is counted, not silently zero"
 
 
+def test_the_numbers_the_catalogue_allows_are_numbers_the_model_is_shown() -> None:
+    """`allowed_numbers` reads a rule's fix, so the fix has to travel in the facts as well.
+
+    `SEO-TITLE` states a length in its suggested fix; a model allowed to repeat "30" while the text
+    it receives never mentions it is being handed a constant it cannot use.
+    """
+    item = finding(rule_id="SEO-TITLE")
+    facts = cause_facts(cause(finding_ids=[item.id]), {item.id: item})
+
+    entry = next(entry for entry in facts["rule_text"] if entry["id"] == "SEO-TITLE")
+    shown = allowed_numbers(facts, ["SEO-TITLE"])
+    from app.agents.validator import payload_numbers
+
+    fix_numbers = payload_numbers({"fix": entry.get("fix", "")})
+    assert fix_numbers, "the SEO-TITLE fix states a length"
+    assert all(number in shown for number in fix_numbers)
+
+
 def test_the_rule_text_travels_with_the_facts() -> None:
     """The model may repeat a standard's constants, so it has to see the standard."""
     item = finding(rule_id="A11Y-CONTRAST")
