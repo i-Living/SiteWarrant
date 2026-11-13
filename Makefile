@@ -36,6 +36,15 @@ agents-fixture:
 	cd api && uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --out ../report-agents.json
 
 # Load the rule corpus into Postgres. Idempotent.
+demo-config:
+	POSTGRES_PASSWORD=local-check docker compose -f infra/demo.yml config >/dev/null && echo "demo.yml ok"
+
+demo-up:
+	docker compose -f infra/demo.yml up -d --build
+
+demo-down:
+	docker compose -f infra/demo.yml down
+
 benchmark-corpus:
 	python3 benchmark/generate.py
 

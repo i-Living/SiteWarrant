@@ -164,7 +164,13 @@ async def get_audit(session: AsyncSession, audit_id: uuid.UUID) -> Audit | None:
 
 
 async def save_llm_calls(
-    session: AsyncSession, *, audit_id: uuid.UUID, run: Any, model: str
+    session: AsyncSession,
+    *,
+    audit_id: uuid.UUID,
+    run: Any,
+    model: str,
+    trace_id: str | None = None,
+    price: Any = None,
 ) -> None:
     """One row per model call, from the per-call stats the runner kept."""
     for stat in run.calls:
@@ -176,12 +182,22 @@ async def save_llm_calls(
                 tokens_in=stat.tokens_in,
                 tokens_out=stat.tokens_out,
                 latency_ms=stat.latency_ms,
+                trace_id=trace_id,
+                cost_estimate_usd=(
+                    None if price is None else price.cost(stat.tokens_in, stat.tokens_out)
+                ),
             )
         )
 
 
 async def add_audit_usage(
-    session: AsyncSession, *, audit_id: uuid.UUID, tokens_in: int, tokens_out: int, llm_calls: int
+    session: AsyncSession,
+    *,
+    audit_id: uuid.UUID,
+    tokens_in: int,
+    tokens_out: int,
+    llm_calls: int,
+    cost_estimate_usd: float | None = None,
 ) -> None:
     audit = await session.get(Audit, audit_id)
     if audit is None:
@@ -189,6 +205,8 @@ async def add_audit_usage(
     audit.tokens_in += tokens_in
     audit.tokens_out += tokens_out
     audit.llm_calls += llm_calls
+    if cost_estimate_usd is not None:
+        audit.cost_estimate_usd = round((audit.cost_estimate_usd or 0.0) + cost_estimate_usd, 6)
 
 
 async def save_root_causes(

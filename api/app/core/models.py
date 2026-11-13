@@ -185,6 +185,8 @@ class LlmCall(Base):
     tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     trace_id: Mapped[str | None] = mapped_column(String(64))
+    # An estimate from the versioned price file; NULL when the model has no price, never 0.
+    cost_estimate_usd: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

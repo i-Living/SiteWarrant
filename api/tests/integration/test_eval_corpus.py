@@ -58,9 +58,17 @@ async def test_a_run_is_self_describing() -> None:
 
 
 async def test_artifacts_are_off_by_default() -> None:
+    """An eval writes no screenshots: compare with what was on disk, not with zero."""
     artifacts = os.environ.get("ARTIFACTS_DIR")
+    if not artifacts:
+        pytest.skip("ARTIFACTS_DIR is not set, so there is nothing to inspect")
+
+    def screenshots() -> set[Path]:
+        return set(Path(artifacts).rglob("*.png"))
+
+    before = await asyncio.to_thread(screenshots)
     run = await run_eval(BENCHMARK / "dataset.json", sites=["lumen"], store_artifacts=False)
+    after = await asyncio.to_thread(screenshots)
+
     assert run.context.store_artifacts is False
-    if artifacts:
-        written = await asyncio.to_thread(lambda: list(Path(artifacts).rglob("*.png")))
-        assert not written, "an eval run must not spend disk on screenshots it never reads"
+    assert after - before == set(), "an eval run must not spend disk on screenshots it never reads"

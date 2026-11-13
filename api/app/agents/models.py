@@ -91,6 +91,9 @@ class AgentRun(BaseModel):
 
     name: str
     status: str
+    # Which model produced this, and what its tokens would cost at the price file in force.
+    model: str = ""
+    cost_estimate_usd: float | None = None
     accepted: list[CandidateFinding] = Field(default_factory=list)
     rejected: list[Rejection] = Field(default_factory=list)
     tool_calls: int = 0

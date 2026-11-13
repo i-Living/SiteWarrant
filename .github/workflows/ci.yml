@@ -78,3 +78,20 @@ jobs:
       - run: bunx biome check .
       - run: bunx tsc --noEmit
       - run: bun run build
+
+  image:
+    name: image (docker build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      # The audit needs a browser, so the image installs Chromium: this job proves that still works
+      # rather than discovering it on the machine that hosts the demo.
+      - uses: docker/build-push-action@v6
+        with:
+          context: api
+          file: api/Dockerfile
+          push: false
+          tags: sitewarrant-api:ci

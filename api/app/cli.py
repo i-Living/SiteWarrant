@@ -15,6 +15,7 @@ from app.crawl.crawler import crawl as crawl_site
 from app.crawl.models import CrawlLimits
 from app.eval.compare import compare_runs
 from app.eval.dataset import DatasetError
+from app.eval.gate import decide
 from app.eval.models import EvalRun
 from app.eval.runner import run_eval
 from app.fixes.reaudit import ReauditError, reaudit
@@ -263,6 +264,31 @@ def _print_eval(run: EvalRun) -> None:
             f"  {rule_id:<20} p={rule['precision']:<7} r={rule['recall']:<7} "
             f"labels {rule['labels']} predicted {rule['predicted']}"
         )
+
+
+@cli.command("prompt-check")
+def prompt_check_command(
+    baseline: Path = typer.Option(
+        ..., "--baseline", help="The run the change is measured against."
+    ),
+    candidate: Path = typer.Option(
+        ..., "--candidate", help="The run measured with the new prompts."
+    ),
+    tolerance: float = typer.Option(
+        0.0, "--tolerance", help="Measurement noise allowed on precision."
+    ),
+) -> None:
+    """Accept a prompt change only when precision did not regress."""
+    before = EvalRun.model_validate_json(baseline.read_text(encoding="utf-8"))
+    after = EvalRun.model_validate_json(candidate.read_text(encoding="utf-8"))
+    decision = decide(before, after, tolerance=tolerance)
+
+    typer.echo(f"corpus {decision.corpus}")
+    for reason in decision.reasons:
+        typer.echo(f"  {reason}")
+    typer.echo(f"{decision.verdict}")
+    if not decision.accepted:
+        raise typer.Exit(code=1)
 
 
 @cli.command("fix")

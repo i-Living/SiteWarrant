@@ -1,0 +1,18 @@
+# Prices used for cost estimates. Versioned on purpose: a stored audit keeps the version it was
+# measured with, so an old estimate is never silently rewritten by today's rates.
+#
+# SiteWarrant runs on the OpenCode Zen Go plan, which bills a subscription with included usage.
+# The numbers below are the OpenCode Console list price for the same model and the same tokens:
+# `cost_estimate_usd` therefore answers "what would these tokens cost at list price", never
+# "what did we pay". The report carries this sentence next to the number.
+version: "2026-11-13"
+currency: USD
+unit: per_1m_tokens
+sources:
+  - url: https://opencode.ai/docs/console/models/
+    retrieved: "2026-11-13"
+    note: Console list price, per 1M tokens; the Go plan bills a subscription instead.
+models:
+  deepseek-v4.1-flash:
+    input: 0.30
+    output: 1.20

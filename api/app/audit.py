@@ -21,10 +21,13 @@ from app.core.report import (
 )
 from app.core.urls import page_key
 from app.core.version import AUDIT_TOOLS, compute_agent_version
+from app.pricing import BASIS as PRICING_BASIS
+from app.pricing import pricing, pricing_version
 from app.rules import corpus
 from app.rules.catalog import RULES
 from app.rules.engine import FindingDraft, NewObservation, draft_findings
 from app.storage import repo
+from app.telemetry import Tracer
 from app.tools import http_probe
 from app.tools.fetch import PageCapture, ViewportCapture, capture_page
 from app.tools.http_probe import SECURITY_HEADERS, HttpFacts
@@ -280,11 +283,45 @@ async def run_audit(
     agents: Sequence[str] = (),
     store_artifacts: bool | None = None,
 ) -> Report:
-    """Audit one page at every configured viewport: facts first, findings from facts.
-
-    Agents and root causes arrive in later phases; this is the deterministic fact layer.
-    """
+    """Audit one page and hand back a report whose spans cover the whole run."""
     settings = get_settings()
+    trace = Tracer()
+    with trace.span("audit", site=url, agents=list(agents)):
+        report = await audit_page(
+            url,
+            allow_private=allow_private,
+            ignore_robots=ignore_robots,
+            agents=agents,
+            store_artifacts=store_artifacts,
+            tracer=trace,
+        )
+    # The span tree is only complete once the audit span has closed, so the file and the summary
+    # are written here rather than inside the page.
+    report = report.model_copy(
+        update={
+            "summary": report.summary.model_copy(
+                update={"spans": trace.summary(), "trace_id": trace.trace_id}
+            )
+        }
+    )
+    if settings.store_artifacts if store_artifacts is None else store_artifacts:
+        write_artifact(uuid.UUID(report.audit_id), "trace.jsonl", trace.to_jsonl())
+        write_artifact(uuid.UUID(report.audit_id), "report.json", report.model_dump_json(indent=2))
+    return report
+
+
+async def audit_page(
+    url: str,
+    *,
+    allow_private: bool = False,
+    ignore_robots: bool = False,
+    agents: Sequence[str] = (),
+    store_artifacts: bool | None = None,
+    tracer: Tracer | None = None,
+) -> Report:
+    """Audit one page at every configured viewport: facts first, findings from facts."""
+    settings = get_settings()
+    trace = tracer or Tracer()
     # Resolve the names first: an unknown agent must fail before anything is written, not after
     # the facts are committed and the audit has to be marked failed with no pages.
     agent_names = parse_agent_names(",".join(agents)) if agents else []
@@ -313,6 +350,8 @@ async def run_audit(
                 "pages_limit": 1,
                 "robots": "ignored" if ignore_robots else "enforced",
                 "agents": agent_names,
+                # The price file in force: an old audit must not be re-priced by new rates.
+                "pricing_version": pricing_version(),
             },
         )
         try:
@@ -369,14 +408,15 @@ async def run_audit(
                     dom_key=dom_key,
                     screenshot_key=screenshot_key,
                 )
-                observations.extend(
-                    viewport_observations(
-                        viewport_capture,
-                        html_key=html_key,
-                        dom_key=dom_key,
-                        screenshot_key=screenshot_key,
+                with trace.span("page", url=capture.url, viewport=viewport_capture.viewport):
+                    observations.extend(
+                        viewport_observations(
+                            viewport_capture,
+                            html_key=html_key,
+                            dom_key=dom_key,
+                            screenshot_key=screenshot_key,
+                        )
                     )
-                )
             await repo.save_observations(session, page_id=page_id, observations=observations)
             drafts = draft_findings([observation.view() for observation in observations])
             stored_findings = await repo.save_findings(
@@ -400,7 +440,9 @@ async def run_audit(
                 # be committed before the MCP server can serve them.
                 await session.commit()
                 pages_committed = 1
-                orchestration = await run_agents(audit_id, names=agent_names, settings=settings)
+                orchestration = await run_agents(
+                    audit_id, names=agent_names, settings=settings, tracer=trace
+                )
                 index = await observation_index(audit_id)
                 agent_drafts: list[FindingDraft] = []
                 for run in orchestration.runs:
@@ -414,6 +456,8 @@ async def run_audit(
                         AgentSummaryOut(
                             name=run.name,
                             status=run.status,
+                            model=run.model,
+                            cost_estimate_usd=run.cost_estimate_usd,
                             findings=len(run.accepted),
                             rejected=len(run.rejected),
                             tool_calls=run.tool_calls,
@@ -462,6 +506,15 @@ async def run_audit(
                 agents=agent_summaries,
                 root_causes=chief.root_causes,
                 duplicates_removed=chief.duplicates_removed,
+                pricing={
+                    "version": pricing_version(),
+                    "currency": pricing().currency,
+                    "basis": PRICING_BASIS,
+                    "unpriced_models": pricing().unpriced(
+                        sorted({agent.model for agent in agent_summaries if agent.model})
+                    ),
+                },
+                trace_id=trace.trace_id,
             )
             report_key = write_artifact(audit_id, "report.json", report.model_dump_json(indent=2))
             await repo.finish_audit(

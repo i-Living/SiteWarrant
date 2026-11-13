@@ -212,6 +212,47 @@ repaired without inventing text (`SEO-TITLE`, `SEO-META-DESC`, `SEO-H1`, `A11Y-L
 audits it again and reports closed / remaining / new — every new finding counts as a regression and
 the command exits `1`.
 
+## Traces and cost
+
+Every audit records one trace: `audit → page → agent → tool call → model call`, with
+OpenTelemetry's identifiers and a `trace.jsonl` artifact beside the report. The report's summary says
+which trace it was (`trace_id`), how many spans of each kind it holds, how many tokens the model
+actually used, and what those tokens would cost at the versioned price file:
+
+```json
+"tokens_in": 13991, "tokens_out": 1237, "llm_calls": 6,
+"cost_estimate_usd": 0.004682,
+"pricing": {"version": "2026-11-13", "basis": "list price ...", "unpriced_models": []}
+```
+
+Tokens and call counts are measured; `cost_estimate_usd` is an estimate from
+`pricing/pricing.yaml`, and the audit stores the price version it was measured with, so an old run is
+never silently re-priced. A model with no entry in that file gets `null`, never `0.0` — "not priced"
+and "free" are different claims. `SITEWARRANT_AUDIT_COST_LIMIT_USD` (default `0.25`) stops an agent
+that reaches the ceiling; it reports `budget_exceeded` instead of finishing the page.
+
+A proposed prompt change is accepted only if precision does not regress:
+
+```bash
+uv run sitewarrant prompt-check --baseline evals/runs/base.json --candidate evals/runs/new.json
+```
+
+## Demo
+
+`infra/demo.yml` runs the same code as one command, with the API bound to loopback; the public face
+is a TLS proxy in front of it, because an unauthenticated crawler should not answer on `0.0.0.0`.
+
+```bash
+POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
+  docker compose -f infra/demo.yml up -d --build
+curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
+  -d '{"url": "https://example.com"}'
+curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
+```
+
+The stack is not deployed on a public URL yet: that needs the VPS and a domain, which is the owner's
+call (PLAN §17.3).
+
 ## Layout
 
 ```

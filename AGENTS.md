@@ -19,6 +19,23 @@ working, and do not add a command to this file that has not been run.
 
 ## Invariants
 
+- **Tokens are measured, money is estimated, and the report says which is which.** `tokens_in`,
+  `tokens_out` and `llm_calls` come from the provider's reply; `cost_estimate_usd` comes from
+  `pricing/pricing.yaml`. An unpriced model yields `None`, never `0.0`, and one unpriced agent makes
+  the audit total `None` rather than quietly smaller.
+- **A price version is recorded with the audit.** `audits.config.pricing_version` and
+  `llm_calls.cost_estimate_usd` mean an old run keeps its old prices; re-pricing is a migration, not
+  a side effect of editing a YAML file.
+- **A span that fails is still recorded.** `Tracer.span` marks `status="error"` with the message and
+  re-raises: a trace that only shows successes is a marketing document.
+- **The cost ceiling stops agents, not audits.** `budget_exceeded` on an agent, the same status on
+  agents that never started, and the deterministic findings are still reported. `_cost_limit_in`
+  opens anyio's exception groups, because a ceiling hidden inside a group would be reported as
+  `failed`.
+- **A prompt change is accepted on precision, not on enthusiasm.** `app/eval/gate.py` gates precision
+  and the false-positive rate, refuses to compare different corpora, and defaults its tolerance to
+  zero.
+
 - **A benchmark number is only as good as its denominator.** `app/eval/metrics.py` keeps counts next
   to ratios, and the run file stores the label set it was measured against, so a reader can redo the
   arithmetic. A comparison across two corpora is refused: it is not a comparison.

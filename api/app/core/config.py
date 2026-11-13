@@ -23,7 +23,9 @@ class Settings(BaseSettings):
 
     database_url: str = Field(
         default="postgresql+asyncpg://sitewarrant:sitewarrant@localhost:5432/sitewarrant",
-        validation_alias=AliasChoices("DATABASE_URL", "database_url"),
+        # The prefixed name is what the images and every .env.example use; accepting only the
+        # bare one made a deployed container fall back to localhost without a word.
+        validation_alias=AliasChoices("SITEWARRANT_DATABASE_URL", "DATABASE_URL", "database_url"),
     )
     store_artifacts: bool = Field(
         default=True,
@@ -76,6 +78,12 @@ class Settings(BaseSettings):
     llm_timeout_s: float = Field(
         default=120.0,
         validation_alias=AliasChoices("SITEWARRANT_LLM_TIMEOUT_S", "llm_timeout_s"),
+    )
+    # Ceiling for the estimated model cost of one audit. None switches the ceiling off; the
+    # estimate itself always comes from the versioned price file.
+    audit_cost_limit_usd: float | None = Field(
+        default=0.25,
+        validation_alias=AliasChoices("SITEWARRANT_AUDIT_COST_LIMIT_USD", "audit_cost_limit_usd"),
     )
 
     @property
