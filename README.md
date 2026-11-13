@@ -60,8 +60,8 @@ that cannot.
 
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
-`evals/runs/2026-11-13-baseline-chief-prompt.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:37d4af33aee7bb8b`, 2026-11-13. A metric with no run behind it stays `null`.
+`evals/runs/2026-11-13-baseline-narration-v2.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:0a57261de95be73a`, 2026-11-13. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.09 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 326.3 s |
+| Median audit duration | wall clock per audit | `3.06 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 327.6 s |
 | Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
 | Regression-free fix rate | re-audits with no new finding at all / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
 
@@ -121,7 +121,7 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-13 against the fixture site, agent `sha256:37d4af33aee7bb8b` (axe-core 4.14.0,
+Measured on 2026-11-13 against the fixture site, agent `sha256:0a57261de95be73a` (axe-core 4.14.0,
 10 SiteWarrant rules):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
@@ -170,10 +170,11 @@ Measured on 2026-11-13 against the fixture site, agent `sha256:37d4af33aee7bb8b`
   is one root cause (`header`) with six symptoms from `responsive` and `a11y`, not unrelated
   findings: `summary.root_causes` is 1 and `duplicate_rate` is 0 on the deterministic run.
 - With `--agents a11y` and narration on, the report carries a `chief` row next to the agent's: one
-  model call, `tokens_in` 1010, `tokens_out` 1032, `cost_estimate_usd` 0.001541 as an estimate, and the
+  model call, `tokens_in` 1146, `tokens_out` 863, `cost_estimate_usd` 0.001379 as an estimate, and the
   root cause's `summary` is a sentence about the header instead of the measured sentence. When the
   reply names a number the cluster's facts do not contain, the measured sentence stays and the reason
-  is in `summary.agents[chief].error`; `tests/integration/test_chief_audit.py` pins both.
+  is in `summary.agents[chief].error`; `tests/integration/test_chief_audit.py` pins both. The run is
+  stored as `evals/audits/2026-11-13-fixture-narrated.json`.
 - Duplicates merge only when the findings share a subject (compared as written, CSS selectors are
   case-sensitive) or a citation, so two targets in one block stay two findings and the same target
   measured at three viewports is one.
@@ -193,7 +194,7 @@ uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
 Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:37d4af33aee7bb8b`, 326.3 s, `evals/runs/2026-11-13-baseline-chief-prompt.json`):
+`sha256:0a57261de95be73a`, 327.6 s, `evals/runs/2026-11-13-baseline-narration-v2.json`):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);

@@ -175,7 +175,7 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
                    and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
-web/app/           Next.js interface: audited sites, audit form, current audits, report
+web/app/           Next.js interface: sites, site pages, audit form, current audits, report
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
 benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests
@@ -187,10 +187,8 @@ scripts/           report_screenshot.py — the CI job that captures the report 
 docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-There is no `api/app/worker/`: `POST /audits` answers `202` with an id and runs the audit as an
-in-process background task, so the browser has a progress page to follow; a restart loses the task and
-leaves the row `running`. That is the documented residual — fine for a demo, wrong for a crawl of 50
-pages.
+There is no `api/app/worker/`: an audit runs inside the API request and holds it until the page is
+done, which is the documented residual — fine for a demo, wrong for a crawl of 50 pages.
 
 ## Code conventions
 
@@ -283,10 +281,6 @@ pages.
   cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.
 - **`pages_count` becomes 1 only after a commit persisted the page.** The failure handler reports
   what is in the database, so a run that dies before the commit says 0 and one that dies after says 1.
-- **The API answers before the audit row exists.** `POST /audits` generates the id, starts the task
-  and returns `202`; the row is written by the task moments later, so a client that polls instantly
-  can get 404 and has to retry. The task is held in a set because an unreferenced task may be
-  collected mid-run, and a restart leaves the row `running`: closing that is a worker's job.
 - **Agent names are resolved before anything is written.** An unknown name raises before the
   audit row exists, so a failed audit never claims zero pages while its facts are committed.
 - **The narration is one call, checked before it lands.** `app/chief/narrate.py` sends the cluster's

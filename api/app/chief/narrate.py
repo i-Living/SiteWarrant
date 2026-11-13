@@ -35,6 +35,13 @@ MAX_RATIONALE_CHARS = 600
 # call: the eight with the highest priority speak for the page.
 MAX_NARRATED_CAUSES = 8
 FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+# The instructions appended in Python are part of the brief, so they are part of its digest too:
+# editing a sentence here has to move `agent_version` exactly like editing chief.md does.
+SYSTEM_SUFFIX = (
+    "Every id you answer must be one of the ids below. A number you write must appear in "
+    "that cause's facts or in the rule text quoted with it."
+)
+USER_PROMPT_LEAD = "Clusters found in this audit, already grouped by the deterministic layer:"
 
 
 @dataclass
@@ -59,13 +66,19 @@ def prompt_text() -> str:
 
 
 def prompt_digest_sha() -> str:
-    """The narration prompt is part of `agent_version`: different brief, different agent."""
-    return hashlib.sha256(prompt_text().encode("utf-8")).hexdigest()[:16]
+    """The narration prompt is part of `agent_version`: different brief, different agent.
+
+    The brief is the file plus the sentences this module appends to it; hashing only the file would
+    let an edit to the appended instructions keep the old version string.
+    """
+    parts = [prompt_text(), SYSTEM_SUFFIX, USER_PROMPT_LEAD]
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 def cause_facts(cause: RootCauseOut, findings: Mapping[str, FindingOut]) -> dict[str, Any]:
     """The facts a cluster may be described with. Nothing else is allowed into the call."""
     members = [findings[finding_id] for finding_id in cause.finding_ids if finding_id in findings]
+    rules = sorted({finding.rule_id for finding in members})
     return {
         "id": cause.id,
         "anchor": cause.anchor,
@@ -75,10 +88,32 @@ def cause_facts(cause: RootCauseOut, findings: Mapping[str, FindingOut]) -> dict
         "priority": cause.priority,
         "findings": len(members),
         "categories_count": len(cause.categories),
-        "rules": sorted({finding.rule_id for finding in members}),
+        "rules": rules,
+        "rule_text": _rule_text(rules),
         "subjects": sorted({finding.subject for finding in members if finding.subject})[:5],
         "titles": sorted({finding.title for finding in members})[:5],
     }
+
+
+def _rule_text(rule_ids: Sequence[str]) -> list[dict[str, str]]:
+    """The claim text behind each rule, because its constants are what the model may repeat.
+
+    The model is told that a number has to come from the cluster or from the rule; without the rule
+    text it could only guess which constants exist, and the validator would reject a number it was
+    allowed to use.
+    """
+    wanted = set(rule_ids)
+    entries = [
+        {"id": rule.id, "title": rule.title, "text": rule.summary}
+        for rule in RULES
+        if rule.id in wanted
+    ]
+    entries.extend(
+        {"id": entry.id, "title": entry.title, "text": entry.body}
+        for entry in corpus.claims()
+        if entry.id in wanted
+    )
+    return entries
 
 
 def allowed_numbers(facts: Mapping[str, Any], rule_ids: Sequence[str]) -> list[float]:
@@ -102,16 +137,12 @@ def allowed_numbers(facts: Mapping[str, Any], rule_ids: Sequence[str]) -> list[f
 
 
 def narration_system_prompt() -> str:
-    return (
-        f"{prompt_text()}\n\n"
-        "Every id you answer must be one of the ids below. A number you write must appear in "
-        "that cause's facts or in the rule text quoted with it."
-    )
+    return f"{prompt_text()}\n\n{SYSTEM_SUFFIX}"
 
 
 def narration_user_prompt(facts: Sequence[Mapping[str, Any]]) -> str:
     return (
-        "Clusters found in this audit, already grouped by the deterministic layer:\n"
+        f"{USER_PROMPT_LEAD}\n"
         f"{json.dumps(list(facts), ensure_ascii=False, indent=1, sort_keys=True)}"
     )
 
@@ -250,7 +281,12 @@ async def narrate(
         numbers,
     )
     if accepted == 0:
-        return result(causes=narrated, status="rejected", error="; ".join(reasons)[:500])
+        return result(
+            causes=narrated,
+            status="rejected",
+            rejected=len(selected),
+            error="; ".join(reasons)[:500],
+        )
     return result(
         causes=narrated,
         status="ok",

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from app.agents.llm import OpenAiCompatibleClient
+from app.agents.models import OrchestrationResult
 from app.agents.orchestrator import observation_index, run_agents
 from app.agents.specs import parse_agent_names, spec_for
 from app.agents.validator import validate
@@ -85,14 +86,31 @@ async def explain_causes(
         session_id=f"sitewarrant-chief-{audit_id}",
         timeout_s=settings.llm_timeout_s,
     )
-    with trace.span("chief.narration", causes=len(causes)):
-        return await narrate(
+    with trace.span("chief.narration", causes=len(causes)) as span:
+        narration = await narrate(
             causes,
             findings_by_id(findings),
             client=client,
             model=settings.llm_model,
             timeout_s=settings.llm_timeout_s,
         )
+        # A failed model call is a failed span, even when the report is fine: a trace that only
+        # shows the successes is a marketing document, not a record of the run.
+        if narration.status != "ok":
+            span.status = "error"
+            span.error = f"{narration.status}: {narration.error or 'no detail'}"[:500]
+    return narration
+
+
+def narration_is_affordable(orchestration: OrchestrationResult, settings: Settings) -> bool:
+    """The cost ceiling bounds the whole audit, and narration is a model call inside it."""
+    ceiling = settings.audit_cost_limit_usd
+    if ceiling is None:
+        return True
+    if any(run.status == "budget_exceeded" for run in orchestration.runs):
+        return False
+    spent = sum(run.cost_estimate_usd or 0.0 for run in orchestration.runs)
+    return spent < ceiling
 
 
 class CaptureFailed(RuntimeError):
@@ -550,7 +568,7 @@ async def audit_page(
                     trace=trace,
                     audit_id=audit_id,
                 )
-                if agent_names
+                if agent_names and narration_is_affordable(orchestration, settings)
                 else None
             )
             if narration is not None:

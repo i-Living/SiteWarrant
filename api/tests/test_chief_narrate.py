@@ -5,13 +5,16 @@ import json
 import uuid
 
 from app.agents.llm import LlmError, LlmReply
-from app.audit import explain_causes
+from app.agents.models import AgentRun, OrchestrationResult
+from app.audit import explain_causes, narration_is_affordable
 from app.chief.narrate import (
     MAX_SUMMARY_CHARS,
     allowed_numbers,
     apply_narration,
     cause_facts,
     narrate,
+    prompt_digest_sha,
+    prompt_text,
 )
 from app.core.config import Settings
 from app.core.report import EvidenceOut, FindingOut, ImpactOut, RootCauseOut
@@ -260,3 +263,87 @@ def test_the_switch_and_the_cassette_both_keep_the_model_out() -> None:
     assert call(Settings(chief_narration=False), [item]) is None
     assert call(Settings(chief_narration=True, llm_cassette="/tmp/recorded.json"), [item]) is None
     assert call(Settings(chief_narration=True), []) is None
+
+
+def test_a_failed_narration_is_a_failed_span() -> None:
+    """The trace shows the call that failed, not only the ones that worked."""
+    item, findings = one_cause()
+    trace = Tracer()
+
+    class Failing:
+        model = "stub"
+
+        async def complete(self, **_: object) -> LlmReply:  # pragma: no cover - raises
+            raise LlmError("provider down")
+
+    import app.audit as audit_module
+
+    original = audit_module.OpenAiCompatibleClient
+    audit_module.OpenAiCompatibleClient = lambda **_: Failing()  # type: ignore[assignment]
+    try:
+        result = asyncio.run(
+            explain_causes(
+                [item],
+                list(findings.values()),
+                settings=Settings(chief_narration=True, llm_api_key="test-key"),
+                trace=trace,
+                audit_id=uuid.uuid4(),
+            )
+        )
+    finally:
+        audit_module.OpenAiCompatibleClient = original  # type: ignore[assignment]
+
+    assert result is not None and result.status == "llm_error"
+    spans = [record for record in trace.spans if record.name == "chief.narration"]
+    assert len(spans) == 1
+    assert spans[0].status == "error"
+    assert "provider down" in (spans[0].error or "")
+
+
+def test_the_digest_covers_the_instructions_appended_in_python() -> None:
+    """Hashing only chief.md would let an edit to the appended rules keep the old version."""
+    import hashlib
+
+    file_only = hashlib.sha256(prompt_text().encode("utf-8")).hexdigest()[:16]
+
+    assert prompt_digest_sha() != file_only
+
+
+def test_the_rejection_count_is_recorded_when_every_cause_is_rejected() -> None:
+    item, findings = one_cause()
+    client = narrated(
+        {"causes": [{"id": "rc-1", "summary": "41 visitors cannot read it", "rationale": "x"}]}
+    )
+    result = asyncio.run(narrate([item], findings, client=client))
+
+    assert result.status == "rejected"
+    assert result.rejected == 1, "a rejected narration is counted, not silently zero"
+
+
+def test_the_rule_text_travels_with_the_facts() -> None:
+    """The model may repeat a standard's constants, so it has to see the standard."""
+    item = finding(rule_id="A11Y-CONTRAST")
+    facts = cause_facts(cause(finding_ids=[item.id]), {item.id: item})
+
+    text = " ".join(entry["text"] for entry in facts["rule_text"])
+    assert "4.5:1" in text
+    assert facts["rule_text"][0]["id"] == "A11Y-CONTRAST"
+
+
+def _agent(status: str, cost: float | None) -> AgentRun:
+    return AgentRun(name="a11y", status=status, model="m", cost_estimate_usd=cost)
+
+
+def test_narration_is_skipped_once_the_ceiling_stopped_the_agents() -> None:
+    settings = Settings(chief_narration=True, audit_cost_limit_usd=0.25)
+
+    assert narration_is_affordable(OrchestrationResult(runs=[_agent("ok", 0.01)]), settings)
+    assert not narration_is_affordable(
+        OrchestrationResult(runs=[_agent("budget_exceeded", 0.30)]), settings
+    ), "a stopped agent means the audit is at its ceiling"
+    assert not narration_is_affordable(OrchestrationResult(runs=[_agent("ok", 0.25)]), settings), (
+        "spent up to the ceiling leaves no room for another call"
+    )
+    assert narration_is_affordable(
+        OrchestrationResult(runs=[_agent("ok", None)]), Settings(audit_cost_limit_usd=None)
+    ), "no ceiling means no skip"

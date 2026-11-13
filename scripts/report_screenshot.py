@@ -17,6 +17,7 @@ no artifact, because it looks like one.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -24,8 +25,11 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
-# The report page must show at least one of these before the capture is worth keeping.
-REPORT_MARKERS = ("finding", "root cause", "audit")
+# The report page must show findings before the capture is worth keeping. A page that says "report
+# unavailable" is an error state, and a screenshot of it looks like an artifact while saying the
+# opposite of what happened.
+ERROR_TEXT = ("report unavailable", "no audit selected")
+REPORT_TEXT = re.compile(r"\d+\s+finding", re.IGNORECASE)
 
 
 def capture(url: str, out: Path, *, width: int, height: int, timeout_ms: int) -> str:
@@ -35,9 +39,12 @@ def capture(url: str, out: Path, *, width: int, height: int, timeout_ms: int) ->
             page = browser.new_page(viewport={"width": width, "height": height})
             page.goto(url, wait_until="networkidle", timeout=timeout_ms)
             page.wait_for_selector("main", timeout=timeout_ms)
-            text = (page.inner_text("main") or "").lower()
-            if not any(marker in text for marker in REPORT_MARKERS):
-                return f"the page rendered no recognisable report: {text[:200]!r}"
+            text = page.inner_text("main") or ""
+            lowered = text.lower()
+            if any(marker in lowered for marker in ERROR_TEXT):
+                return f"the page rendered an error state: {text[:200]!r}"
+            if not REPORT_TEXT.search(text):
+                return f"the page shows no finding count: {text[:200]!r}"
             out.parent.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(out), full_page=True)
             return ""
