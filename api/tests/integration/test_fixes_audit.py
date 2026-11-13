@@ -25,6 +25,8 @@ async def test_every_finding_gets_a_recommendation(tmp_path: Path) -> None:
     # The five mechanical rules are paid for here; the rest are text on purpose.
     assert {"SEO-TITLE", "SEO-META-DESC", "SEO-H1", "A11Y-LANG", "LAYOUT-OCCLUSION"} <= patched
     assert "A11Y-IMG-ALT" not in patched
+    # An occlusion patch moves the covering element; the covered link stays where it is.
+    assert ".banner" in fixes.diff, fixes.diff[:400]
     advisory = [item for item in fixes.recommendations if not item.patched]
     assert all(item.note for item in advisory)
 

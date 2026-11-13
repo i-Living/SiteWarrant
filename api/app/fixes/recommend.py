@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.db import session_scope
-from app.core.models import Finding, Page, Snapshot
+from app.core.models import Finding, Observation, Page, Snapshot
 from app.fixes.patch import FIXABLE, Patch, passing_colour, patch_for
 
 
@@ -72,6 +72,22 @@ async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
                 await session.execute(select(Page).where(Page.audit_id == identifier))
             ).scalars()
         }
+        # Which element covered which: keyed by the covered selector, because that is what a
+        # finding's `subject` names. An empty hit list is a page with nothing covered.
+        occluders: dict[uuid.UUID, dict[str, str]] = {}
+        observation_rows = (
+            await session.execute(select(Observation).where(Observation.page_id.in_(list(pages))))
+        ).scalars()
+        for row in observation_rows:
+            if row.tool != "occlusion":
+                continue
+            for hit in row.payload.get("hits") or []:
+                if not isinstance(hit, dict):
+                    continue
+                covered = str(hit.get("selector") or "")
+                covering = str(hit.get("occluder_selector") or "")
+                if covered and covering:
+                    occluders.setdefault(row.page_id, {})[covered] = covering
         snapshots = {
             snapshot.page_id: snapshot
             for snapshot in (
@@ -86,6 +102,7 @@ async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
                 finding.subject,
                 pages[finding.page_id].url if finding.page_id in pages else "",
                 _html_key(snapshots.get(finding.page_id)),
+                _occluder_for(occluders.get(finding.page_id, {}), finding.subject),
             )
             for finding in findings
         ]
@@ -96,21 +113,32 @@ async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
     working: dict[str, str] = {}
     notes: dict[str, list[str]] = {}
     originals: dict[str, str] = {}
-    for rule_id, severity, suggestion, subject, page_url, html_key in rows:
+    for rule_id, severity, suggestion, subject, page_url, html_key, occluder in rows:
         patch: Patch | None = None
-        if rule_id in FIXABLE and html_key and page_url:
+        if rule_id in FIXABLE and html_key and page_url and site_dir is not None:
             html = working.get(page_url) or _source_of(page_url, html_key, site_dir)
             if html is not None:
                 originals.setdefault(page_url, html)
-                patch = patch_for(rule_id, page_url, html, subject=subject)
+                # For an occlusion the fix moves the covering element, never the covered one:
+                # `subject` names the target a click failed to reach.
+                patch = patch_for(
+                    rule_id,
+                    page_url,
+                    html,
+                    subject=occluder if rule_id == "LAYOUT-OCCLUSION" else subject,
+                )
                 if patch is not None:
                     working[page_url] = patch.after
                     notes.setdefault(page_url, []).append(patch.note)
         note: str | None = None
         if rule_id not in FIXABLE:
             note = "recommendation only: repairing this means writing text a machine cannot invent"
+        elif site_dir is None:
+            # Browsers serialise the DOM they were given: a diff of that snapshot reorders
+            # attributes and does not apply to the file a human edits.
+            note = "no patch: pass --site-dir so the diff is computed against the served source"
         elif patch is None:
-            note = "no patch: the captured HTML does not offer what this fix would need"
+            note = "no patch: the source does not offer what this fix would need"
         report.recommendations.append(
             Recommendation(
                 rule_id=rule_id,
@@ -155,8 +183,14 @@ def _source_of(page_url: str, html_key: str, site_dir: Path | None) -> str | Non
     if site_dir is not None:
         candidate = site_dir / _relative(page_url)
         if candidate.is_file():
-            return candidate.read_text(encoding="utf-8")
+            return _with_final_newline(candidate.read_text(encoding="utf-8"))
     return _read(html_key)
+
+
+def _occluder_for(occluders: dict[str, str], subject: str | None) -> str:
+    if subject and subject in occluders:
+        return occluders[subject]
+    return next(iter(occluders.values()), "")
 
 
 def _html_key(snapshot: Snapshot | None) -> str | None:
@@ -169,14 +203,21 @@ def _read(key: str) -> str | None:
     target = artifact_path(key)
     if not target.exists():
         return None
-    return target.read_text(encoding="utf-8")
+    return _with_final_newline(target.read_text(encoding="utf-8"))
+
+
+def _with_final_newline(text: str) -> str:
+    """A diff of a file whose last line has no newline applies with a warning at best."""
+    return text if text.endswith("\n") or not text else text + "\n"
 
 
 def _relative(url: str) -> str:
+    """The file a URL is served from: `/` and `/products/` are index files, not directories."""
     from urllib.parse import urlsplit
 
-    parts = urlsplit(url)
-    path = parts.path.lstrip("/") or "index.html"
+    path = urlsplit(url).path.lstrip("/")
+    if not path or path.endswith("/"):
+        return f"{path}index.html"
     return path
 
 

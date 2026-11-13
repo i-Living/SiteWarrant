@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 
 
 def test_the_prefixed_database_url_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -17,6 +17,13 @@ def test_the_bare_name_still_works(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().database_url.endswith("@db:5432/sitewarrant")
 
 
-def test_the_default_is_loopback_not_a_wildcard() -> None:
+def test_the_default_is_loopback_not_a_wildcard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nothing in the shipped defaults should point at a host other than this machine."""
-    assert "localhost" in get_settings().database_url
+    monkeypatch.delenv("SITEWARRANT_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        "app.core.config.Settings.model_config",
+        {**Settings.model_config, "env_file": None},
+        raising=False,
+    )
+    assert "localhost" in Settings(_env_file=None).database_url

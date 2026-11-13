@@ -37,7 +37,11 @@ def compare_runs(
     allow_corpus_change: bool = False,
 ) -> Comparison:
     """A metric may only be compared across the same corpus; anything else is a different test."""
-    compatible = baseline.context.dataset_digest == candidate.context.dataset_digest
+    same_digest = baseline.context.dataset_digest == candidate.context.dataset_digest
+    # A subset of the corpus shares its digest but not its measurement: two sites cannot be
+    # compared with eight and called a change.
+    same_sites = set(baseline.per_site) == set(candidate.per_site)
+    compatible = same_digest and same_sites
     if not compatible and not allow_corpus_change:
         return Comparison(
             baseline=baseline_label,
@@ -51,9 +55,15 @@ def compare_runs(
             per_rule={},
             compatible=False,
             note=(
-                "the two runs were measured on different corpora "
-                f"({baseline.context.dataset_digest} vs {candidate.context.dataset_digest}); "
-                "a delta across corpora is not a comparison"
+                "the two runs cannot be compared: "
+                + (
+                    "different corpora "
+                    f"({baseline.context.dataset_digest} vs {candidate.context.dataset_digest})"
+                    if not same_digest
+                    else f"different site sets ({sorted(baseline.per_site)} vs "
+                    f"{sorted(candidate.per_site)}) of one corpus"
+                )
+                + "; a delta across different measurements is not a comparison"
             ),
         )
 

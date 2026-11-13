@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from html import escape
 
 # Rules whose repair is mechanical. Everything else gets a recommendation and no diff: an
 # automatic patch that invents a name or alt text hides a defect instead of fixing it.
@@ -79,7 +80,8 @@ def fix_meta_description(html: str) -> tuple[str, str]:
     paragraph = first_paragraph(html)
     if paragraph is None:
         raise FixError("the page has no paragraph to take a description from")
-    description = shorten(paragraph)
+    # The paragraph is page text, not markup: a quote in it would otherwise end the attribute.
+    description = escape(shorten(paragraph), quote=True)
     tag = f'<meta name="description" content="{description}">'
     existing = re.search(r'<meta[^>]+name=["\']description["\'][^>]*>', html, flags=re.I)
     if existing:
@@ -179,7 +181,10 @@ def fix_occlusion(html: str, *, occluder_selector: str) -> tuple[str, str]:
         raise FixError("the page has no inline stylesheet to add the override to")
     index = html.rindex("</style>")
     start_of_rule = html.rfind("\n", 0, index)
-    fixed = f"{html[:start_of_rule]}\n{rule}{html[start_of_rule:]}"
+    # When `</style>` starts the file there is no preceding newline, and rfind returns -1.
+    insert_at = len(html[:index].rstrip(" \t")) if start_of_rule < 0 else start_of_rule
+    prefix = "" if start_of_rule < 0 and insert_at == 0 else "\n"
+    fixed = f"{html[:insert_at]}{prefix}{rule}{html[insert_at:]}"
     return fixed, f"stopped {selector} from being positioned over its neighbours"
 
 

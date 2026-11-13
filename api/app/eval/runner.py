@@ -46,6 +46,8 @@ async def run_eval(
         site_labels: set[tuple[str, str]] = set()
         site_predicted: set[tuple[str, str]] = set()
         site_pages_with_false = 0
+        site_findings_raw = 0
+        site_duplicates = 0
         for page in site.pages:
             url = dataset.page_url(site, page)
             report = await run_audit(
@@ -60,8 +62,11 @@ async def run_eval(
             planted = site.labels_for(page)
             if page_rules - planted:
                 site_pages_with_false += 1
-            findings_raw += len(report.findings)
+            # Raw means before dedupe: a finding the chief layer removed was still reported.
+            findings_raw += len(report.findings) + report.summary.duplicates_removed
             duplicates_removed += report.summary.duplicates_removed
+            site_findings_raw += len(report.findings) + report.summary.duplicates_removed
+            site_duplicates += report.summary.duplicates_removed
             durations.append(report.summary.duration_ms)
             pages += 1
 
@@ -73,8 +78,8 @@ async def run_eval(
             site_predicted,
             pages=len(site.pages),
             pages_with_false_positives=site_pages_with_false,
-            findings_raw=0,
-            duplicates_removed=0,
+            findings_raw=site_findings_raw,
+            duplicates_removed=site_duplicates,
         ).as_dict()
 
     metrics: Metrics = measure(
@@ -90,11 +95,14 @@ async def run_eval(
         context=RunContext(
             dataset_digest=dataset.digest,
             dataset_version=dataset.version,
+            # The same inputs run_audit feeds the digest: a version that ignores the model would
+            # label two different agents as one.
             agent_version=compute_agent_version(
                 viewports=settings.viewport_list,
                 page_timeout_ms=settings.page_timeout_ms,
                 capture_timeout_ms=settings.capture_timeout_ms,
                 user_agent=settings.user_agent,
+                llm_model=settings.llm_model,
             ),
             viewports=list(settings.viewport_list),
             agents=list(agents or ()),

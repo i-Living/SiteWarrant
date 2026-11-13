@@ -121,7 +121,10 @@ async def reaudit(
     """Re-audit every page of a previous report, from the site or from its patched copy."""
     targets = sorted({finding.page_url for finding in before.findings})
     if not targets:
-        raise ReauditError("the previous report has no findings to re-audit")
+        # A clean page has nothing to close, and re-auditing it is exactly how a regression shows.
+        if not before.site:
+            raise ReauditError("the previous report names no page to re-audit")
+        targets = [before.site]
     if patch_file is not None and site_dir is None:
         raise ReauditError("--patch needs --site-dir: the copy has to come from somewhere")
 
@@ -129,12 +132,10 @@ async def reaudit(
     if patch_file is not None:
         assert site_dir is not None
         copy = apply_patch(site_dir, patch_file)
-        with PatchedSite(copy) as server:
-            for url in targets:
-                report = await run_audit(
-                    server.base_url + path_of(url), allow_private=True, agents=()
-                )
-                after.extend(_rebase(report.findings, server.base_url))
+        try:
+            after = await _reaudit_copy(copy, targets)
+        finally:
+            shutil.rmtree(copy.parent, ignore_errors=True)
     else:
         for url in targets:
             report = await run_audit(url, allow_private=True, agents=())
@@ -143,6 +144,16 @@ async def reaudit(
     result = diff_findings(before.findings, after)
     result.pages = len(targets)
     return result
+
+
+async def _reaudit_copy(copy: Path, targets: list[str]) -> list[FindingOut]:
+    """Serve the patched copy and re-audit every page, expressed under the original URLs."""
+    found: list[FindingOut] = []
+    with PatchedSite(copy) as server:
+        for url in targets:
+            report = await run_audit(server.base_url + path_of(url), allow_private=True, agents=())
+            found.extend(_rebase(report.findings, server.base_url))
+    return found
 
 
 def _rebase(findings: list[FindingOut], base_url: str) -> list[FindingOut]:

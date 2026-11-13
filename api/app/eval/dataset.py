@@ -83,11 +83,13 @@ def load_dataset(path: Path) -> Dataset:
             )
         )
     site_tuple = tuple(sites)
-    dataset = Dataset(
-        version=int(payload.get("version") or 1),
-        digest=str(payload.get("digest") or dataset_digest(site_tuple)),
-        sites=site_tuple,
-    )
+    computed = dataset_digest(site_tuple)
+    declared = payload.get("digest")
+    if declared is not None and str(declared) != computed:
+        # A comparison trusts the digest; a digest that does not describe the labels means two
+        # different corpora could be compared as one.
+        raise DatasetError(f"manifest digest {declared} does not match the corpus ({computed})")
+    dataset = Dataset(version=int(payload.get("version") or 1), digest=computed, sites=site_tuple)
     if len(dataset.sites) < MIN_SITES:
         raise DatasetError(
             f"a benchmark needs at least {MIN_SITES} sites, found {len(dataset.sites)}"

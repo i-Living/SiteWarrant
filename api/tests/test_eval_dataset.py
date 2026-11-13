@@ -68,9 +68,21 @@ def test_a_label_for_an_unknown_page_is_refused(tmp_path: Path) -> None:
         load_dataset(broken)
 
 
+def test_a_digest_that_does_not_describe_the_labels_is_refused(tmp_path: Path) -> None:
+    """A comparison trusts the digest, so a manifest may not carry someone else's."""
+    payload = json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    payload["digest"] = "sha256:0000000000000000"
+    broken = tmp_path / "dataset.json"
+    broken.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(DatasetError, match="does not match the corpus"):
+        load_dataset(broken)
+
+
 def test_a_small_corpus_is_refused(tmp_path: Path) -> None:
     payload = json.loads(BENCHMARK.read_text(encoding="utf-8"))
     payload["sites"] = payload["sites"][:2]
+    # The digest would now describe a corpus that no longer exists; the size rule is under test.
+    payload.pop("digest", None)
     small = tmp_path / "dataset.json"
     small.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(DatasetError, match="at least 8 sites"):

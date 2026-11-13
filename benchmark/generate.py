@@ -17,8 +17,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 SITES_DIR = ROOT / "sites"
@@ -117,7 +117,9 @@ def body_for(page: Page, defect: str | None, brand: str) -> str:
         parts.append('<img src="proof.png" width="240" height="160">')
     else:
         parts.append('<p>Latest proof, photographed on the press:</p>')
-        parts.append('<img src="proof.png" alt="A proof sheet on the press" width="240" height="160">')
+        parts.append(
+            '<img src="proof.png" alt="A proof sheet on the press" width="240" height="160">'
+        )
 
     if defect == "A11Y-CONTRAST":
         parts.append('<p class="faint">Colour proofs are posted every second Friday.</p>')
@@ -199,16 +201,27 @@ def render(site_index: int, brand: str, page: Page, defect: str | None) -> str:
 
 
 def build() -> dict[str, Any]:
+    """Write every page, then return the manifest that describes them."""
+    for site_index, (slug, brand) in enumerate(SITES):
+        for page_index, (path, title, headline) in enumerate(PAGES):
+            page = Page(path=path, title=title, headline=headline)
+            target = SITES_DIR / slug / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                render(site_index, brand, page, defects_for(site_index, page_index)),
+                encoding="utf-8",
+            )
+    return manifest()
+
+
+def manifest() -> dict[str, Any]:
+    """The manifest a fresh generator would write, computed without touching the filesystem."""
     sites: list[dict[str, Any]] = []
     total_pages = 0
     for site_index, (slug, brand) in enumerate(SITES):
         labels: list[dict[str, str]] = []
-        for page_index, (path, title, headline) in enumerate(PAGES):
-            page = Page(path=path, title=title, headline=headline)
+        for page_index, (path, _title, _headline) in enumerate(PAGES):
             defect = defects_for(site_index, page_index)
-            target = SITES_DIR / slug / path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(render(site_index, brand, page, defect), encoding="utf-8")
             if defect is not None:
                 labels.append({"page": path, "rule_id": defect})
         total_pages += len(PAGES)
@@ -249,7 +262,10 @@ def digest_of(sites: list[dict[str, Any]]) -> str:
                 "slug": site["slug"],
                 "pages": list(site["pages"]),
                 "labels": sorted(
-                    ({"page": label["page"], "rule_id": label["rule_id"]} for label in site["labels"]),
+                    (
+                        {"page": label["page"], "rule_id": label["rule_id"]}
+                        for label in site["labels"]
+                    ),
                     key=lambda item: (item["page"], item["rule_id"]),
                 ),
             }
@@ -282,6 +298,10 @@ def check() -> int:
         if not target.exists() or target.read_text(encoding="utf-8") != text:
             drifted.append(relative)
     committed = json.loads(DATASET.read_text(encoding="utf-8"))
+    regenerated = manifest()
+    if committed != regenerated:
+        # The labels are the measurement; a hand-edited manifest would make them a claim.
+        drifted.append("dataset.json (manifest differs from the generator)")
     for site in committed["sites"]:
         for page in site["pages"]:
             if f"{site['slug']}/{page}" not in expected:

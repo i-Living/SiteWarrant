@@ -212,14 +212,19 @@ def evaluate(
         typer.echo(f"dataset: {error}", err=True)
         raise typer.Exit(code=2) from error
 
+    # Read the baseline first: writing the candidate over a mistyped path is not recoverable.
+    baseline = (
+        None
+        if compare is None
+        else EvalRun.model_validate_json(compare.read_text(encoding="utf-8"))
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(run.model_dump_json(indent=2) + "\n", encoding="utf-8")
     _print_eval(run)
     typer.echo(f"run written to {out}")
 
-    if compare is None:
+    if baseline is None:
         return
-    baseline = EvalRun.model_validate_json(compare.read_text(encoding="utf-8"))
     comparison = compare_runs(baseline, run, baseline_label=str(compare), candidate_label=str(out))
     typer.echo("")
     typer.echo(f"compare {comparison.baseline} -> {comparison.candidate}: {comparison.note}")
@@ -333,7 +338,12 @@ def reaudit_command(
 ) -> None:
     """Re-audit a page and report what closed, what stayed and what broke."""
     before = Report.model_validate_json(against.read_text(encoding="utf-8"))
-    _ = audit_id
+    if audit_id and audit_id != before.audit_id:
+        typer.echo(
+            f"reaudit: {against} is the report of audit {before.audit_id}, not {audit_id}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     try:
         result = asyncio.run(reaudit(before, site_dir=site_dir, patch_file=patch_file))
     except ReauditError as error:
