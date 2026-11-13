@@ -81,7 +81,7 @@
 | `cost_per_100_pages` | 100 × суммарная стоимость / страниц (медиана по сайтам) | экономика |
 | `median_duration` | медиана времени аудита по бенчмарку | практическая пригодность |
 | `fix_acceptance_rate` | принятых правок / предложенных | полезность рекомендаций |
-| `regression_free_fix_rate` | повторных аудитов без новых blocker и major / применённых правок | безопасность правок |
+| `regression_free_fix_rate` | повторных аудитов без новых находок (любая новая — регрессия, как в `reaudit`) / применённых правок | безопасность правок |
 
 **Сопоставление находки с эталоном (TP/FP/FN).** Детерминированное, без суждений модели:
 
@@ -293,15 +293,15 @@ uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fi
 uv run sitewarrant reaudit <audit_id> --against-report report.json \
   --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
 
-# Frontend
-cd web && bun install
+# Frontend (каталог — корень репозитория, из api/ это ../web)
+cd ../web && bun install
 bun run dev
 bun run build
 bunx biome check .
 bunx tsc --noEmit
 
-# Один гейт перед коммитом
-make check                            # ruff + mypy + pytest + biome + tsc
+# Один гейт перед коммитом (из web/ возвращаемся в корень)
+cd .. && make check                  # ruff + mypy + pytest + biome + tsc
 ```
 
 ## 10. Стиль кода

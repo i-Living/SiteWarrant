@@ -81,9 +81,9 @@ These are not style preferences. Breaking one silently invalidates the published
 ## Commands
 
 Verified commands, annotated with the phase that makes each one meaningful. `uv run` needs the `api/`
-project, so everything except the compose and `make` lines runs from `api/`; the `../` paths follow
-from that, and the CLI defaults (`benchmark/dataset.json`, `evals/runs/latest.json`) only resolve from
-the repository root, which has no `pyproject.toml`.
+project, so the blocks run from `api/`; the `../` paths follow from that. The CLI defaults
+(`benchmark/dataset.json`, `evals/runs/latest.json`) are relative to the working directory, so from
+`api/` they point nowhere — pass `--dataset` and `--out` explicitly, as the commands below do.
 
 ```bash
 # Infrastructure [P0, verified]
@@ -125,15 +125,15 @@ uv run sitewarrant reaudit <audit_id> --against-report old.json \
 # MCP fact server [P3, verified]: there is no console script — the orchestrator spawns it over stdio
 uv run python -m app.mcp.server                    # needs SITEWARRANT_MCP_AUDIT_ID, one audit per process
 
-# Frontend [P4, verified]
-cd web && bun install
+# Frontend [P4, verified], from api/
+cd ../web && bun install
 bun run dev
 bun run build
 bunx biome check .
 bunx tsc --noEmit
 
-# Single gate before a commit [verified]
-make check
+# Single gate before a commit [verified]; `make check` is read from the repository root
+cd .. && make check
 ```
 
 `make check` is the contract: ruff, mypy, pytest, biome and `tsc` in one command. It runs against the

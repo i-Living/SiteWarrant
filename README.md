@@ -72,10 +72,10 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | False positive rate | false positives / findings | `0.0000` — 0/80 |
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
-| Audit cost per 100 pages | estimated cost, median across sites | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents |
+| Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
 | Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 320.7 s |
 | Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
-| Regression-free fix rate | re-audits with no new blocker or major / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
+| Regression-free fix rate | re-audits with no new finding at all / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
 
 A zero denominator reports `null`, never `0`. Cost is an estimate from a versioned price table; tokens
 and call counts are the measured, tariff-independent values reported next to it.
