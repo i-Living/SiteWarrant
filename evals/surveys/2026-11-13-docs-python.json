@@ -1,0 +1,911 @@
+{
+  "audit_id": "9ccb8ca0-3411-4d03-bb10-89b26fc30d85",
+  "site": "https://docs.python.org/3/",
+  "agent_version": "sha256:37d4af33aee7bb8b",
+  "status": "partial",
+  "generated_at": "2026-11-13T21:00:01.551958Z",
+  "summary": {
+    "pages_audited": 58,
+    "findings_total": 19,
+    "by_severity": {
+      "blocker": 0,
+      "major": 11,
+      "minor": 8,
+      "info": 0
+    },
+    "scores": {
+      "seo": 99.7,
+      "a11y": 98.6
+    },
+    "duration_ms": 447815,
+    "observations_by_tool": {
+      "http": 464,
+      "dom": 174,
+      "axe": 590,
+      "contrast": 222,
+      "responsive": 174,
+      "occlusion": 174,
+      "performance": 174,
+      "screenshot": 174
+    },
+    "agents": [],
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "llm_calls": 0,
+    "cost_estimate_usd": 0.0,
+    "pricing": {
+      "version": "2026-11-13",
+      "currency": "USD",
+      "basis": "list price for the same model and tokens; the subscription plan bills a flat fee, so this is not an invoice",
+      "unpriced_models": []
+    },
+    "trace_id": null,
+    "spans": {},
+    "root_causes": 0,
+    "duplicates_removed": 0,
+    "duplicate_rate": 0.0
+  },
+  "findings": [
+    {
+      "id": "effe66e6-04f2-4871-80de-bb1d7669f58d",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3/",
+      "page_key": "docs.python.org/3",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "2459cd88-7d69-4964-b4e6-648d8de8c6ea",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0398de92-6ded-4016-9dc0-7d7e8a2ee8b2",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "c07a03f0-de2c-4aa1-868a-79f39295bc23",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "2459cd88-7d69-4964-b4e6-648d8de8c6ea",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0398de92-6ded-4016-9dc0-7d7e8a2ee8b2",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "c07a03f0-de2c-4aa1-868a-79f39295bc23",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "5277bf00-503a-43dd-ae66-b87233c611b3",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.16/",
+      "page_key": "docs.python.org/3.16",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "eb595593-d0e8-4e0b-b9f6-5ceb3f0389b0",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "412e535e-1b58-4f38-b368-eb6f8db2b98f",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "c9745dae-1e09-4fb7-96a6-a1740928ae8a",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "eb595593-d0e8-4e0b-b9f6-5ceb3f0389b0",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "412e535e-1b58-4f38-b368-eb6f8db2b98f",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "c9745dae-1e09-4fb7-96a6-a1740928ae8a",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "0bb6b45f-1721-4fe5-9355-f964dcc7e3e5",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.15/",
+      "page_key": "docs.python.org/3.15",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "4300842d-53ba-4c53-8318-0637d5f216ff",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "d804f517-54a0-479b-a722-16db56617734",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "81c8dc07-407b-412a-a4a4-9312883cd173",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "4300842d-53ba-4c53-8318-0637d5f216ff",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "d804f517-54a0-479b-a722-16db56617734",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "81c8dc07-407b-412a-a4a4-9312883cd173",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "eb8bf9be-7509-4257-9647-a13aca391eea",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.14/",
+      "page_key": "docs.python.org/3.14",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "03798eae-e09d-4f5d-b42c-58c6b8b3f858",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0a3e739a-9cc1-4313-b911-0c3b5526f67d",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "633349a2-9649-4e54-877d-8ed535583c16",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "03798eae-e09d-4f5d-b42c-58c6b8b3f858",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0a3e739a-9cc1-4313-b911-0c3b5526f67d",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "633349a2-9649-4e54-877d-8ed535583c16",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "1c3d8e8e-2143-48d5-bf41-cad9a68bcba4",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.13/",
+      "page_key": "docs.python.org/3.13",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "2456042a-f4d0-464a-b483-f3845f869d3f",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "95cbd0c9-6e41-4bf5-8783-44570f94fe2a",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "7380fd72-5d5e-489c-9ffa-f9440d7e1b41",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "2456042a-f4d0-464a-b483-f3845f869d3f",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "95cbd0c9-6e41-4bf5-8783-44570f94fe2a",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "7380fd72-5d5e-489c-9ffa-f9440d7e1b41",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "3e3e6e93-d76e-42cf-b352-3d71c8d3aa04",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.12/",
+      "page_key": "docs.python.org/3.12",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "561f0577-cf55-4498-8d6f-a0e8dcd9b07b",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0a7da9f4-de12-4481-9f0f-bdc320ce45eb",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "71a12a64-25b8-4f48-975f-aa3f49c6c59d",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "561f0577-cf55-4498-8d6f-a0e8dcd9b07b",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0a7da9f4-de12-4481-9f0f-bdc320ce45eb",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "71a12a64-25b8-4f48-975f-aa3f49c6c59d",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "f9964889-8a26-44b4-a7db-8e7e8b46615d",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.11/",
+      "page_key": "docs.python.org/3.11",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "8ecf5a11-4b42-4aaf-bae0-b9ca431b0ff4",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "9ecf05d0-3b4e-4f5e-81ce-b7cff7e61277",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "37de19ae-fbf4-4da8-8a46-2a2855ca4716",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "57043be7-2bc8-44da-a23b-f8f10e0ff8bf",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.11/",
+      "page_key": "docs.python.org/3.11",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "82c82bc7-612c-4239-9b11-3a9974507e7d",
+          "excerpt": ".related[aria-label=\"related navigation\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "82c82bc7-612c-4239-9b11-3a9974507e7d",
+          "excerpt": ".related[aria-label=\"related navigation\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "479059a3-15cf-49d9-82b7-d519679a8373",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3/genindex.html",
+      "page_key": "docs.python.org/3/genindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "284f6324-d4fb-4dc3-9b6b-a10f538712ba",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "77f7e9d3-d648-48f0-9e80-1ea3bae58ea5",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "c00e5626-dfb1-4fbe-90d3-03d50197358c",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "5dadaeb2-b2e3-4284-b429-e624eb6a65b3",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3/py-modindex.html",
+      "page_key": "docs.python.org/3/py-modindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "a8273f76-3efa-4645-a165-3d676469ce1b",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "7cbfa0d3-4234-4004-af04-d3eb97440f2e",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "887864eb-db4b-4f66-9970-5a01c262347b",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "47b3c604-2da0-4a20-99c2-25a5de620798",
+      "rule_id": "A11Y-CONTRAST",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Text contrast below WCAG AA",
+      "summary": "Text and background do not reach the 4.5:1 ratio required for normal text, which makes content hard to read in daylight and for low-vision users. Reported on 1 element(s).",
+      "suggested_fix": "Darken the text or lighten the background until the ratio reaches 4.5:1.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 3
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3/extending/index.html",
+      "page_key": "docs.python.org/3/extending/index.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 12.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "b3f1db40-874a-4e3f-80d7-93b3cd697832",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "dcda0cfb-8334-4c9e-bf7b-59cb50f4ea3d",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "3b9b1e9a-d5c4-46eb-b577-2537f07651cb",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        }
+      ]
+    },
+    {
+      "id": "d56d1960-1263-4f6a-8c01-f112d017fbb8",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3/index.html",
+      "page_key": "docs.python.org/3/index.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "6167c1ed-e288-4290-ad4e-7336e44376a5",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "07b3dcfe-2aac-4695-a62a-56bd7a997da1",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0fbebff2-4a56-478e-bf2a-dd5f96289699",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(2) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "6167c1ed-e288-4290-ad4e-7336e44376a5",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "07b3dcfe-2aac-4695-a62a-56bd7a997da1",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "0fbebff2-4a56-478e-bf2a-dd5f96289699",
+          "excerpt": ".related[aria-label=\"Related\"][role=\"navigation\"]:nth-child(4) > ul > .nav-item.nav-item-this > a[href=\"\"] :: <a href=\"\"></a>"
+        }
+      ]
+    },
+    {
+      "id": "74eb0852-7b1a-4fd4-9760-2184fd0919d7",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.15/archives/",
+      "page_key": "docs.python.org/3.15/archives",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "129afe2b-626a-4cb0-8daa-0b45806b69a8",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "f57c27ac-482f-40dc-92db-9ab09f9e9a47",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "9a5e3cb8-18db-44da-ab40-f39ff7095638",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "4a4de35f-dc7a-411c-a5c2-8a5ffe713676",
+      "rule_id": "A11Y-LANG",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Page language is not declared",
+      "summary": "The html element has no lang attribute, so screen readers may read the page with the wrong pronunciation rules. Reported on 1 element(s).",
+      "suggested_fix": "Set lang on the html element, for example <html lang=\"en\">.",
+      "impact": {
+        "conversion": 0,
+        "seo": 0,
+        "ux": 1
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.15/archives/",
+      "page_key": "docs.python.org/3.15/archives",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 6.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "f7dd17e1-3713-495a-8fbb-8ab5c918f1f9",
+          "excerpt": "html :: <html>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "11669f14-968a-4f2d-b6fd-0fe93baca036",
+          "excerpt": "html :: <html>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "a4959211-a68a-4b28-9c2b-bfdfadb14050",
+          "excerpt": "html :: <html>"
+        }
+      ]
+    },
+    {
+      "id": "446ecae3-e93a-487e-8277-83380bd62c26",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.16/genindex.html",
+      "page_key": "docs.python.org/3.16/genindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "3b7c9c06-c826-4734-b509-212075c3767d",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "1e62ff75-738f-4902-9713-5d534ed107ee",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "04395166-884e-4105-8e83-e4c046b87bff",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "93031aea-dcec-476e-be11-85f9af87b0a6",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.16/py-modindex.html",
+      "page_key": "docs.python.org/3.16/py-modindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "1dcde141-993e-4a45-8bd6-5b3333104b5d",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "45c7c323-ca06-436f-9d34-67bf6d86ae5c",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "bf76921a-f3d3-43a6-97e8-3c259c5d1d06",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "45186969-a9eb-4380-a246-690736169589",
+      "rule_id": "A11Y-CONTRAST",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Text contrast below WCAG AA",
+      "summary": "Text and background do not reach the 4.5:1 ratio required for normal text, which makes content hard to read in daylight and for low-vision users. Reported on 1 element(s).",
+      "suggested_fix": "Darken the text or lighten the background until the ratio reaches 4.5:1.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 3
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.16/extending/index.html",
+      "page_key": "docs.python.org/3.16/extending/index.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 12.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "f5559b7f-695e-4b43-9221-81863e8cb951",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "8d360877-b204-423f-a46e-b72ec66db87e",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "9dec5dea-8815-46ef-9b8d-120eadca99d8",
+          "excerpt": ".xref > .pre :: <span class=\"pre\">ctypes</span>"
+        }
+      ]
+    },
+    {
+      "id": "a3c65f42-e546-4f52-93f9-09de9613e0db",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.15/genindex.html",
+      "page_key": "docs.python.org/3.15/genindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "7767789e-747e-44f6-a7ad-7192b65ae853",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "7c2d2511-c5f7-49c9-b783-a80f5f7d6ab0",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "4ea95bdf-a671-4855-8d64-cb94b84b1666",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "08c610f8-7562-4118-b5af-31fc673a77ad",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "https://docs.python.org/3.15/py-modindex.html",
+      "page_key": "docs.python.org/3.15/py-modindex.html",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "074fb64d-0f23-4da7-a28d-ec2647fd2c0c",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "ecec9711-6e5a-46f5-aa34-690d0418bbf5",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "1925c32f-2cdc-4593-980c-ec1619adbff9",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    }
+  ],
+  "root_causes": []
+}
