@@ -52,7 +52,28 @@ class FindingOut(BaseModel):
     page_key: str
     criterion: str | None = None
     criterion_title: str | None = None
+    priority: float = 0.0
+    subject: str | None = None
+    root_cause_id: str | None = None
     evidence: list[EvidenceOut]
+
+
+class RootCauseOut(BaseModel):
+    """Several findings that one fix is likely to close (docs/PLAN.md section 6).
+
+    The grouping is deterministic; `summary` and `rationale` explain it, they do not decide it.
+    """
+
+    id: str
+    kind: str
+    anchor: str
+    label: str = ""
+    categories: list[str]
+    summary: str
+    rationale: str
+    severity: Severity
+    priority: float
+    finding_ids: list[str]
 
 
 class SummaryOut(BaseModel):
@@ -63,6 +84,9 @@ class SummaryOut(BaseModel):
     duration_ms: int
     observations_by_tool: dict[str, int]
     agents: list[AgentSummaryOut] = []
+    root_causes: int = 0
+    duplicates_removed: int = 0
+    duplicate_rate: float = 0.0
 
 
 class Report(BaseModel):
@@ -73,6 +97,7 @@ class Report(BaseModel):
     generated_at: datetime
     summary: SummaryOut
     findings: list[FindingOut]
+    root_causes: list[RootCauseOut] = []
 
 
 def direction_score(penalty: float, pages_audited: int) -> float:
@@ -95,6 +120,8 @@ def build_report(
     measured_categories: set[str],
     observations_by_tool: dict[str, int],
     agents: Sequence[AgentSummaryOut] = (),
+    root_causes: Sequence[RootCauseOut] = (),
+    duplicates_removed: int = 0,
 ) -> Report:
     counts = Counter(finding.severity for finding in findings)
     by_severity = {severity: counts.get(severity, 0) for severity in SEVERITIES}
@@ -122,9 +149,18 @@ def build_report(
             duration_ms=duration_ms,
             observations_by_tool=observations_by_tool,
             agents=list(agents),
+            root_causes=len(root_causes),
+            duplicates_removed=duplicates_removed,
+            duplicate_rate=_duplicate_rate(findings, duplicates_removed),
         ),
         findings=list(findings),
+        root_causes=list(root_causes),
     )
+
+
+def _duplicate_rate(findings: Sequence[FindingOut], duplicates_removed: int) -> float:
+    total = len(findings) + duplicates_removed
+    return round(duplicates_removed / total, 4) if total else 0.0
 
 
 def has_blocker(report: Report) -> bool:

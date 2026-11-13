@@ -207,6 +207,7 @@ def validate(
         impact_ux=candidate.impact.ux,
         confidence=candidate.confidence,
         agent=agent,
+        subject=candidate.subject,
         evidence=[
             EvidenceDraft(
                 observation_id=evidence.observation_id,

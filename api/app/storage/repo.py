@@ -15,6 +15,8 @@ from app.core.models import (
     Page,
     Snapshot,
 )
+from app.core.models import RootCause as RootCauseRow
+from app.core.report import RootCauseOut
 from app.rules.engine import FindingDraft, NewObservation
 
 
@@ -120,6 +122,7 @@ async def save_findings(
             impact_ux=draft.impact_ux,
             confidence=draft.confidence,
             agent=draft.agent,
+            subject=draft.subject,
         )
         session.add(finding)
         await session.flush()
@@ -186,3 +189,38 @@ async def add_audit_usage(
     audit.tokens_in += tokens_in
     audit.tokens_out += tokens_out
     audit.llm_calls += llm_calls
+
+
+async def save_root_causes(
+    session: AsyncSession,
+    *,
+    audit_id: uuid.UUID,
+    page_id: uuid.UUID,
+    causes: Sequence[RootCauseOut],
+) -> dict[str, uuid.UUID]:
+    """Store the deterministic clusters and return report id -> row id."""
+    stored: dict[str, uuid.UUID] = {}
+    for cause in causes:
+        row = RootCauseRow(
+            audit_id=audit_id,
+            page_id=page_id,
+            cause_kind=cause.kind,
+            anchor=cause.anchor,
+            summary=cause.summary,
+            rationale=cause.rationale,
+            severity=cause.severity,
+            priority=cause.priority,
+            categories=list(cause.categories),
+        )
+        session.add(row)
+        await session.flush()
+        stored[cause.id] = row.id
+    return stored
+
+
+async def assign_root_causes(session: AsyncSession, *, mapping: dict[str, uuid.UUID]) -> None:
+    """Point stored findings at their cluster. Unknown ids are ignored, not invented."""
+    for finding_id, cause_id in mapping.items():
+        finding = await session.get(Finding, uuid.UUID(finding_id))
+        if finding is not None:
+            finding.root_cause_id = cause_id

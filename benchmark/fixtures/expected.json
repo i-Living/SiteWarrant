@@ -1,7 +1,7 @@
 {
   "url": "http://localhost:8081/",
   "page_key": "localhost",
-  "notes": "Nine planted defects, one per catalogued rule in api/app/rules/catalog.py.",
+  "notes": "Ten planted defects, one per catalogued rule. The banner counts once as a defect but covers five header links, and each covered target is its own finding.",
   "rule_ids": [
     "A11Y-BUTTON-NAME",
     "A11Y-CONTRAST",
@@ -9,9 +9,15 @@
     "A11Y-LABEL",
     "A11Y-LANG",
     "A11Y-LINK-NAME",
+    "LAYOUT-OCCLUSION",
     "SEO-H1",
     "SEO-META-DESC",
     "SEO-TITLE"
   ],
-  "blockers": ["A11Y-BUTTON-NAME", "A11Y-LABEL"]
+  "blockers": [
+    "A11Y-BUTTON-NAME",
+    "A11Y-LABEL"
+  ],
+  "findings_total": 14,
+  "root_causes": 1
 }

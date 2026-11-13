@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from app.agents.orchestrator import observation_index, run_agents
 from app.agents.specs import parse_agent_names, spec_for
 from app.agents.validator import validate
+from app.chief import run_chief
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.report import (
@@ -204,6 +205,7 @@ def to_finding_out(
         ),
         confidence=draft.confidence,
         agent=draft.agent,
+        subject=draft.subject,
         page_url=page_url,
         page_key=key,
         criterion=criterion_entry.id if criterion_entry else None,
@@ -423,6 +425,22 @@ async def run_audit(
                         for finding_id, draft in stored_agents
                     )
                 status = orchestration.status
+            # The chief layer runs last: every finding exists, so a duplicate of another
+            # agent's claim is visible, and a cluster can cross categories.
+            payload_by_id = {str(item.id): item.payload for item in observations}
+            chief = run_chief(findings, payload_by_id)
+            findings = chief.findings
+            stored_causes = await repo.save_root_causes(
+                session, audit_id=audit_id, page_id=page_id, causes=chief.root_causes
+            )
+            await repo.assign_root_causes(
+                session,
+                mapping={
+                    finding.id: stored_causes[finding.root_cause_id]
+                    for finding in findings
+                    if finding.root_cause_id in stored_causes
+                },
+            )
             report = build_report(
                 audit_id=str(audit_id),
                 site=url,
@@ -434,6 +452,8 @@ async def run_audit(
                 measured_categories=measured,
                 observations_by_tool=observations_by_tool,
                 agents=agent_summaries,
+                root_causes=chief.root_causes,
+                duplicates_removed=chief.duplicates_removed,
             )
             report_key = write_artifact(audit_id, "report.json", report.model_dump_json(indent=2))
             await repo.finish_audit(

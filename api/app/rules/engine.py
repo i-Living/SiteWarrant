@@ -59,6 +59,7 @@ class FindingDraft(BaseModel):
     impact_ux: int
     confidence: float
     agent: str
+    subject: str | None = None
     evidence: list[EvidenceDraft]
 
 
@@ -105,6 +106,37 @@ def dom_drafts(observation: ObservationView) -> list[FindingDraft]:
     return drafts
 
 
+def occlusion_drafts(observation: ObservationView) -> list[FindingDraft]:
+    """One draft per covered target: a click that lands on someone else is a measured defect."""
+    rule = rule_by_match("occlusion", _OCCLUSION_MATCH)
+    if rule is None:
+        return []
+    drafts: list[FindingDraft] = []
+    for hit in observation.payload.get("hits") or []:
+        selector = str(hit.get("selector") or "")
+        occluder = str(hit.get("occluder_selector") or "")
+        if not selector or not occluder:
+            continue
+        drafts.append(
+            _draft(
+                rule,
+                [
+                    EvidenceDraft(
+                        observation_id=observation.id,
+                        kind="occlusion_hit",
+                        excerpt=f"{selector} covered by {occluder}",
+                    )
+                ],
+                f"{rule.summary} Observed: {selector} is covered by {occluder}.",
+                subject=selector,
+            )
+        )
+    return drafts
+
+
+_OCCLUSION_MATCH = "occluded_target"
+
+
 def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft]:
     """Rules only claim what the catalog covers; every other fact stays an observation.
 
@@ -120,20 +152,25 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
                 drafts.append(draft)
         elif observation.tool == "dom":
             drafts.extend(dom_drafts(observation))
+        elif observation.tool == "occlusion":
+            drafts.extend(occlusion_drafts(observation))
     return merge_by_rule(drafts)
 
 
 def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
-    """One draft per rule, with evidence pooled across viewports.
+    """One draft per rule and subject, with evidence pooled across viewports.
 
     Evidence is taken round-robin by position within each draft, so a viewport that reports
     ten nodes cannot fill the cap and hide the two later viewports. Items are deduplicated
     by observation and excerpt: the same node twice is one item, two nodes of one observation
     stay two items.
     """
-    groups: dict[str, list[FindingDraft]] = {}
+    groups: dict[tuple[str, str | None], list[FindingDraft]] = {}
     for draft in drafts:
-        groups.setdefault(draft.rule_id, []).append(draft)
+        # The subject separates targets: two covered links are two defects, the same link
+        # measured at three viewports is one. Drafts without a subject, like axe and dom
+        # drafts, keep merging by rule alone.
+        groups.setdefault((draft.rule_id, draft.subject), []).append(draft)
 
     merged: list[FindingDraft] = []
     for group in groups.values():
@@ -157,7 +194,13 @@ def merge_by_rule(drafts: Sequence[FindingDraft]) -> list[FindingDraft]:
     return merged
 
 
-def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDraft:
+def _draft(
+    rule: Rule,
+    evidence: list[EvidenceDraft],
+    summary: str,
+    *,
+    subject: str | None = None,
+) -> FindingDraft:
     return FindingDraft(
         rule_id=rule.id,
         category=rule.category,
@@ -170,6 +213,7 @@ def _draft(rule: Rule, evidence: list[EvidenceDraft], summary: str) -> FindingDr
         impact_ux=rule.impact.ux,
         confidence=DETERMINISTIC_CONFIDENCE,
         agent=RULES_AGENT,
+        subject=subject,
         evidence=evidence,
     )
 

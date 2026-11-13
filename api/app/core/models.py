@@ -81,6 +81,28 @@ class Observation(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
 
+class RootCause(Base):
+    """Several findings one fix is likely to close. The grouping is deterministic."""
+
+    __tablename__ = "root_causes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("audits.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    page_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=False
+    )
+    cause_kind: Mapped[str] = mapped_column(String(32))
+    anchor: Mapped[str] = mapped_column(String(512))
+    summary: Mapped[str] = mapped_column(Text)
+    rationale: Mapped[str] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String(16))
+    priority: Mapped[float] = mapped_column(Float, default=0.0)
+    categories: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Finding(Base):
     __tablename__ = "findings"
 
@@ -102,6 +124,10 @@ class Finding(Base):
     impact_ux: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     agent: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    root_cause_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("root_causes.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
 
 class FindingEvidence(Base):

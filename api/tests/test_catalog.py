@@ -18,8 +18,17 @@ def test_every_rule_states_its_case() -> None:
         assert rule.suggested_fix.strip()
 
 
-def test_both_sources_are_covered() -> None:
-    assert {rule.source for rule in RULES} == {"axe", "dom"}
+def test_every_source_is_covered() -> None:
+    """Each measured channel that has a rule is named, and no rule comes from nowhere."""
+    assert {rule.source for rule in RULES} == {"axe", "dom", "occlusion"}
+    for source in ("axe", "dom", "occlusion"):
+        assert any(rule.source == source for rule in RULES)
+
+
+def test_the_occlusion_rule_consumes_its_own_channel() -> None:
+    rule = next(rule for rule in RULES if rule.id == "LAYOUT-OCCLUSION")
+    assert rule.category == "responsive"
+    assert rule_by_match("occlusion", rule.match) is rule
 
 
 def test_rule_by_match_rejects_unknown_rule() -> None:
