@@ -8,14 +8,24 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 
 ## Status
 
-**Phase P0 is complete.** The repository holds a working vertical slice: one page in, one JSON report
-out, every finding citing a stored observation. `api/` has the FastAPI service, the Playwright capture,
-axe-core, the DOM probe and the rule engine; `web/` is a Next.js page that renders a stored report;
-`infra/` brings up Postgres, Redis and a fixture site with nine planted defects.
+**Phases P0–P7 have landed code; the plan is not closed.** `api/` holds the FastAPI service, the
+Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
+MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
+runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/` is
+a Next.js page that renders a stored report; `infra/` brings up Postgres, Redis and a fixture site with
+ten planted defects, and `infra/demo.yml` runs the same code on loopback.
 
-The commands below were executed at least once on 2026-11-12 and are annotated with the phase that
-makes them meaningful. Anything marked with a later phase does not work yet — do not present it as
-working, and do not add a command to this file that has not been run.
+Still open, and the plan says so in each case:
+
+- the Chief Auditor's LLM narration and the report screenshot artifact in CI (`docs/PLAN.md`, P4
+  «Осталось из плана»);
+- a public URL for the demo stand — it needs the owner's VPS, domain and secrets (§17.3);
+- an audit of a public site of 50+ pages (§16.1): only single `example.com` audits and the synthetic
+  corpus have been run;
+- §17 questions 2 and 4–6 are undecided (only the provider, §17.1, is answered).
+
+The commands below were executed at least once on 2026-11-12 or 2026-11-13 and are annotated with the
+phase that makes them meaningful. Do not add a command to this file that has not been run.
 
 ## Invariants
 
@@ -70,8 +80,10 @@ These are not style preferences. Breaking one silently invalidates the published
 
 ## Commands
 
-Verified P0 commands, plus the ones that only work once their phase lands. Phase in brackets says when
-each becomes real; `verified` means it ran against this repository.
+Verified commands, annotated with the phase that makes each one meaningful. `uv run` needs the `api/`
+project, so the blocks run from `api/`; the `../` paths follow from that. The CLI defaults
+(`benchmark/dataset.json`, `evals/runs/latest.json`) are relative to the working directory, so from
+`api/` they point nowhere — pass `--dataset` and `--out` explicitly, as the commands below do.
 
 ```bash
 # Infrastructure [P0, verified]
@@ -97,20 +109,31 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant crawl https://example.com --max-pages 50 --max-depth 3 --out pages.json
 
-# Not implemented yet, do not present as working
-# uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json  [P5]
-# uv run sitewarrant reaudit <audit_id> --against-report old.json   [P6]
-# uv run sitewarrant-mcp                                            [P3]
+# Evals [P5, verified 2026-11-13]
+python3 ../benchmark/generate.py --check          # the corpus still matches its generator
+uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
+uv run sitewarrant eval --dataset ../benchmark --sites northwind --out /tmp/one-site.json
+uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json \
+  --compare ../evals/runs/2026-11-13-baseline-corpus-bytes.json
+uv run sitewarrant prompt-check --baseline ../evals/runs/base.json --candidate ../evals/runs/new.json
 
-# Frontend [P0 stub verified]
-cd web && bun install
+# Fixes and re-audit [P6, verified]
+uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fixes/<audit_id>
+uv run sitewarrant reaudit <audit_id> --against-report old.json \
+  --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
+
+# MCP fact server [P3, verified]: there is no console script — the orchestrator spawns it over stdio
+uv run python -m app.mcp.server                    # needs SITEWARRANT_MCP_AUDIT_ID, one audit per process
+
+# Frontend [P4, verified], from api/
+cd ../web && bun install
 bun run dev
 bun run build
 bunx biome check .
 bunx tsc --noEmit
 
-# Single gate before a commit [P0, verified]
-make check
+# Single gate before a commit [verified]; `make check` is read from the repository root
+cd .. && make check
 ```
 
 `make check` is the contract: ruff, mypy, pytest, biome and `tsc` in one command. It runs against the
@@ -130,23 +153,36 @@ What exists today:
 ```
 api/app/api/       FastAPI app: health, create audit, fetch stored report
 api/app/core/      config, database engine, ORM models, report schema, agent_version, page_key
-api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report
-api/app/rules/     catalog.py (what we claim) and engine.py (facts to findings)
+api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report, digest
+api/app/rules/     catalog.py (10 rules), engine.py (facts to findings), corpus, store (pgvector)
+api/app/agents/    specs, prompts/, runner (budgeted loop), validator, orchestrator, llm client
+api/app/chief/     anchor (where a finding lives) and cluster (dedupe, root causes, priority)
+api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new)
+api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare
+api/app/mcp/       fact server (stdio, one audit per process) and the agent loop's MCP client
 api/app/storage/   repository functions over the ORM
 api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
                    performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
+api/app/cli.py     the `sitewarrant` commands; telemetry.py and pricing.py sit beside it
+api/Dockerfile     the API image `infra/demo.yml` and CI build
 api/migrations/    Alembic environment and revisions
 api/tests/         unit tests (math, thresholds, merge, validator, runner on cassettes),
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
-                   and tests/integration (fixture site, database, browser, MCP, agents)
+                   and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
 web/app/           Next.js report page
-benchmark/fixtures/  static site with planted defects, expected.json, robots.txt, sitemap.xml
-infra/             docker-compose: Postgres with pgvector, Redis, fixture site
+benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
+benchmark/sites/     eight generated sites + their labels (never hand-edited)
+benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests
+evals/runs/          recorded eval runs; a number in the docs must name one of these files
+pricing/pricing.yaml  versioned price table; the audit stores the version it was priced with
+infra/             docker-compose (Postgres with pgvector, Redis, fixture site) and demo.yml
+.github/workflows/ ci.yml (gate, including the image build), eval.yml (weekly corpus run)
+docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api/app/worker/`,
-`rules/` (the WCAG and header corpus).
+There is no `api/app/worker/`: an audit runs inside the API request, which is the documented
+residual — fine for a demo, wrong for a crawl of 50 pages.
 
 ## Code conventions
 

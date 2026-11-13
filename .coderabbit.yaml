@@ -80,7 +80,7 @@ reviews:
           sitemap entry that is followed without re-validation.
         - Page-template clustering is deterministic; flag a model call inside it.
 
-    - path: "api/app/evals/**"
+    - path: "api/app/eval/**"
       instructions: |
         Every published number comes from a run artifact under evals/runs/ with a denominator and
         a date. A zero denominator yields null, never 0.
