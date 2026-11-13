@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.chief.anchor import anchor_for_evidence
+from app.chief.anchor import anchor_for_evidence, label
 from app.core.report import FindingOut, RootCauseOut
 from app.rules.catalog import SEVERITY_WEIGHTS, Severity
 
@@ -151,15 +151,17 @@ def cluster(
         if len(members) < ROOT_CAUSE_MIN_FINDINGS or len(categories) < ROOT_CAUSE_MIN_CATEGORIES:
             continue
         severity = max(members, key=lambda item: severity_weight(item.severity)).severity
+        name = label(anchor)
         causes.append(
             RootCauseOut(
                 id=root_cause_id(members[0].page_key, anchor),
                 kind="dom_anchor",
                 anchor=anchor,
+                label=name,
                 categories=categories,
                 summary=(
                     f"{len(members)} findings in {len(categories)} categories share "
-                    f"{anchor}; fixing the block is likely to close them together."
+                    f"{name}; fixing the block is likely to close them together."
                 ),
                 rationale=", ".join(sorted({finding.rule_id for finding in members})),
                 severity=severity,

@@ -61,8 +61,9 @@ def without_generic_heads(path: list[str]) -> list[str]:
     return trimmed
 
 
-def _normalize(segment: str) -> str:
-    return segment.split(":nth-of-type")[0].strip().lower()
+def label(anchor: str) -> str:
+    """The tag name to show a human: `section:nth-of-type(2)` reads as `section`."""
+    return anchor.split(":nth-of-type")[0].split("#")[0].strip().lower()
 
 
 def anchor_for_selectors(selectors: Iterable[str]) -> str | None:
@@ -82,9 +83,10 @@ def anchor_for_selectors(selectors: Iterable[str]) -> str | None:
         heads.append(path[0])
     if len(set(heads)) != 1:
         return None
-    # Agreement is decided on the raw segment: section:nth-of-type(1) and section:nth-of-type(2)
-    # are different blocks even though both are called "section". Only the label is normalized.
-    return _normalize(heads[0])
+    # The raw segment is the identity: section:nth-of-type(1) and section:nth-of-type(2) are
+    # different blocks even though both are called "section", and grouping them would invent a
+    # cause. `label()` produces the readable tag name for the report.
+    return heads[0]
 
 
 def anchor_for_evidence(

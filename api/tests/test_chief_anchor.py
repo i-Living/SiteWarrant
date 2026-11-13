@@ -14,11 +14,11 @@ MAIN_PARAGRAPH = (
 
 
 def test_a_single_path_names_its_block() -> None:
-    assert anchor_for_selectors([HEADER_LINK]) == "header"
+    assert anchor_for_selectors([HEADER_LINK]) == "header:nth-of-type(1)"
 
 
 def test_paths_in_one_block_name_that_block() -> None:
-    assert anchor_for_selectors([HEADER_LINK, HEADER_BANNER]) == "header"
+    assert anchor_for_selectors([HEADER_LINK, HEADER_BANNER]) == "header:nth-of-type(1)"
 
 
 def test_paths_in_different_blocks_name_nothing() -> None:
@@ -43,14 +43,14 @@ def test_free_text_is_not_a_selector() -> None:
         "html": '<h2 class="a > b">',
     }
     assert selectors_in(payload) == [HEADER_LINK]
-    assert anchor_for_selectors(selectors_in(payload)) == "header"
+    assert anchor_for_selectors(selectors_in(payload)) == "header:nth-of-type(1)"
 
 
 def test_two_sections_are_two_blocks() -> None:
     """`section:nth-of-type(1)` and `section:nth-of-type(2)` share a tag, not a place."""
     first = "main:nth-of-type(1) > section:nth-of-type(1) > p"
     second = "main:nth-of-type(1) > section:nth-of-type(2) > p"
-    assert anchor_for_selectors([first]) == "section"
+    assert anchor_for_selectors([first]) == "section:nth-of-type(1)"
     assert anchor_for_selectors([first, second]) is None
 
 
@@ -79,20 +79,30 @@ def test_the_subject_wins_over_the_rest_of_its_observation() -> None:
     # Without a subject the payload disagrees with itself, so the finding has no place.
     assert anchor_for_evidence(["obs-occlusion"], observations) is None
     # The subject names the covered element, so the finding keeps its block.
-    assert anchor_for_evidence(["obs-occlusion"], observations, subject=header_hit) == "header"
-    assert anchor_for_evidence(["obs-occlusion"], observations, subject=footer_hit) == "footer"
+    assert anchor_for_evidence(["obs-occlusion"], observations, subject=header_hit).startswith(
+        "header:nth-of-type(1)"
+    )
+    assert anchor_for_evidence(["obs-occlusion"], observations, subject=footer_hit).startswith(
+        "footer:nth-of-type(1)"
+    )
 
 
 def test_free_text_subject_does_not_override_the_evidence() -> None:
-    """The validator only checks the subject text appears in the payload, so a breadcrumb passes."""
+    """The validator only checks the subject text is in the payload, so a breadcrumb would pass."""
     observations = {"obs": {"selector": HEADER_LINK, "note": "Home > Products"}}
-    assert anchor_for_evidence(["obs"], observations, subject="Home > Products") == "header"
+    assert anchor_for_evidence(["obs"], observations, subject="Home > Products") == (
+        "header:nth-of-type(1)"
+    )
 
 
 def test_a_subject_that_is_not_a_path_falls_back_to_the_evidence() -> None:
     observations = {"obs": {"selector": HEADER_LINK}}
-    assert anchor_for_evidence(["obs"], observations, subject="header > a") == "header"
-    assert anchor_for_evidence(["obs"], observations, subject="Navigation link") == "header"
+    assert (
+        anchor_for_evidence(["obs"], observations, subject="header > a") == "header:nth-of-type(1)"
+    )
+    assert anchor_for_evidence(["obs"], observations, subject="Navigation link").startswith(
+        "header"
+    )
 
 
 def test_evidence_refs_and_report_evidence_share_one_shape() -> None:

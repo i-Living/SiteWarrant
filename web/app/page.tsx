@@ -21,6 +21,7 @@ type RootCause = {
   id: string;
   kind: string;
   anchor: string;
+  label: string;
   categories: string[];
   summary: string;
   rationale: string;
@@ -140,7 +141,7 @@ export default async function Page({
           data-severity={cause.severity}
         >
           <h2>
-            {cause.anchor}{" "}
+            {cause.label} <span className="rule">{cause.anchor}</span>{" "}
             <span className="rule">{cause.categories.join(" + ")}</span>
           </h2>
           <p>{cause.summary}</p>

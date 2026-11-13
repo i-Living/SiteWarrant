@@ -19,7 +19,8 @@ async def test_the_banner_is_one_root_cause_with_symptoms_from_two_categories() 
 
     assert report.summary.root_causes == 1
     cause = report.root_causes[0]
-    assert cause.anchor == "header"
+    assert cause.anchor == "header:nth-of-type(1)"
+    assert cause.label == "header"
     assert len(cause.categories) >= 2, cause.categories
     assert len(cause.finding_ids) >= 2
     assert {"responsive", "a11y"} <= set(cause.categories)
@@ -55,7 +56,7 @@ async def test_the_cluster_is_persisted_with_its_findings() -> None:
             .all()
         )
         assert len(rows) == len(report.root_causes[0].finding_ids)
-        assert causes[0].anchor == "header"
+        assert causes[0].anchor == "header:nth-of-type(1)"
         assert causes[0].priority > 0
 
 

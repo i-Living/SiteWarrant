@@ -491,7 +491,8 @@ pgvector (`rules.embedding`, `<=>`), команда `sitewarrant index-rules`, �
 - **Осталось из плана:** LLM-нарратив Chief Auditor'а (объяснение и оценка влияния — группировка уже
   детерминированная) и артефакт скриншота отчёта в CI.
 - Verify: `uv run sitewarrant audit http://localhost:8081/ --allow-private` →
-  `summary.root_causes` = 1, `root_causes[0].anchor` = `header`.
+  `summary.root_causes` = 1, `root_causes[0].anchor` = `header:nth-of-type(1)` (сырой блок —
+  он же ключ группировки), `root_causes[0].label` = `header` для отображения.
 
 ### P5 — evals (неделя 5–6)
 

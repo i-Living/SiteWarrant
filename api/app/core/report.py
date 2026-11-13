@@ -67,6 +67,7 @@ class RootCauseOut(BaseModel):
     id: str
     kind: str
     anchor: str
+    label: str = ""
     categories: list[str]
     summary: str
     rationale: str

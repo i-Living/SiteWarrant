@@ -159,7 +159,8 @@ def test_a_cross_category_cluster_becomes_a_root_cause() -> None:
     )
     assert len(result.root_causes) == 1
     cause = result.root_causes[0]
-    assert cause.anchor == "header"
+    assert cause.anchor == "header:nth-of-type(1)"
+    assert cause.label == "header"
     assert cause.categories == ["a11y", "responsive"]
     assert len(cause.finding_ids) == 2
     assert {f.root_cause_id for f in result.findings} == {cause.id}
@@ -211,7 +212,7 @@ def test_root_causes_are_ordered_by_priority() -> None:
         ],
         observations(),
     )
-    assert [cause.anchor for cause in result.root_causes] == ["section", "header"]
+    assert [cause.label for cause in result.root_causes] == ["section", "header"]
 
 
 def test_the_root_cause_id_is_stable() -> None:
