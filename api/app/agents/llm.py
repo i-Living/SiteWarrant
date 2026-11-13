@@ -138,7 +138,15 @@ class OpenAiCompatibleClient:
             raise LlmError(
                 f"{self.model} answered HTTP {response.status_code}: {response.text[:300]}"
             )
-        reply = parse_reply(response.json())
+        try:
+            reply = parse_reply(response.json())
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            # A 2xx with a body the client cannot read is a provider failure like any other: it has
+            # to arrive as LlmError, or an agent run and the chief narration get an exception they
+            # are not allowed to treat as a failed call.
+            raise LlmError(
+                f"{self.model} answered with an unusable body: {response.text[:300]}"
+            ) from error
         reply.latency_ms = int((time.monotonic() - started) * 1000)
         return reply
 

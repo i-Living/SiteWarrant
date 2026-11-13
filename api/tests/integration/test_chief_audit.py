@@ -1,17 +1,36 @@
 """The P4 acceptance: the fixture's banner is one cause, not a pile of unrelated findings."""
 
 import uuid
+from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.agents.models import LlmCallStat
 from app.audit import run_audit
+from app.chief.narrate import NarrationCall
+from app.core.config import get_settings
 from app.core.db import session_scope
-from app.core.models import Finding, RootCause
+from app.core.models import Finding, LlmCall, RootCause
 
 pytestmark = pytest.mark.integration
 
 URL = "http://localhost:8081/"
+CASSETTES = Path(__file__).resolve().parents[2] / "tests/agents/cassettes"
+
+
+@pytest.fixture
+def cassette(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
+    """An agent run needs a recorded conversation; narration is stubbed per test."""
+
+    def use(name: str) -> None:
+        monkeypatch.setenv("SITEWARRANT_LLM_CASSETTE", str(CASSETTES / name))
+        get_settings.cache_clear()
+
+    yield use
+    monkeypatch.delenv("SITEWARRANT_LLM_CASSETTE", raising=False)
+    get_settings.cache_clear()
 
 
 async def test_the_banner_is_one_root_cause_with_symptoms_from_two_categories() -> None:
@@ -66,3 +85,72 @@ async def test_a_page_level_defect_is_not_clustered() -> None:
     titles = [finding for finding in report.findings if finding.rule_id == "SEO-TITLE"]
     assert titles
     assert titles[0].root_cause_id is None
+
+
+async def test_the_narration_reaches_the_report_and_the_call_log(
+    cassette: Callable[[str], None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The prose is stored with the cause and priced with the audit, next to the agent calls."""
+
+    async def explained(causes, findings, *, settings, trace, audit_id):
+        assert causes, "the stub is only called when there is a cluster"
+        return NarrationCall(
+            causes=[
+                cause.model_copy(
+                    update={
+                        "summary": "The header hides the menu at 390 px.",
+                        "rationale": "One fix in the header closes the labelled and covered links.",
+                    }
+                )
+                for cause in causes
+            ],
+            status="ok",
+            accepted=len(causes),
+            tokens_in=900,
+            tokens_out=120,
+            llm_calls=1,
+            latency_ms=400,
+            calls=[LlmCallStat(tokens_in=900, tokens_out=120, latency_ms=400)],
+        )
+
+    monkeypatch.setattr("app.audit.explain_causes", explained)
+    cassette("a11y_valid.json")
+    report = await run_audit(URL, allow_private=True, agents=["a11y"])
+
+    assert report.root_causes
+    assert report.root_causes[0].summary == "The header hides the menu at 390 px."
+    chief = next(agent for agent in report.summary.agents if agent.name == "chief")
+    assert chief.status == "ok"
+    assert (chief.tokens_in, chief.tokens_out, chief.llm_calls) == (900, 120, 1)
+    assert chief.cost_estimate_usd is not None, "a priced model yields an estimate"
+    # The chief's tokens are part of the audit total, not a separate ledger.
+    assert report.summary.tokens_in >= 900
+    assert report.summary.llm_calls >= 1
+
+    async with session_scope() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(LlmCall).where(
+                        LlmCall.audit_id == uuid.UUID(report.audit_id),
+                        LlmCall.agent == "chief",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].tokens_in == 900
+    assert rows[0].cost_estimate_usd is not None
+
+
+async def test_a_cassette_keeps_the_narration_off(cassette: Callable[[str], None]) -> None:
+    """A recorded conversation has no narration in it, so the measured sentence stays."""
+    cassette("a11y_valid.json")
+    report = await run_audit(URL, allow_private=True, agents=["a11y"])
+
+    chief_rows = [agent for agent in report.summary.agents if agent.name == "chief"]
+    assert chief_rows == []
+    assert "findings in" in report.root_causes[0].summary
+    assert report.root_causes[0].rationale.startswith("A11Y-")

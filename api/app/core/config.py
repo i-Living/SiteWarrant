@@ -85,6 +85,12 @@ class Settings(BaseSettings):
         default=0.25,
         validation_alias=AliasChoices("SITEWARRANT_AUDIT_COST_LIMIT_USD", "audit_cost_limit_usd"),
     )
+    # The Chief Auditor's prose about a cluster the deterministic layer built. One extra model
+    # call per audit that produced a root cause; a failure leaves the measured text in place.
+    chief_narration: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SITEWARRANT_CHIEF_NARRATION", "chief_narration"),
+    )
 
     @property
     def viewport_list(self) -> tuple[str, ...]:

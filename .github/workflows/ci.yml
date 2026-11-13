@@ -95,3 +95,68 @@ jobs:
           file: api/Dockerfile
           push: false
           tags: sitewarrant-api:ci
+
+  report:
+    name: report (screenshot artifact)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: oven-sh/setup-bun@v2
+      - run: uv sync --frozen --group dev
+      - name: Start Postgres, Redis and the fixture site
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml up -d --wait
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run alembic upgrade head
+      # Deterministic audit: no agents, no API key, the same page and the same cause every time.
+      # Exit 1 means a blocker was proven, which the fixture has by design; only 2 is a failure.
+      - name: Audit the fixture
+        run: |
+          set +e
+          uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            exit "$code"
+          fi
+          echo "audit exit $code (0 clean, 1 blocker proven — the fixture carries two)"
+      # One step: a background process does not outlive the shell that started it, so serving and
+      # capturing happen together.
+      - name: Serve the API and capture the report page
+        run: |
+          (cd ../web && bun install --frozen-lockfile \
+            && SITEWARRANT_API=http://127.0.0.1:8000 bun run build)
+          (cd ../web && SITEWARRANT_API=http://127.0.0.1:8000 bun run start -- -H 127.0.0.1 -p 3000 &)
+          uv run sitewarrant-api &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null \
+              && curl -fsS -o /dev/null http://127.0.0.1:3000/; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/health > /dev/null
+          curl -fsS -o /dev/null http://127.0.0.1:3000/
+          audit=$(python3 -c "import json;print(json.load(open('report.json'))['audit_id'])")
+          uv run python ../scripts/report_screenshot.py \
+            --url "http://127.0.0.1:3000/?audit=$audit" --out ../report-page.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-page
+          path: report-page.png
+          if-no-files-found: warn
+      - name: Show container logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml logs --tail 50

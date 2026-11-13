@@ -6,8 +6,8 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-13-baseline-corpus-bytes.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:668a9010f1b1e6d2`, 2026-11-13, 320.7 s, whole corpus (8 synthetic sites, 104 pages, 80
+Run `evals/runs/2026-11-13-baseline-narration-v2.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:0a57261de95be73a`, 2026-11-13, 327.6 s, whole corpus (8 synthetic sites, 104 pages, 80
 planted defects, 24 clean pages):
 
 | metric | value | denominator |
@@ -17,7 +17,7 @@ planted defects, 24 clean pages):
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 320.7 s | 104 pages (3.08 s/page) |
+| duration | 327.6 s | 104 pages (3.15 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -48,6 +48,11 @@ root cause, and the same ten planted defects are still covered. The comparison p
 so it is a fixture comparison, not a benchmark comparison — the honest way to say it is "the numbers
 moved the way dedupe predicted", not "the newer version is 22 % better".
 
+A third version followed on 2026-11-13 for the Chief Auditor's narration (`sha256:0a57261de95be73a`),
+and it is deliberately not in the table: narration changes the words that explain a cluster, not the
+cluster, so on the same fixture it reports the same findings with a longer `rationale`. A model that
+made findings better would show up in the benchmark; a model that only writes prose cannot.
+
 A benchmark comparison of two agent versions is now possible without new code: run `sitewarrant eval`
 twice and pass the two files to `sitewarrant prompt-check` or `sitewarrant eval --compare`. It has not
 been run, because each pass over the corpus with an agent costs about forty minutes of model time.
@@ -74,6 +79,13 @@ Measured on the fixture page with `--agents seo,a11y` (2026-11-13, one page, thr
 The same page without agents yields 14 findings and `llm_calls: 0`, `cost_estimate_usd: 0.0`: the
 deterministic layer is free, and every finding it loses by adding agents would be a finding the
 facts already proved.
+
+The Chief Auditor's explanation is a ninth model call, and it is billed like the others but costs a
+fraction of them. Run `evals/audits/2026-11-13-fixture-narrated.json` — the same fixture page with
+`--agents a11y` and narration on, agent `sha256:0a57261de95be73a` — carries a `chief` row: 1 call,
+1 146 tokens in, 863 out, `$0.001379` estimated, status `ok`, next to the accessibility agent's 6
+calls and `$0.028806`. The paragraph it produced names the header links and says what a visitor loses
+— and every number in it was checked against the cluster's facts before it was kept.
 
 At list price this is **$3.69 per 100 pages** (`0.036854 × 100`), or about 16.5 minutes of wall time
 per page on this machine (135 s for the fixture page including three viewports and both agents). The
@@ -109,5 +121,11 @@ the gate exists, its first real decision will be the first prompt change someone
 - The public demo. `infra/demo.yml` and `api/Dockerfile` exist; the stack answers on loopback
   (`/health`, migrations, `POST /audits`) and the image builds, but no VPS or domain has been pointed
   at it, so "public URL under 15 minutes" is unverified.
-- Concurrency and load. Everything here is one audit at a time; the API runs the audit inside the
-  request, which is fine for a demo and wrong for a crawler of 50 pages.
+- The quality of the Chief Auditor's prose. The check is arithmetic — no number outside the cluster's
+  facts — not editorial: nobody has labelled a set of good explanations, so "this sentence explains
+  the cause better than that one" is a judgement, not a measurement here. What is measured is that a
+  sentence the check rejects never reaches the report.
+- Concurrency and load. `POST /audits` runs the audit inside the request and answers once the page is
+  done, so a slow page holds the connection; there is no queue and no worker, a restart loses a
+  running audit and a burst of submissions runs several browsers. Fine for a demo, wrong for a
+  crawler of 50 pages.
