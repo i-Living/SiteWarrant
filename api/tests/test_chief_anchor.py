@@ -83,6 +83,12 @@ def test_the_subject_wins_over_the_rest_of_its_observation() -> None:
     assert anchor_for_evidence(["obs-occlusion"], observations, subject=footer_hit) == "footer"
 
 
+def test_free_text_subject_does_not_override_the_evidence() -> None:
+    """The validator only checks the subject text appears in the payload, so a breadcrumb passes."""
+    observations = {"obs": {"selector": HEADER_LINK, "note": "Home > Products"}}
+    assert anchor_for_evidence(["obs"], observations, subject="Home > Products") == "header"
+
+
 def test_a_subject_that_is_not_a_path_falls_back_to_the_evidence() -> None:
     observations = {"obs": {"selector": HEADER_LINK}}
     assert anchor_for_evidence(["obs"], observations, subject="header > a") == "header"

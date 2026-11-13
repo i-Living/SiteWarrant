@@ -98,17 +98,22 @@ def anchor_for_evidence(
     An observation can cover many elements: an occlusion report holds up to twenty hits from
     across the page, and one finding per hit cites that same report. Reading every selector in
     the payload would collect the footer's hits too, so the heads disagree and the finding would
-    lose its place. The subject names the element the finding is about, so it wins when it is a
-    path; otherwise the cited payloads decide.
+    lose its place. The subject names the element the finding is about, so it wins when the cited
+    payload actually holds it as a selector; otherwise the cited payloads decide.
     """
-    if subject is not None and SEPARATOR in subject:
-        own = anchor_for_selectors([subject.strip()])
-        if own is not None:
-            return own
     selectors: list[str] = []
     for observation_id in observation_ids:
         payload = observations.get(observation_id)
         if payload is None:
             continue
         selectors.extend(selectors_in(payload))
+    if subject is not None:
+        own = subject.strip()
+        # The validator only proves the subject appears somewhere in the payload, so a breadcrumb
+        # ("Home > Products") would otherwise pass for a path. The override stands only when the
+        # cited observation itself holds this selector.
+        if own and own in selectors:
+            anchor = anchor_for_selectors([own])
+            if anchor is not None:
+                return anchor
     return anchor_for_selectors(selectors)
