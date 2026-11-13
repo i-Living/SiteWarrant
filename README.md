@@ -109,7 +109,13 @@ docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, Redis, fix
 cd api && uv sync && uv run alembic upgrade head
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+uv run sitewarrant survey https://example.com --max-pages 50 --out survey.json
 ```
+
+`survey` is the site-level command: it discovers the pages a crawl would reach, audits the selected
+ones and merges them into one report, so a fifty-page site produces one `survey.json` instead of
+fifty `report.json` files. Each page keeps its own root causes — a cause is a block on a page, and
+two pages that both carry a `header` do not share one.
 
 The fixture site at `http://localhost:8081/` is a static page with ten defects planted on purpose,
 one per rule in `api/app/rules/catalog.py`, plus a journal, a product list, an app shell and a
