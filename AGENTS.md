@@ -250,6 +250,14 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **An excerpt is evidence, so its numbers are checked** against the observation it names — not
   against the union of everything the finding cites, and not against the claim's constants: "24 by
   24 pixels" is the rule, and a quote that contains it is a fabricated measurement.
+- **A root cause is a place, not a rule family.** The anchor is read from the selectors in the cited
+  observations: the first path segment that is not a page wrapper. A finding whose evidence spans two
+  blocks has no place and joins no cluster, and a group needs two findings from two categories before
+  it is called a cause (docs/PLAN.md invariant 4).
+- **Dedupe merges only what is the same thing.** Identity is claim + place + subject, and without a
+  subject the findings must share a cited observation; two targets in one block stay two findings.
+- **axe nodes carry `path`.** axe reports `.icon-link`, which names no place, so `run_axe` adds the
+  element's nth-of-type path in the same evaluate.
 - **The validator is the only path from a candidate to a finding.** An agent proposes; the
   validator checks the claim exists in the corpus, the category matches, severity is not lowered,
   every cited observation belongs to this audit, the channel is allowed for that claim, and every

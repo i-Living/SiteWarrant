@@ -13,7 +13,7 @@ Category = Literal[
     "conversion",
 ]
 Severity = Literal["blocker", "major", "minor", "info"]
-RuleSource = Literal["axe", "dom"]
+RuleSource = Literal["axe", "dom", "occlusion"]
 
 CATEGORIES: tuple[Category, ...] = (
     "seo",
@@ -194,6 +194,23 @@ RULES: tuple[Rule, ...] = (
         impact=Impact(seo=2),
         source="dom",
         match="meta_description",
+    ),
+    Rule(
+        id="LAYOUT-OCCLUSION",
+        category="responsive",
+        severity="major",
+        title="An interactive element is covered by another element",
+        summary=(
+            "A hit test at the centre of an interactive element lands on a different element, "
+            "so a pointer user cannot activate it where it appears to be."
+        ),
+        suggested_fix=(
+            "Move the covering element out of the target's box, or let the block reflow so the "
+            "target is not covered at this viewport."
+        ),
+        impact=Impact(conversion=2, ux=2),
+        source="occlusion",
+        match="occluded_target",
     ),
 )
 

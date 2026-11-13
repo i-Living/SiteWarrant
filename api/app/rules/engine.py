@@ -59,6 +59,7 @@ class FindingDraft(BaseModel):
     impact_ux: int
     confidence: float
     agent: str
+    subject: str | None = None
     evidence: list[EvidenceDraft]
 
 
@@ -105,6 +106,36 @@ def dom_drafts(observation: ObservationView) -> list[FindingDraft]:
     return drafts
 
 
+def occlusion_drafts(observation: ObservationView) -> list[FindingDraft]:
+    """One draft per covered target: a click that lands on someone else is a measured defect."""
+    rule = rule_by_match("occlusion", _OCCLUSION_MATCH)
+    if rule is None:
+        return []
+    drafts: list[FindingDraft] = []
+    for hit in observation.payload.get("hits") or []:
+        selector = str(hit.get("selector") or "")
+        occluder = str(hit.get("occluder_selector") or "")
+        if not selector or not occluder:
+            continue
+        drafts.append(
+            _draft(
+                rule,
+                [
+                    EvidenceDraft(
+                        observation_id=observation.id,
+                        kind="occlusion_hit",
+                        excerpt=f"{selector} covered by {occluder}",
+                    )
+                ],
+                f"{rule.summary} Observed: {selector} is covered by {occluder}.",
+            )
+        )
+    return drafts
+
+
+_OCCLUSION_MATCH = "occluded_target"
+
+
 def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft]:
     """Rules only claim what the catalog covers; every other fact stays an observation.
 
@@ -120,6 +151,8 @@ def draft_findings(observations: Sequence[ObservationView]) -> list[FindingDraft
                 drafts.append(draft)
         elif observation.tool == "dom":
             drafts.extend(dom_drafts(observation))
+        elif observation.tool == "occlusion":
+            drafts.extend(occlusion_drafts(observation))
     return merge_by_rule(drafts)
 
 

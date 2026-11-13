@@ -1,0 +1,66 @@
+import uuid
+
+from app.agents.models import EvidenceRef
+from app.chief.anchor import anchor_for_selectors, selectors_in
+from app.core.report import EvidenceOut, FindingOut, ImpactOut
+
+HEADER_LINK = "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2)"
+HEADER_BANNER = (
+    "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img"
+)
+MAIN_PARAGRAPH = (
+    "html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1) > p:nth-of-type(3)"
+)
+
+
+def test_a_single_path_names_its_block() -> None:
+    assert anchor_for_selectors([HEADER_LINK]) == "header"
+
+
+def test_paths_in_one_block_name_that_block() -> None:
+    assert anchor_for_selectors([HEADER_LINK, HEADER_BANNER]) == "header"
+
+
+def test_paths_in_different_blocks_name_nothing() -> None:
+    """A finding that touches two blocks belongs to neither, and a cluster would be invented."""
+    assert anchor_for_selectors([HEADER_LINK, MAIN_PARAGRAPH]) is None
+
+
+def test_a_leaf_under_a_page_wrapper_names_nothing() -> None:
+    """`main > p` is a paragraph, not a place: stripping the wrapper leaves one segment."""
+    assert anchor_for_selectors([MAIN_PARAGRAPH]) is None
+
+
+def test_a_bare_element_selector_is_not_a_place() -> None:
+    assert anchor_for_selectors([".icon-link", "#cta"]) is None
+
+
+def test_selectors_are_read_from_payload_values_not_keys() -> None:
+    payload = {
+        "selector": HEADER_LINK,
+        "occluder_selector": HEADER_BANNER,
+        "selector_count": 2,
+        "note": "not a path",
+    }
+    assert selectors_in(payload) == [HEADER_LINK, HEADER_BANNER]
+
+
+def test_evidence_refs_and_report_evidence_share_one_shape() -> None:
+    """The validator and the chief layer read the same evidence type; this pins the assumption."""
+    finding = FindingOut(
+        id=str(uuid.uuid4()),
+        rule_id="A11Y-LINK-NAME",
+        category="a11y",
+        severity="major",
+        title="Link has no accessible name",
+        summary="",
+        suggested_fix="",
+        impact=ImpactOut(conversion=0, seo=0, ux=0),
+        confidence=1.0,
+        agent="rules",
+        page_url="http://localhost:8081/",
+        page_key="localhost",
+        evidence=[EvidenceOut(kind="axe_node", observation_id=str(uuid.uuid4()))],
+    )
+    assert isinstance(finding.evidence[0].observation_id, str)
+    assert EvidenceRef(observation_id=finding.evidence[0].observation_id, kind="axe_node")

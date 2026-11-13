@@ -16,6 +16,13 @@
       form { display: flex; gap: 8px; margin-top: 12px; }
       input, button { font-size: 1rem; padding: 8px 12px; }
       footer { padding: 24px; color: #555555; border-top: 1px solid #dcdcdc; }
+      .site-header { position: relative; }
+      /* Planted defect: at mobile width this promo banner sits on top of the header links,
+         so a tap on them lands on the banner instead. Above 768 px it is part of the flow. */
+      .banner { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: #ffffff; border: 1px solid #dcdcdc; }
+      /* Planted defect: this grey on white is about 2.6:1. */
+      .banner-text { color: #9aa0a6; font-size: 0.875rem; }
+      @media (min-width: 768px) { .banner { position: static; } }
     </style>
   </head>
   <body>
@@ -34,6 +41,17 @@
           <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" />
         </svg>
       </a>
+      <!-- Planted defect: the banner covers the header links at 390 px, its text is low
+           contrast, and its only content of the close control is an aria-hidden svg. -->
+      <div class="banner" role="complementary" aria-label="Promotion">
+        <img src="sale.png" alt="Autumn sale" />
+        <span class="banner-text">Autumn sale</span>
+        <a class="banner-close" href="#dismiss">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M1 1 L13 13 M13 1 L1 13" stroke="currentColor" />
+          </svg>
+        </a>
+      </div>
     </header>
 
     <main>

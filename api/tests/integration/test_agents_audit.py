@@ -78,7 +78,7 @@ async def test_the_deterministic_layer_still_runs_alongside_the_agents(cassette)
     report = await run_audit(URL, allow_private=True, agents=["a11y"])
 
     deterministic = [finding for finding in report.findings if finding.agent == "rules"]
-    assert len(deterministic) == 9
+    assert len(deterministic) == 10
     assert report.summary.by_severity["blocker"] == 2
 
 
@@ -109,7 +109,7 @@ async def test_a_failed_agent_makes_the_report_partial(cassette) -> None:
     assert summary.status == "llm_error"
     assert summary.error is not None and "cassette" in summary.error
     # The deterministic findings are still there: one agent failing is not a failed audit.
-    assert len([finding for finding in report.findings if finding.agent == "rules"]) == 9
+    assert len([finding for finding in report.findings if finding.agent == "rules"]) == 10
 
     audit = await stored_audit(report.audit_id)
     assert audit.status == "partial"
@@ -148,7 +148,7 @@ async def test_a_broken_cassette_is_one_failed_agent_not_a_failed_audit(
 
     assert report.status == "partial"
     assert report.summary.agents[0].status == "failed"
-    assert report.summary.findings_total >= 9
+    assert report.summary.findings_total >= 10
 
 
 async def test_a_failure_before_the_facts_commit_records_no_pages(
