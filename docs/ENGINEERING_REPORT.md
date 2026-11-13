@@ -55,10 +55,10 @@ The two failures are field data, not noise to delete: one screenshot and one nav
 names both; a survey that dropped them quietly would read as a complete pass over 60 pages.
 
 **Zero root causes is the interesting number.** A cause needs two findings from two categories on one
-block, and on these pages the defects sit on different elements — eleven contrast failures on inline
-code, one page with no `lang`, a missing meta description. Calling any of that a shared cause would be
-inventing a block. On the fixture, where a banner really does cover the navigation, the same code finds
-one cause with six symptoms.
+block, and on these pages the defects sit on different elements — two contrast failures on inline
+code, eight links whose name is just an icon, one page with no `lang`, eight meta descriptions the
+search result cuts. Calling any of that a shared cause would be inventing a block. On the fixture,
+where a banner really does cover the navigation, the same code finds one cause with six symptoms.
 
 What this run does not say: precision or recall. There are no labels for docs.python.org, so the claim
 is only that the tool crossed 50 real pages at a polite rate and produced one auditable artifact — not
