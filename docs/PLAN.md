@@ -215,25 +215,36 @@ feedback(id, finding_id, action, note, created_at)   -- accept/reject для с�
 
 ## 8. Структура репозитория
 
+Фактическое дерево (обновлено 2026-11-13; отличается от наброска тем, что восемь каналов заменили
+Lighthouse, пакет метрик называется `app/eval`, а очередь воркера не появилась — аудит выполняется
+внутри запроса API):
+
 ```
 api/
   app/api/        HTTP-роуты: создать аудит, статус, отчёт, обратная связь
-  app/core/       конфиг, БД, трассировка, прайс-таблица
-  app/crawl/      crawler, discovery, кластеризация шаблонов
-  app/tools/      детерминированные инструменты: http_probe, dom_probe, axe, lighthouse,
-                  screenshot, occlusion, responsive
-  app/agents/     8 аудиторов + chief, промпты отдельными файлами
-  app/mcp/        MCP-сервер и MCP-клиент оркестратора
-  app/evals/      сопоставление, метрики, раннер бенчмарка
-  app/worker/     очередь Redis, воркер с Playwright
+  app/core/       конфиг, БД, ORM, схема отчёта, agent_version, page_key
+  app/crawl/      crawler, discovery, кластеризация шаблонов, дайджест обхода
+  app/rules/      catalog (10 правил), engine, corpus, store (pgvector)
+  app/tools/      восемь каналов: http_probe, dom_probe, axe, contrast, responsive,
+                  occlusion, performance, screenshot + fetch, http_get, guard, robots
+  app/agents/     specs, prompts/, runner (бюджетный цикл), validator, orchestrator, llm
+  app/chief/      anchor (место находки), cluster (dedupe, root causes, приоритет)
+  app/fixes/      patch (пять механических правил), recommend, reaudit
+  app/eval/       dataset (манифест и дайджест), metrics, runner, compare
+  app/mcp/        MCP-сервер фактов (stdio) и MCP-клиент оркестратора
+  app/cli.py      команды sitewarrant; telemetry.py и pricing.py рядом
+  Dockerfile      образ API для demo.yml и CI
   migrations/
   tests/
-web/              Next.js: страница аудита, история, diff повторного аудита
-benchmark/        манифест сайтов + метки (JSON), фикстуры для CI
-rules/            корпус WCAG 2.2 / SEO / HTTP-безопасности + скрипт индексации
-infra/            docker-compose, Dockerfile, сети и лимиты egress
+web/              Next.js: страница отчёта (причины, находки, улики)
+benchmark/        fixtures/ (сайт P0–P4), sites/ (восемь сгенерированных сайтов + метки),
+                  dataset.json, generate.py
+rules/            корпус WCAG 2.2 / SEO / HTTP-безопасности (claims.jsonl)
+evals/runs/       записанные прогоны; число в документах обязано называть один из файлов
+pricing/          pricing.yaml — версионированная прайс-таблица
+infra/            docker-compose.yml (Postgres+pgvector, Redis, фикстура), demo.yml, nginx-конфиг
 docs/             PLAN.md, ENGINEERING_REPORT.md
-.github/          ci.yml, eval-nightly.yml
+.github/          workflows/ci.yml (гейт и сборка образа), workflows/eval.yml (недельный прогон)
 ```
 
 ## 9. Команды
@@ -270,15 +281,23 @@ uv run sitewarrant crawl https://example.com --max-depth 3 --pages-per-template 
 # MCP-сервер фактов для одного аудита (stdio). Его же запускает оркестратор.
 SITEWARRANT_MCP_AUDIT_ID=<audit_id> uv run python -m app.mcp.server
 
-# Дальше — команды будущих фаз, сейчас их нет:
-# uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json        [P5]
-# uv run sitewarrant reaudit <audit_id> --against-report old.json                [P6]
+# Бенчмарк и гейт промптов (P5). Каталог — api/, как и у команд выше.
+python3 ../benchmark/generate.py --check        # корпус совпадает с генератором, байт в байт
+uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
+uv run sitewarrant eval --dataset ../benchmark --out /tmp/latest.json \
+  --compare ../evals/runs/2026-11-13-baseline-corpus-bytes.json
+uv run sitewarrant prompt-check --baseline ../evals/runs/a.json --candidate ../evals/runs/b.json
+
+# Исправления и повторный аудит (P6). Патч считается по исходнику, а не по снятому DOM.
+uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fixes/<audit_id>
+uv run sitewarrant reaudit <audit_id> --against-report report.json \
+  --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
 
 # Frontend
 cd web && bun install
 bun run dev
 bun run build
-bunx biome check src
+bunx biome check .
 bunx tsc --noEmit
 
 # Один гейт перед коммитом

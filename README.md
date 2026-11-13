@@ -3,15 +3,16 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: phases P0–P4 complete. Facts, agents, deduplication and deterministic root causes run, and the report page groups findings by cause. The Chief Auditor narration and evals are still ahead.**
-> `sitewarrant crawl <url>` discovers the pages of a site and picks at most two per template;
-> `sitewarrant audit <url>` measures one page at three viewports through eight deterministic channels
-> and writes a JSON report where every finding cites a stored observation. The eight audit agents,
-> root-cause clustering, evals and re-audits are still ahead — see the phase table below.
+> **Stage: phases P0–P7 have landed, except the public demo stand.** Discovery, eight deterministic
+> channels at three viewports, eight budgeted agents behind a validator, deterministic deduplication
+> and root causes, a frozen benchmark with published numbers, fixes with re-audits, and traces with
+> cost estimates all run. Still open, each with the document that says so: the Chief Auditor's LLM
+> narration (the clustering itself is deterministic — [docs/PLAN.md](docs/PLAN.md), P4), the report
+> screenshot artifact in CI, and a public URL for `infra/demo.yml`, which needs the owner's VPS and
+> domain (PLAN §17.3).
 >
-> The quality metrics are `null`: there is no eval run yet, and no number here was produced by a
-> benchmark. The only measured facts in this repository are the fixture results described under
-> "Verification".
+> The numbers below come from stored runs under `evals/runs/`; a metric with no run behind it is
+> `null` and says so, never `0`.
 
 ## The problem this solves
 
@@ -44,7 +45,7 @@ presented as measurements.
 ```
 URL
  └─ discovery        robots.txt, sitemap, BFS crawl, page-template clustering
-     └─ fact layer    http_probe, dom_probe, axe-core, Lighthouse, screenshots (390/768/1440), occlusion
+     └─ fact layer    http_probe, dom_probe, axe-core, performance timings, screenshots (390/768/1440), occlusion
          └─ agents    8 specialised auditors read facts through MCP tools, write candidate findings
              └─ validator    schema, mandatory evidence reference, rule citation
                  └─ chief auditor   dedup, root-cause clustering, priority, business impact
@@ -59,20 +60,22 @@ that cannot.
 
 ## Quality metrics
 
-Measured on a labelled benchmark of 8 sites and 100+ pages. Definitions and the matching rule live in
-[docs/PLAN.md](docs/PLAN.md).
+Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
+[docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
+`evals/runs/2026-11-13-baseline-corpus-bytes.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:668a9010f1b1e6d2`, 2026-11-13. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
-| Findings precision | true positives / findings | `null` — no eval run yet |
-| Findings recall | true positives / gold labels | `null` — no eval run yet |
-| False positive rate | false positives / findings | `null` — no eval run yet |
-| Duplicate finding rate | findings repeating the same page, rule and element | `null` — no eval run yet |
-| Pages audited | pages in the benchmark run | `null` — no eval run yet |
-| Audit cost per 100 pages | estimated cost, median across sites | `null` — no eval run yet |
-| Median audit duration | wall clock per audit | `null` — no eval run yet |
-| Fix acceptance rate | accepted fixes / proposed fixes | `null` — no eval run yet |
-| Regression-free fix rate | re-audits with no new blocker or major / applied fixes | `null` — no eval run yet |
+| Findings precision | true positives / findings | `1.0000` — 80/80 |
+| Findings recall | true positives / gold labels | `1.0000` — 80/80 |
+| False positive rate | false positives / findings | `0.0000` — 0/80 |
+| Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
+| Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
+| Audit cost per 100 pages | estimated cost, median across sites | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents |
+| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 320.7 s |
+| Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
+| Regression-free fix rate | re-audits with no new blocker or major / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
 
 A zero denominator reports `null`, never `0`. Cost is an estimate from a versioned price table; tokens
 and call counts are the measured, tariff-independent values reported next to it.
@@ -87,10 +90,10 @@ Planned for 8 weeks of evening work, roughly 80 hours. That is an estimate, not 
 | P1 | 1–2 | crawl, discovery, page templates | **done** |
 | P2 | 2–3 | deterministic fact layer, three viewports | **done** |
 | P3 | 3–4 | MCP tools, orchestrator, 8 agents, rule corpus | **done** |
-| P4 | 4–5 | chief auditor, root causes, web report | **done** (deterministic layer) |
-| P5 | 5–6 | benchmark, gold labels, eval runner | not started |
-| P6 | 6–7 | fixes and re-audit with diff | not started |
-| P7 | 7–8 | tracing, cost accounting, demo, engineering report | not started |
+| P4 | 4–5 | chief auditor, root causes, web report | **done** (deterministic layer; LLM narration open) |
+| P5 | 5–6 | benchmark, gold labels, eval runner | **done** |
+| P6 | 6–7 | fixes and re-audit with diff | **done** |
+| P7 | 7–8 | tracing, cost accounting, demo, engineering report | **done, except the public demo stand** |
 
 **Not in the MVP:** accounts and billing, scanning behind authentication, opening pull requests in
 third-party repositories, mobile apps, browser extensions, PDF export, UI localisation.
@@ -130,7 +133,7 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 262 tests green (223 unit, 39 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 342 tests green (290 unit, 52 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -153,7 +156,8 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - The eval corpus is frozen: `python benchmark/generate.py --check` fails when a page and its labels
   drift apart, and the same corpus scores the same numbers twice
   (`tests/integration/test_eval_corpus.py`).
-- Eight agents share one budgeted loop (12 tool calls, 30k tokens, 90 s) and read facts through an
+- Eight agents share one budgeted loop (12 tool calls, 60k tokens as a warning with two reserved
+  calls, 180 s deadline) and read facts through an
   MCP server scoped to their audit; the validator rejects a finding whose observation does not exist,
   whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
 - A real run with `--agents a11y` against the fixture reports 15 findings — the 14 deterministic
@@ -179,8 +183,9 @@ site and three clean pages per site as the control for false positives. It is ge
 hand-edited, and frozen:
 
 ```bash
-python benchmark/generate.py --check          # every page still matches the generator
-uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
+cd api                                        # `uv run` needs this project
+python3 ../benchmark/generate.py --check       # every page still matches the generator
+uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
 Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
@@ -201,9 +206,10 @@ refused rather than reported.
 ## Fixes and re-audit
 
 ```bash
-uv run sitewarrant fix <audit_id> --site-dir benchmark/fixtures/site --out fixes/<audit_id>
+cd api
+uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fixes/<audit_id>
 uv run sitewarrant reaudit <audit_id> --against-report old.json \
-    --patch fixes/<audit_id>/fixes.patch --site-dir benchmark/fixtures/site
+    --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
 ```
 
 `fix` writes a recommendation for every finding and a unified diff for the five rules that can be
@@ -234,7 +240,7 @@ that reaches the ceiling; it reports `budget_exceeded` instead of finishing the 
 A proposed prompt change is accepted only if precision does not regress:
 
 ```bash
-uv run sitewarrant prompt-check --baseline evals/runs/base.json --candidate evals/runs/new.json
+uv run sitewarrant prompt-check --baseline ../evals/runs/base.json --candidate ../evals/runs/new.json
 ```
 
 ## Demo
