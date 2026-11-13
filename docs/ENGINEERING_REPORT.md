@@ -6,8 +6,9 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-13-baseline.json`, agent `sha256:b56c3636b4fad883`, 2026-11-13, 328.7 s,
-whole corpus (8 synthetic sites, 104 pages, 80 planted defects, 24 clean pages):
+Run `evals/runs/2026-11-13-baseline-corpus-bytes.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:668a9010f1b1e6d2`, 2026-11-13, 320.7 s, whole corpus (8 synthetic sites, 104 pages, 80
+planted defects, 24 clean pages):
 
 | metric | value | denominator |
 | --- | --- | --- |

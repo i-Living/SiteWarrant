@@ -220,10 +220,15 @@ def manifest() -> dict[str, Any]:
     total_pages = 0
     for site_index, (slug, brand) in enumerate(SITES):
         labels: list[dict[str, str]] = []
-        for page_index, (path, _title, _headline) in enumerate(PAGES):
+        page_digests: dict[str, str] = {}
+        for page_index, (path, title, headline) in enumerate(PAGES):
             defect = defects_for(site_index, page_index)
             if defect is not None:
                 labels.append({"page": path, "rule_id": defect})
+            # The digest names the markup, not only the labels: two corpora that plant the same
+            # defects in different pages must not compare as one measurement.
+            page = Page(path=path, title=title, headline=headline)
+            page_digests[path] = content_digest(render(site_index, brand, page, defect))
         total_pages += len(PAGES)
         sites.append(
             {
@@ -231,6 +236,7 @@ def manifest() -> dict[str, Any]:
                 "brand": brand,
                 "base_url": f"http://localhost:8081/bench/{slug}/",
                 "pages": [path for path, _, _ in PAGES],
+                "page_digests": page_digests,
                 "labels": labels,
             }
         )
@@ -254,8 +260,13 @@ def manifest() -> dict[str, Any]:
     return dataset
 
 
+def content_digest(text: str) -> str:
+    """One page's bytes. `api/app/eval/dataset.py::page_digest` writes the same value."""
+    return f"sha256:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
+
+
 def digest_of(sites: list[dict[str, Any]]) -> str:
-    """The digest the eval loader computes: labels and pages only, never presentation."""
+    """The digest the eval loader computes: pages, their bytes, and the labels planted in them."""
     payload = json.dumps(
         [
             {
@@ -268,6 +279,7 @@ def digest_of(sites: list[dict[str, Any]]) -> str:
                     ),
                     key=lambda item: (item["page"], item["rule_id"]),
                 ),
+                "page_digests": site["page_digests"],
             }
             for site in sites
         ],

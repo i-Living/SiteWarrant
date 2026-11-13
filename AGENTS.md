@@ -337,6 +337,12 @@ What later phases add: `api/app/agents/`, `api/app/mcp/`, `api/app/evals/`, `api
 - **Performance numbers are excluded from the determinism check.** TTFB, FCP, LCP, CLS and TBT move
   between runs on the same machine; `tests/integration/test_fact_layer.py` compares every other channel
   and says so. Do not "fix" the comparison by loosening it for other tools.
+- **The benchmark digest covers the markup, not only the labels.** `dataset_digest` hashes each
+  site's page paths, the digest of every page's rendered text, and the labels planted in them; a
+  manifest carrying a digest that does not match is refused. Labels alone would let two corpora with
+  identical defects in different pages be compared as one measurement. `benchmark/generate.py` and
+  `app/eval/dataset.py` must hash the same text — a test pins the generator's digest against the
+  loader's, so change both or neither.
 - **The crawl digest is part of `agent_version`.** `app/crawl/version.py` hashes the discovery sources,
   because which pages get audited changes the report. Editing the crawler changes every version string
   and every published number — expected, not a bug.

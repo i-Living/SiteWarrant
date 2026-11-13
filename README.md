@@ -184,7 +184,7 @@ uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
 ```
 
 Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:b56c3636b4fad883`, 328.7 s):
+`sha256:668a9010f1b1e6d2`, 320.7 s, `evals/runs/2026-11-13-baseline-corpus-bytes.json`):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);
