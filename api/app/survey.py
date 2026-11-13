@@ -16,7 +16,8 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, Field
 
 from app.audit import run_audit
 from app.core.config import Settings
@@ -27,18 +28,22 @@ from app.crawl.models import CrawlLimits, CrawlReport
 FAILURE_CHARS = 300
 
 
-@dataclass
-class SurveyResult:
+class SurveyResult(BaseModel):
     """The merged report, the pages it covers, and what could not be audited."""
 
     report: Report
     crawl: CrawlReport
-    pages: list[str] = field(default_factory=list)
-    failures: list[tuple[str, str]] = field(default_factory=list)
+    pages: list[str] = Field(default_factory=list)
+    failures: list[tuple[str, str]] = Field(default_factory=list)
 
     @property
     def status(self) -> str:
-        return "partial" if self.failures else "completed"
+        """`partial` when a page failed outright or when a page came back partial itself.
+
+        A page audit whose agent failed returns `partial` without raising, so counting only the
+        exceptions would call a survey complete while its merged agent row says `failed`.
+        """
+        return "partial" if self.failures or self.report.status != "completed" else "completed"
 
 
 def merge_agents(reports: Sequence[Report]) -> list[AgentSummaryOut]:
@@ -95,11 +100,12 @@ def merge_reports(
         observations.update(report.summary.observations_by_tool)
     measured = {category for report in reports for category in report.summary.scores}
     duplicates = sum(report.summary.duplicates_removed for report in reports)
+    page_is_partial = any(report.status != "completed" for report in reports)
     return build_report(
         audit_id=audit_id or str(uuid.uuid4()),
         site=site,
         agent_version=first.agent_version,
-        status="partial" if failures else "completed",
+        status="partial" if failures or page_is_partial else "completed",
         findings=findings,
         pages_audited=len(reports),
         duration_ms=sum(report.summary.duration_ms for report in reports),

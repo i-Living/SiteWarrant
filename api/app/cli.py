@@ -254,7 +254,7 @@ def survey(
     out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     typer.echo(
         f"{result.crawl.pages_discovered} page(s) discovered, "
-        f"{len(result.pages)} audited, {len(result.failures)} failed"
+        f"{report.summary.pages_audited} audited, {len(result.failures)} failed"
     )
     typer.echo(
         f"{len(report.findings)} finding(s) in {len(report.root_causes)} root cause(s) "
@@ -262,7 +262,7 @@ def survey(
     )
     severities = " ".join(f"{name}={count}" for name, count in report.summary.by_severity.items())
     typer.echo(f"severities: {severities}")
-    for page, reason in result.failures[:10]:
+    for page, reason in result.failures:
         typer.echo(f"  failed {page}: {reason}", err=True)
     typer.echo(f"report written to {out}")
     raise typer.Exit(code=exit_code_for(report))

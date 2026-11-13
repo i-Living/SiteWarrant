@@ -164,3 +164,14 @@ def test_agent_totals_add_up_and_status_is_the_worst_case() -> None:
     assert merged["a11y"].status == "failed", "one failed page means the agent covered no site"
     assert merged["a11y"].error == "llm_error"
     assert merged["seo"].findings == 3
+
+
+def test_a_partial_page_makes_the_survey_partial_without_a_failure() -> None:
+    """An agent that failed on a page returns `partial` without raising; the survey must say so."""
+    ok = page_report(page_key="a", findings=1)
+    partial = page_report(page_key="b", findings=1).model_copy(update={"status": "partial"})
+
+    merged = merge_reports([ok, partial], site="https://example.test/")
+
+    assert merged.status == "partial"
+    assert not merged.summary.agents or all(agent.status == "ok" for agent in merged.summary.agents)

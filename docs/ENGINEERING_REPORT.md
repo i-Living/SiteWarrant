@@ -46,7 +46,7 @@ agents, so `llm_calls: 0` and `cost_estimate_usd: 0.0`):
 | pages selected / audited / failed | 60 / 58 / 2 |
 | findings | 19 over 17 pages (`major` 11, `minor` 8, no blocker) |
 | root causes | 0 |
-| observations | 2 148 |
+| observations | 2 146 |
 | wall clock | 447.8 s (7.7 s per page including discovery) |
 | `agent_version` | `sha256:37d4af33aee7bb8b` |
 
@@ -63,7 +63,7 @@ one cause with six symptoms.
 What this run does not say: precision or recall. There are no labels for docs.python.org, so the claim
 is only that the tool crossed 50 real pages at a polite rate and produced one auditable artifact — not
 that its findings are right. The rules it fired were `A11Y-CONTRAST`, `A11Y-LANG`, `A11Y-LINK-NAME`
-and `SEO-META-DESC`; seven of the ten catalogue rules stayed silent, which is also unlabelled and
+and `SEO-META-DESC`; six of the ten catalogue rules stayed silent, which is also unlabelled and
 therefore neither a hit nor a miss.
 
 ## 3. Two agent versions, compared
