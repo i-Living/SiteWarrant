@@ -1,0 +1,47 @@
+# Run the demo the way a reader reaches it: one command, one URL, no manual steps.
+#
+#   docker compose -f infra/demo.yml up -d --build
+#   curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
+#        -d '{"url": "https://example.com"}' | head -c 400
+#
+# The API publishes no port to the world: a reverse proxy (nginx, Caddy) terminates TLS in front of
+# it, and TLS is where a public demo actually lives. Publishing 8000 on 0.0.0.0 without a proxy would
+# expose an unauthenticated crawler, which is why the port is bound to loopback here.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: sitewarrant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: sitewarrant
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sitewarrant -d sitewarrant -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    # A named image so `up --no-build` can use what CI built, instead of building twice.
+    image: sitewarrant-api:demo
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    environment:
+      SITEWARRANT_DATABASE_URL: postgresql+asyncpg://sitewarrant:${POSTGRES_PASSWORD}@postgres:5432/sitewarrant
+      SITEWARRANT_ARTIFACTS_DIR: /app/.artifacts
+      SITEWARRANT_VIEWPORTS: 390x844,768x1024,1440x900
+      SITEWARRANT_AUDIT_COST_LIMIT_USD: ${SITEWARRANT_AUDIT_COST_LIMIT_USD:-0.25}
+      SITEWARRANT_LLM_BASE_URL: ${SITEWARRANT_LLM_BASE_URL:-https://opencode.ai/zen/go/v1}
+      SITEWARRANT_LLM_MODEL: ${SITEWARRANT_LLM_MODEL:-deepseek-v4.1-flash}
+      SITEWARRANT_LLM_API_KEY: ${SITEWARRANT_LLM_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"   # the proxy in front of this is the only public face
+    restart: unless-stopped
+
+volumes:
+  pgdata:

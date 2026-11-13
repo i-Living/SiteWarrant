@@ -1,6 +1,6 @@
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from sqlalchemy import select
 
@@ -8,11 +8,14 @@ from app.agents.llm import CassetteClient, LlmClient, OpenAiCompatibleClient
 from app.agents.models import AgentRun, ObservationFacts, OrchestrationResult
 from app.agents.runner import run_agent
 from app.agents.specs import spec_for
+from app.agents.traced import CostLimitExceeded, TracedLlm, TracedTools
 from app.core.config import Settings
 from app.core.db import session_scope
 from app.core.models import Observation, Page
 from app.mcp.client import McpToolProvider
+from app.pricing import Price, pricing
 from app.rules import store
+from app.telemetry import Tracer
 
 
 async def observation_index(audit_id: uuid.UUID) -> dict[str, ObservationFacts]:
@@ -67,6 +70,18 @@ def build_client(
     )
 
 
+def _cost_limit_in(error: BaseException) -> CostLimitExceeded | None:
+    """Find the cost stop inside an exception group, if that is what happened."""
+    if isinstance(error, CostLimitExceeded):
+        return error
+    if isinstance(error, BaseExceptionGroup):
+        for nested in error.exceptions:
+            found = _cost_limit_in(nested)
+            if found is not None:
+                return found
+    return None
+
+
 def describe_error(error: BaseException) -> str:
     """Flatten an exception group, which is how anyio reports a failed subprocess."""
     if isinstance(error, BaseExceptionGroup) and error.exceptions:
@@ -75,7 +90,12 @@ def describe_error(error: BaseException) -> str:
 
 
 async def run_agents(
-    audit_id: uuid.UUID, *, names: Sequence[str], settings: Settings
+    audit_id: uuid.UUID,
+    *,
+    names: Sequence[str],
+    settings: Settings,
+    tracer: Tracer | None = None,
+    cost_limit_usd: float | None = None,
 ) -> OrchestrationResult:
     """Run the selected agents against the stored facts and collect their candidates.
 
@@ -87,40 +107,123 @@ async def run_agents(
     async with session_scope() as session:
         await store.ensure_indexed(session)
 
+    trace = tracer or Tracer()
+    price = pricing().price_for(settings.llm_model)
+    limit = settings.audit_cost_limit_usd if cost_limit_usd is None else cost_limit_usd
+    spent_usd = 0.0
+    stopped_at: str | None = None
     runs: list[AgentRun] = []
     for name in names:
+        if stopped_at is not None:
+            # Never started, and the report says so: a skipped agent is not a clean page.
+            runs.append(
+                AgentRun(
+                    name=name,
+                    status="budget_exceeded",
+                    model=settings.llm_model,
+                    error=f"audit cost limit reached after {stopped_at}; this agent did not run",
+                )
+            )
+            continue
         started = time.monotonic()
         try:
-            # The client is built inside the boundary too: a broken cassette or a missing key
-            # is this agent's failure, not a reason to lose the audit's deterministic findings.
-            spec = spec_for(name)
-            llm = build_client(settings, name, observations=observations)
-            async with McpToolProvider(str(audit_id)) as tools:
-                run = await run_agent(spec, llm=llm, tools=tools, observations=observations)
+            with trace.span("agent", agent=name):
+                run = await _run_one(
+                    name,
+                    audit_id=audit_id,
+                    settings=settings,
+                    observations=observations,
+                    tracer=trace,
+                    price=price,
+                    remaining_usd=None if limit is None else max(limit - spent_usd, 0.0),
+                )
         except Exception as error:
+            # anyio reports a failure from a subprocess as a group: the ceiling is only visible
+            # once the group is opened, and "failed" would hide why the agent stopped.
+            limit_error = _cost_limit_in(error)
+            if limit_error is not None:
+                stopped_at = name
+                run = AgentRun(
+                    name=name,
+                    status="budget_exceeded",
+                    model=settings.llm_model,
+                    cost_estimate_usd=limit_error.spent_usd if price is not None else None,
+                    error=describe_error(limit_error),
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                )
+                spent_usd = round(spent_usd + (run.cost_estimate_usd or 0.0), 6)
+                runs.append(run)
+                continue
+            # A broken cassette or a missing key is this agent's failure, not a reason to lose
+            # the audit's deterministic findings.
             run = AgentRun(
                 name=name,
                 status="failed",
+                model=settings.llm_model,
                 error=describe_error(error),
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
+        spent_usd = round(spent_usd + (run.cost_estimate_usd or 0.0), 6)
         runs.append(run)
 
-    await _record_calls(audit_id, runs, settings.llm_model)
+    await _record_calls(audit_id, runs, settings.llm_model, trace.trace_id)
     return OrchestrationResult(runs=runs)
 
 
-async def _record_calls(audit_id: uuid.UUID, runs: Sequence[AgentRun], model: str) -> None:
+async def _run_one(
+    name: str,
+    *,
+    audit_id: uuid.UUID,
+    settings: Settings,
+    observations: Mapping[str, ObservationFacts],
+    tracer: Tracer,
+    price: Price | None,
+    remaining_usd: float | None,
+) -> AgentRun:
+    """One agent, with its model calls and tool calls on the trace and its cost counted."""
+    spec = spec_for(name)
+    llm = TracedLlm(
+        build_client(settings, name, observations=dict(observations)),
+        tracer=tracer,
+        agent=name,
+        price=price,
+        cost_limit_usd=remaining_usd,
+    )
+    async with McpToolProvider(str(audit_id)) as tools:
+        run = await run_agent(
+            spec,
+            llm=llm,
+            tools=TracedTools(tools, tracer=tracer, agent=name),
+            observations=observations,
+        )
+    run.model = llm.model
+    # An unpriced model leaves the cost absent: the tokens are still measured.
+    run.cost_estimate_usd = round(llm.spent_usd, 6) if price is not None else None
+    return run
+
+
+async def _record_calls(
+    audit_id: uuid.UUID, runs: Sequence[AgentRun], model: str, trace_id: str | None = None
+) -> None:
+    from app.pricing import pricing
     from app.storage import repo
 
+    price = pricing().price_for(model)
     async with session_scope() as session:
         for run in runs:
-            await repo.save_llm_calls(session, audit_id=audit_id, run=run, model=model)
+            await repo.save_llm_calls(
+                session, audit_id=audit_id, run=run, model=model, trace_id=trace_id, price=price
+            )
         await repo.add_audit_usage(
             session,
             audit_id=audit_id,
             tokens_in=sum(run.tokens_in for run in runs),
             tokens_out=sum(run.tokens_out for run in runs),
             llm_calls=sum(run.llm_calls for run in runs),
+            cost_estimate_usd=(
+                None
+                if price is None
+                else round(sum(run.cost_estimate_usd or 0.0 for run in runs), 6)
+            ),
         )
         await session.commit()

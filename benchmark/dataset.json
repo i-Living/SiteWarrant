@@ -1,0 +1,509 @@
+{
+  "version": 1,
+  "generator": "benchmark/generate.py",
+  "notes": "Synthetic, frozen corpus: eight sites, thirteen pages each, ten planted defects per site (one per catalogued rule) and three clean pages. Findings are matched to labels by rule and page path, which is the granularity of the deterministic layer.",
+  "sites": [
+    {
+      "slug": "northwind",
+      "brand": "Northwind Press",
+      "base_url": "http://localhost:8081/bench/northwind/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        }
+      ]
+    },
+    {
+      "slug": "saltmarsh",
+      "brand": "Saltmarsh Studio",
+      "base_url": "http://localhost:8081/bench/saltmarsh/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "SEO-TITLE"
+        }
+      ]
+    },
+    {
+      "slug": "lumen",
+      "brand": "Lumen Workshop",
+      "base_url": "http://localhost:8081/bench/lumen/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "SEO-META-DESC"
+        }
+      ]
+    },
+    {
+      "slug": "kilnhouse",
+      "brand": "Kiln House",
+      "base_url": "http://localhost:8081/bench/kilnhouse/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "SEO-H1"
+        }
+      ]
+    },
+    {
+      "slug": "fernhollow",
+      "brand": "Fern Hollow",
+      "base_url": "http://localhost:8081/bench/fernhollow/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "A11Y-LANG"
+        }
+      ]
+    },
+    {
+      "slug": "tidewater",
+      "brand": "Tidewater Editions",
+      "base_url": "http://localhost:8081/bench/tidewater/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "A11Y-IMG-ALT"
+        }
+      ]
+    },
+    {
+      "slug": "oatfield",
+      "brand": "Oatfield Bindery",
+      "base_url": "http://localhost:8081/bench/oatfield/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "A11Y-LABEL"
+        }
+      ]
+    },
+    {
+      "slug": "bright-anvil",
+      "brand": "Bright Anvil",
+      "base_url": "http://localhost:8081/bench/bright-anvil/",
+      "pages": [
+        "index.html",
+        "about.html",
+        "contact.html",
+        "blog/index.html",
+        "blog/post-1.html",
+        "blog/post-2.html",
+        "blog/post-3.html",
+        "products/index.html",
+        "products/item-1.html",
+        "products/item-2.html",
+        "spa.html",
+        "pricing.html",
+        "legal.html"
+      ],
+      "labels": [
+        {
+          "page": "index.html",
+          "rule_id": "A11Y-LINK-NAME"
+        },
+        {
+          "page": "about.html",
+          "rule_id": "A11Y-CONTRAST"
+        },
+        {
+          "page": "contact.html",
+          "rule_id": "LAYOUT-OCCLUSION"
+        },
+        {
+          "page": "blog/index.html",
+          "rule_id": "SEO-TITLE"
+        },
+        {
+          "page": "blog/post-1.html",
+          "rule_id": "SEO-META-DESC"
+        },
+        {
+          "page": "blog/post-2.html",
+          "rule_id": "SEO-H1"
+        },
+        {
+          "page": "blog/post-3.html",
+          "rule_id": "A11Y-LANG"
+        },
+        {
+          "page": "products/index.html",
+          "rule_id": "A11Y-IMG-ALT"
+        },
+        {
+          "page": "products/item-1.html",
+          "rule_id": "A11Y-LABEL"
+        },
+        {
+          "page": "products/item-2.html",
+          "rule_id": "A11Y-BUTTON-NAME"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "sites": 8,
+    "pages": 104,
+    "labels": 80
+  },
+  "digest": "sha256:575374f4feda2d6d"
+}

@@ -1,0 +1,49 @@
+name: eval
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: benchmark (104 labelled pages)
+    runs-on: ubuntu-latest
+    # 104 pages × 3 viewports in a browser: give it room, and still finish well inside an hour.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - name: Start Postgres, Redis and the corpus
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml up -d --wait
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run alembic upgrade head
+      - name: Check the corpus still matches its generator
+        working-directory: .
+        run: python benchmark/generate.py --check
+      - name: Measure precision and recall on the frozen corpus
+        run: >
+          uv run sitewarrant eval
+          --dataset ../benchmark
+          --out ../evals/runs/ci.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-run
+          path: evals/runs/ci.json
+      - name: Show container logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml logs --tail 50

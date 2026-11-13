@@ -1,6 +1,7 @@
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -27,6 +28,9 @@ class AgentSummaryOut(BaseModel):
 
     name: str
     status: str
+    model: str = ""
+    # Tokens are measured; the cost is an estimate from the price file, and absent when unpriced.
+    cost_estimate_usd: float | None = None
     findings: int = 0
     rejected: int = 0
     tool_calls: int = 0
@@ -84,6 +88,13 @@ class SummaryOut(BaseModel):
     duration_ms: int
     observations_by_tool: dict[str, int]
     agents: list[AgentSummaryOut] = []
+    tokens_in: int = 0
+    tokens_out: int = 0
+    llm_calls: int = 0
+    cost_estimate_usd: float | None = None
+    pricing: dict[str, Any] = {}
+    trace_id: str | None = None
+    spans: dict[str, int] = {}
     root_causes: int = 0
     duplicates_removed: int = 0
     duplicate_rate: float = 0.0
@@ -122,6 +133,9 @@ def build_report(
     agents: Sequence[AgentSummaryOut] = (),
     root_causes: Sequence[RootCauseOut] = (),
     duplicates_removed: int = 0,
+    pricing: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    spans: dict[str, int] | None = None,
 ) -> Report:
     counts = Counter(finding.severity for finding in findings)
     by_severity = {severity: counts.get(severity, 0) for severity in SEVERITIES}
@@ -149,6 +163,13 @@ def build_report(
             duration_ms=duration_ms,
             observations_by_tool=observations_by_tool,
             agents=list(agents),
+            tokens_in=sum(agent.tokens_in for agent in agents),
+            tokens_out=sum(agent.tokens_out for agent in agents),
+            llm_calls=sum(agent.llm_calls for agent in agents),
+            cost_estimate_usd=_total_cost(agents),
+            pricing=pricing or {},
+            trace_id=trace_id,
+            spans=spans or {},
             root_causes=len(root_causes),
             duplicates_removed=duplicates_removed,
             duplicate_rate=_duplicate_rate(findings, duplicates_removed),
@@ -156,6 +177,14 @@ def build_report(
         findings=list(findings),
         root_causes=list(root_causes),
     )
+
+
+def _total_cost(agents: Sequence[AgentSummaryOut]) -> float | None:
+    """Sum only what was priced: one unpriced agent makes the total unknown, not smaller."""
+    costs = [agent.cost_estimate_usd for agent in agents]
+    if any(cost is None for cost in costs):
+        return None
+    return round(sum(cost for cost in costs if cost is not None), 6)
 
 
 def _duplicate_rate(findings: Sequence[FindingOut], duplicates_removed: int) -> float:

@@ -150,6 +150,9 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - Three snapshots per page, one per viewport, with HTML, DOM JSON and a full-page PNG on disk.
 - Two consecutive audits produce an identical observation set once timings and artifact keys are
   excluded; `tests/integration/test_fact_layer.py` asserts that.
+- The eval corpus is frozen: `python benchmark/generate.py --check` fails when a page and its labels
+  drift apart, and the same corpus scores the same numbers twice
+  (`tests/integration/test_eval_corpus.py`).
 - Eight agents share one budgeted loop (12 tool calls, 30k tokens, 90 s) and read facts through an
   MCP server scoped to their audit; the validator rejects a finding whose observation does not exist,
   whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
@@ -168,6 +171,87 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
   measured at three viewports is one.
 
 This is a single page of ten known defects. It is not precision, not recall, and not a benchmark.
+
+## Benchmark and evals
+
+The corpus is eight synthetic sites, thirteen pages each, with one defect per catalogued rule per
+site and three clean pages per site as the control for false positives. It is generated, not
+hand-edited, and frozen:
+
+```bash
+python benchmark/generate.py --check          # every page still matches the generator
+uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
+```
+
+Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
+`sha256:b56c3636b4fad883`, 328.7 s):
+
+- precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
+- pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);
+- every rule scores 8/8 on its own denominators.
+
+A perfect score here is a floor, not a claim about the open web: the generator plants exactly the
+defects the catalogue promises to catch, so `1.0` means "no planted defect was lost and nothing was
+invented". Precision on real sites is what an eval run against real sites would measure — this
+corpus cannot.
+
+Two runs on the same corpus compare with `--compare`, and a comparison across different corpora is
+refused rather than reported.
+
+## Fixes and re-audit
+
+```bash
+uv run sitewarrant fix <audit_id> --site-dir benchmark/fixtures/site --out fixes/<audit_id>
+uv run sitewarrant reaudit <audit_id> --against-report old.json \
+    --patch fixes/<audit_id>/fixes.patch --site-dir benchmark/fixtures/site
+```
+
+`fix` writes a recommendation for every finding and a unified diff for the five rules that can be
+repaired without inventing text (`SEO-TITLE`, `SEO-META-DESC`, `SEO-H1`, `A11Y-LANG`,
+`LAYOUT-OCCLUSION`). `reaudit` applies that diff to a copy of the site, serves the copy on loopback,
+audits it again and reports closed / remaining / new — every new finding counts as a regression and
+the command exits `1`.
+
+## Traces and cost
+
+Every audit records one trace: `audit → page → agent → tool call → model call`, with
+OpenTelemetry's identifiers and a `trace.jsonl` artifact beside the report. The report's summary says
+which trace it was (`trace_id`), how many spans of each kind it holds, how many tokens the model
+actually used, and what those tokens would cost at the versioned price file:
+
+```json
+"tokens_in": 13991, "tokens_out": 1237, "llm_calls": 6,
+"cost_estimate_usd": 0.004682,
+"pricing": {"version": "2026-11-13", "basis": "list price ...", "unpriced_models": []}
+```
+
+Tokens and call counts are measured; `cost_estimate_usd` is an estimate from
+`pricing/pricing.yaml`, and the audit stores the price version it was measured with, so an old run is
+never silently re-priced. A model with no entry in that file gets `null`, never `0.0` — "not priced"
+and "free" are different claims. `SITEWARRANT_AUDIT_COST_LIMIT_USD` (default `0.25`) stops an agent
+that reaches the ceiling; it reports `budget_exceeded` instead of finishing the page.
+
+A proposed prompt change is accepted only if precision does not regress:
+
+```bash
+uv run sitewarrant prompt-check --baseline evals/runs/base.json --candidate evals/runs/new.json
+```
+
+## Demo
+
+`infra/demo.yml` runs the same code as one command, with the API bound to loopback; the public face
+is a TLS proxy in front of it, because an unauthenticated crawler should not answer on `0.0.0.0`.
+
+```bash
+POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
+  docker compose -f infra/demo.yml up -d --build
+curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
+  -d '{"url": "https://example.com"}'
+curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
+```
+
+The stack is not deployed on a public URL yet: that needs the VPS and a domain, which is the owner's
+call (PLAN §17.3).
 
 ## Layout
 

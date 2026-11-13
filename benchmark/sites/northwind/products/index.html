@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Northwind Press — Prints</title><meta name="description" content="Northwind Press: Prints."><style>
+    body { margin: 0; font-family: system-ui, sans-serif; color: #1b1b1b; background: #ffffff; }
+    header { display: flex; justify-content: space-between; align-items: center;
+             padding: 16px 24px; border-bottom: 1px solid #dcdcdc; position: relative; }
+    .brand { color: #1b1b1b; font-weight: 600; text-decoration: none; }
+    nav a { margin-left: 12px; color: #0b57d0; }
+    main { padding: 24px; max-width: 720px; }
+    .lede { color: #333333; font-size: 1.125rem; }
+    .muted { color: #555555; }
+    .faint { color: #9aa0a6; }
+    form { display: flex; gap: 8px; margin-top: 12px; }
+    input, button { font-size: 1rem; padding: 8px 12px; }
+    footer { padding: 24px; color: #555555; border-top: 1px solid #dcdcdc; }
+    .promo { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; padding: 6px 8px;
+             background: #ffffff; border: 1px solid #dcdcdc; }
+    @media (min-width: 768px) { .promo { position: static; } }
+</style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="index.html">Northwind Press</a>
+      <nav aria-label="Sections"><a href="blog/index.html">Journal</a><a href="products/index.html">Prints</a><a href="about.html">About</a></nav>
+      
+    </header>
+    <main>
+      <h1>Editions and notebooks</h1>
+      <p class="lede">Prints, notebooks and field notes.</p>
+      <p>Latest proof, photographed on the press:</p>
+      <img src="proof.png" alt="A proof sheet on the press" width="240" height="160">
+      <p class="muted">Colour proofs are posted every second Friday.</p>
+      <p><a href="https://example.com/feed"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" /></svg></a></p>
+    </main>
+    <footer><p>© Northwind Press</p></footer>
+  </body>
+</html>
