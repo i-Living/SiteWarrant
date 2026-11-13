@@ -278,6 +278,12 @@ uv run sitewarrant index-rules          # корпус правил в Postgres 
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --max-pages 50 --out pages.json
 uv run sitewarrant crawl https://example.com --max-depth 3 --pages-per-template 2 --out pages.json
 
+# Обзор сайта (DoD §16.1): обход, аудит выбранных страниц и один отчёт на сайт.
+# Лимит шаблона решает охват: у документации шаблонов мало, поэтому он поднимается вместе с
+# --max-pages. Root causes не сливаются между страницами — причина живёт на странице.
+uv run sitewarrant survey https://docs.python.org/3/ --max-pages 60 --pages-per-template 50 \
+  --out ../evals/surveys/2026-11-13-docs-python.json
+
 # MCP-сервер фактов для одного аудита (stdio). Его же запускает оркестратор.
 SITEWARRANT_MCP_AUDIT_ID=<audit_id> uv run python -m app.mcp.server
 
@@ -649,6 +655,11 @@ re-audit с диффом закрыто / осталось / новое и сп�
 MVP готов, когда все пункты проверены прогоном:
 
 1. Аудит публичного сайта на 50+ страниц даёт `report.json` со всеми полями из §3.
+   **Выполнено 2026-11-13:** `sitewarrant survey https://docs.python.org/3/ --max-pages 60
+   --pages-per-template 50` — найдено 200 страниц, выбрано 60, проаудировано 58 (две не открылись
+   по таймауту), 19 находок на 17 страницах, 0 root causes, 447.8 с; артефакт
+   `evals/surveys/2026-11-13-docs-python.json`. Отчёт помечен `partial`, и это часть результата:
+   две страницы честно не попали в знаменатель, а не растворились в нём.
 2. На бенчмарке 8 сайтов и 100+ страниц посчитаны precision, recall, false-positive rate, duplicate rate,
    cost per 100 pages, median duration — каждое с указанным знаменателем и датой.
 3. Каждая находка в отчёте имеет минимум одну улику, и валидатор доказуемо отбивает находки без неё.
