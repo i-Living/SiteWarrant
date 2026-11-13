@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MIN_SITES = 8
@@ -23,12 +25,24 @@ class Label:
         return (self.rule_id, self.page)
 
 
+def page_digest(text: str) -> str:
+    """One page's bytes, in the form both the generator and this loader write.
+
+    `benchmark/generate.py` hashes the same text it writes, so the two digests agree without the
+    loader having to guess how the file was produced.
+    """
+    return f"sha256:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
+
+
 @dataclass(frozen=True)
 class SiteLabels:
     slug: str
     base_url: str
     pages: tuple[str, ...]
     labels: tuple[Label, ...]
+    # Page → digest of that page's rendered text. Two corpora with identical labels but different
+    # markup would otherwise share a digest and be compared as one measurement.
+    page_digests: Mapping[str, str] = field(default_factory=dict)
 
     def labels_for(self, page: str) -> frozenset[str]:
         return frozenset(label.rule_id for label in self.labels if label.page == page)
@@ -74,12 +88,22 @@ def load_dataset(path: Path) -> Dataset:
         for label in labels:
             if label.page not in pages:
                 raise DatasetError(f"{raw['slug']}: label for unknown page {label.page!r}")
+        page_digests = {
+            str(page): str(digest) for page, digest in (raw.get("page_digests") or {}).items()
+        }
+        missing = [page for page in pages if page not in page_digests]
+        if missing:
+            raise DatasetError(
+                f"{raw['slug']}: no content digest for {missing[0]!r}, so the corpus cannot be "
+                "identified; re-run python benchmark/generate.py"
+            )
         sites.append(
             SiteLabels(
                 slug=str(raw["slug"]),
                 base_url=str(raw["base_url"]),
                 pages=pages,
                 labels=labels,
+                page_digests=page_digests,
             )
         )
     site_tuple = tuple(sites)
@@ -100,7 +124,11 @@ def load_dataset(path: Path) -> Dataset:
 
 
 def dataset_digest(sites: tuple[SiteLabels, ...]) -> str:
-    """Digest of the labels alone: two runs may only be compared on the same corpus."""
+    """Digest of the corpus: its labels and the bytes they were planted in.
+
+    Labels alone would let two different corpora compare as one measurement; the page digests keep
+    the digest tied to the markup a run actually saw.
+    """
     payload = json.dumps(
         [
             {
@@ -110,12 +138,11 @@ def dataset_digest(sites: tuple[SiteLabels, ...]) -> str:
                     ({"page": label.page, "rule_id": label.rule_id} for label in site.labels),
                     key=lambda item: (item["page"], item["rule_id"]),
                 ),
+                "page_digests": dict(site.page_digests),
             }
             for site in sites
         ],
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
-    import hashlib
-
     return f"sha256:{hashlib.sha256(payload).hexdigest()[:16]}"

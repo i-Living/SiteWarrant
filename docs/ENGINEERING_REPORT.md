@@ -6,8 +6,9 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-13-baseline.json`, agent `sha256:b56c3636b4fad883`, 2026-11-13, 328.7 s,
-whole corpus (8 synthetic sites, 104 pages, 80 planted defects, 24 clean pages):
+Run `evals/runs/2026-11-13-baseline-corpus-bytes.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:668a9010f1b1e6d2`, 2026-11-13, 320.7 s, whole corpus (8 synthetic sites, 104 pages, 80
+planted defects, 24 clean pages):
 
 | metric | value | denominator |
 | --- | --- | --- |
@@ -16,7 +17,7 @@ whole corpus (8 synthetic sites, 104 pages, 80 planted defects, 24 clean pages):
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 328.7 s | 104 pages (3.2 s/page) |
+| duration | 320.7 s | 104 pages (3.08 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no

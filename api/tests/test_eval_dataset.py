@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.eval.compare import compare_runs
-from app.eval.dataset import DatasetError, dataset_digest, load_dataset
+from app.eval.dataset import DatasetError, Label, SiteLabels, dataset_digest, load_dataset
 from app.eval.models import EvalRun, RunContext
 
 BENCHMARK = Path(__file__).resolve().parents[2] / "benchmark" / "dataset.json"
@@ -75,6 +75,39 @@ def test_a_digest_that_does_not_describe_the_labels_is_refused(tmp_path: Path) -
     broken = tmp_path / "dataset.json"
     broken.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(DatasetError, match="does not match the corpus"):
+        load_dataset(broken)
+
+
+def test_the_digest_names_the_markup_not_only_the_labels() -> None:
+    """Same labels, different pages: a run on one is not a run on the other."""
+    labels = (Label(page="index.html", rule_id="SEO-TITLE"),)
+    one = SiteLabels(
+        slug="lumen",
+        base_url="http://bench/lumen/",
+        pages=("index.html",),
+        labels=labels,
+        page_digests={"index.html": "sha256:0000000000000001"},
+    )
+    other = SiteLabels(
+        slug="lumen",
+        base_url="http://bench/lumen/",
+        pages=("index.html",),
+        labels=labels,
+        page_digests={"index.html": "sha256:0000000000000002"},
+    )
+    assert dataset_digest((one,)) != dataset_digest((other,))
+    # The labels alone would have called these the same corpus.
+    assert [(label.page, label.rule_id) for label in one.labels] == [
+        (label.page, label.rule_id) for label in other.labels
+    ]
+
+
+def test_a_page_without_a_content_digest_is_refused(tmp_path: Path) -> None:
+    payload = json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    payload["sites"][0]["page_digests"].pop("index.html")
+    broken = tmp_path / "dataset.json"
+    broken.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(DatasetError, match="no content digest"):
         load_dataset(broken)
 
 

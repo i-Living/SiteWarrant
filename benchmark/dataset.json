@@ -22,6 +22,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:e299cb7e85e607a3",
+        "about.html": "sha256:b16373995e1f85fb",
+        "contact.html": "sha256:22f2060148c9d513",
+        "blog/index.html": "sha256:353986196d8a95cd",
+        "blog/post-1.html": "sha256:9f21a07f45c58605",
+        "blog/post-2.html": "sha256:cd26958a78a65932",
+        "blog/post-3.html": "sha256:cc4ad689ec9f797a",
+        "products/index.html": "sha256:f01eb55d1294ea2c",
+        "products/item-1.html": "sha256:fc386a153a0ee19d",
+        "products/item-2.html": "sha256:898fb9ff1f8eeefc",
+        "spa.html": "sha256:9ed6e1f24ff378e5",
+        "pricing.html": "sha256:879666064b7da8fa",
+        "legal.html": "sha256:1ad57272cbe21c5a"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -84,6 +99,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:f9de7d0dce7ba031",
+        "about.html": "sha256:4aa6d59acb92ccb9",
+        "contact.html": "sha256:4f9065ad65a1d5ab",
+        "blog/index.html": "sha256:f87bb89e038ef7fb",
+        "blog/post-1.html": "sha256:263127e2f702dc2c",
+        "blog/post-2.html": "sha256:3edacb16dfb5e0f1",
+        "blog/post-3.html": "sha256:0752960520639005",
+        "products/index.html": "sha256:4c83ad9f387efbf5",
+        "products/item-1.html": "sha256:209fa5d323900f72",
+        "products/item-2.html": "sha256:06fcca5f8d071eb8",
+        "spa.html": "sha256:a71f1b410f5e2a3c",
+        "pricing.html": "sha256:83ccfc9f042f0d18",
+        "legal.html": "sha256:94c106bc2e79dd74"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -146,6 +176,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:8531d5d34986ecb9",
+        "about.html": "sha256:c8a184ebd7798494",
+        "contact.html": "sha256:66f5c0c92281decb",
+        "blog/index.html": "sha256:cbf1899cf9fde84a",
+        "blog/post-1.html": "sha256:4e53e7f39e7ce001",
+        "blog/post-2.html": "sha256:10da273cbe04a9e3",
+        "blog/post-3.html": "sha256:d1883397033be80b",
+        "products/index.html": "sha256:ad9377620928a772",
+        "products/item-1.html": "sha256:d4eb98c1483d45dc",
+        "products/item-2.html": "sha256:2c68b25d79edeab0",
+        "spa.html": "sha256:f60ae567f059a6dd",
+        "pricing.html": "sha256:d637450f09c87bc6",
+        "legal.html": "sha256:a51dc04bfd000cd9"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -208,6 +253,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:d3b8cd73ae65470e",
+        "about.html": "sha256:ee932851c0c4d963",
+        "contact.html": "sha256:eb8f737a144575e0",
+        "blog/index.html": "sha256:c801d3990360e5fc",
+        "blog/post-1.html": "sha256:624283213f5a9f1d",
+        "blog/post-2.html": "sha256:3874741207d9e383",
+        "blog/post-3.html": "sha256:cf36658157a16e93",
+        "products/index.html": "sha256:b9f5916597642543",
+        "products/item-1.html": "sha256:66638167c2106a4c",
+        "products/item-2.html": "sha256:040efd80dd1cb18e",
+        "spa.html": "sha256:df1b0f53c3c97b91",
+        "pricing.html": "sha256:5a4021c4351011a8",
+        "legal.html": "sha256:5bdc79e1f075215b"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -270,6 +330,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:c18df205601c39b7",
+        "about.html": "sha256:59fc6b8daff6d091",
+        "contact.html": "sha256:db10dc3b3a0cff90",
+        "blog/index.html": "sha256:13588b9938f4fd42",
+        "blog/post-1.html": "sha256:79c4b73ffe84c61b",
+        "blog/post-2.html": "sha256:7a0ab77742fbb7fd",
+        "blog/post-3.html": "sha256:d95119209350b2bc",
+        "products/index.html": "sha256:bb34fba2341ef150",
+        "products/item-1.html": "sha256:756e4c9feccc4514",
+        "products/item-2.html": "sha256:10e8de9b564fa705",
+        "spa.html": "sha256:3732f3f2dafd7782",
+        "pricing.html": "sha256:5e8d1fbe3e1b9570",
+        "legal.html": "sha256:1340d81543f63e93"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -332,6 +407,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:032d44f459c0f412",
+        "about.html": "sha256:323fad0bf5642a0e",
+        "contact.html": "sha256:f99878a92f94639d",
+        "blog/index.html": "sha256:12f4cfa1ab45a653",
+        "blog/post-1.html": "sha256:7e1c6854693f778c",
+        "blog/post-2.html": "sha256:b2f27c904fdb77bf",
+        "blog/post-3.html": "sha256:d002b1c7f39e0d8a",
+        "products/index.html": "sha256:406e47179be70204",
+        "products/item-1.html": "sha256:aa3abfc2e154750e",
+        "products/item-2.html": "sha256:0afe8a2881a22e5a",
+        "spa.html": "sha256:5e683aee3857dabf",
+        "pricing.html": "sha256:6230d4969ea3be21",
+        "legal.html": "sha256:754855cecb8dbcd9"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -394,6 +484,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:3abeffbeee84b658",
+        "about.html": "sha256:e076aa1250fa4022",
+        "contact.html": "sha256:321bdff6646761e7",
+        "blog/index.html": "sha256:2f06603fba111c60",
+        "blog/post-1.html": "sha256:6631470b655270d4",
+        "blog/post-2.html": "sha256:d9fd410c130fe7c6",
+        "blog/post-3.html": "sha256:2984f418cac87b0d",
+        "products/index.html": "sha256:5534316982eb0c64",
+        "products/item-1.html": "sha256:c17e1cd35a27f5fe",
+        "products/item-2.html": "sha256:fab683738dc2d6e8",
+        "spa.html": "sha256:edc9d57046c86f30",
+        "pricing.html": "sha256:85c76a5751afa01e",
+        "legal.html": "sha256:ddf6b973ce096df0"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -456,6 +561,21 @@
         "pricing.html",
         "legal.html"
       ],
+      "page_digests": {
+        "index.html": "sha256:ff4720f480aab331",
+        "about.html": "sha256:8370042fa2cd7b28",
+        "contact.html": "sha256:c53cc730397ab96a",
+        "blog/index.html": "sha256:1a3ce6423a3e763f",
+        "blog/post-1.html": "sha256:e79f42b509f46356",
+        "blog/post-2.html": "sha256:d76c3e7b3561b9ea",
+        "blog/post-3.html": "sha256:19e9af60153dcefe",
+        "products/index.html": "sha256:3f92bc40fa1fa08c",
+        "products/item-1.html": "sha256:7137001932971e69",
+        "products/item-2.html": "sha256:417aaf7a284d86c6",
+        "spa.html": "sha256:8d1e411c9a3d945e",
+        "pricing.html": "sha256:4a1437b703aa6e35",
+        "legal.html": "sha256:d7089dffdb15fad1"
+      },
       "labels": [
         {
           "page": "index.html",
@@ -505,5 +625,5 @@
     "pages": 104,
     "labels": 80
   },
-  "digest": "sha256:575374f4feda2d6d"
+  "digest": "sha256:df240161c8d3e5ea"
 }
