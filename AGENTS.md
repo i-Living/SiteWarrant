@@ -19,6 +19,22 @@ working, and do not add a command to this file that has not been run.
 
 ## Invariants
 
+- **A benchmark number is only as good as its denominator.** `app/eval/metrics.py` keeps counts next
+  to ratios, and the run file stores the label set it was measured against, so a reader can redo the
+  arithmetic. A comparison across two corpora is refused: it is not a comparison.
+- **The eval corpus is generated, never hand-edited.** `benchmark/generate.py --check` compares every
+  byte; a hand-fixed page would make its label a lie. Its 1.0/1.0 is a floor (the generator plants
+  exactly what the catalogue promises) and the README says so.
+- **A fix that cannot be written is not written.** Five rules get a patch because their repair invents
+  no text; `A11Y-IMG-ALT`, `A11Y-LABEL`, `A11Y-BUTTON-NAME`, `A11Y-LINK-NAME` and `A11Y-CONTRAST`
+  get a recommendation and an explicit note, because a machine-made alt or link name would hide the
+  defect instead of fixing it.
+- **A patch is computed against the source, not the DOM.** Browsers serialise the DOM they were given,
+  so a diff built from the captured HTML reorders attributes and fails to apply; `--site-dir` makes
+  `fix` read the file that is actually served.
+- **Every new finding is a regression.** `reaudit` does not decide which new findings are acceptable;
+  it lists them and exits `1`, and `diff_findings` keeps closed, remaining and new disjoint.
+
 These are not style preferences. Breaking one silently invalidates the published metrics.
 
 1. **Tools compute facts; the model interprets them.** Contrast ratios, header values, timings, overflow

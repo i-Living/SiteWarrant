@@ -25,6 +25,11 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://sitewarrant:sitewarrant@localhost:5432/sitewarrant",
         validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
+    store_artifacts: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SITEWARRANT_STORE_ARTIFACTS", "store_artifacts"),
+        description="Write HTML, DOM and PNG artifacts for each capture.",
+    )
     artifacts_dir: Path = Field(
         default=Path("artifacts"),
         validation_alias=AliasChoices("ARTIFACTS_DIR", "artifacts_dir"),

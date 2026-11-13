@@ -245,11 +245,17 @@ def read_artifact(key: str) -> str:
     return artifact_path(key).read_text(encoding="utf-8")
 
 
-def store_artifacts(
-    capture: PageCapture, audit_id: uuid.UUID
+def store_artifact_files(
+    capture: PageCapture, audit_id: uuid.UUID, *, write_files: bool = True
 ) -> tuple[str, list[tuple[str, str, str, ViewportCapture]]]:
-    """Write the page's artifacts and return its key plus per-viewport keys."""
+    """Write the page's artifacts and return its key plus per-viewport keys.
+
+    An eval run audits a hundred pages; the screenshots and DOM dumps it never reads would cost
+    more disk than the whole corpus, so it turns the files off and keeps the keys empty.
+    """
     key = page_key(capture.url)
+    if not write_files:
+        return key, [(key, "", "", item) for item in capture.viewports]
     stored: list[tuple[str, str, str, ViewportCapture]] = []
     for viewport_capture in capture.viewports:
         prefix = f"{key}/{viewport_capture.viewport}"
@@ -272,6 +278,7 @@ async def run_audit(
     allow_private: bool = False,
     ignore_robots: bool = False,
     agents: Sequence[str] = (),
+    store_artifacts: bool | None = None,
 ) -> Report:
     """Audit one page at every configured viewport: facts first, findings from facts.
 
@@ -342,7 +349,8 @@ async def run_audit(
             )
             if capture.status_code >= 400:
                 raise CaptureFailed(f"{capture.url} answered with HTTP {capture.status_code}")
-            key, stored = store_artifacts(capture, audit_id)
+            write_files = settings.store_artifacts if store_artifacts is None else store_artifacts
+            key, stored = store_artifact_files(capture, audit_id, write_files=write_files)
             page_id = await repo.save_page(
                 session,
                 audit_id=audit_id,

@@ -150,6 +150,9 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
 - Three snapshots per page, one per viewport, with HTML, DOM JSON and a full-page PNG on disk.
 - Two consecutive audits produce an identical observation set once timings and artifact keys are
   excluded; `tests/integration/test_fact_layer.py` asserts that.
+- The eval corpus is frozen: `python benchmark/generate.py --check` fails when a page and its labels
+  drift apart, and the same corpus scores the same numbers twice
+  (`tests/integration/test_eval_corpus.py`).
 - Eight agents share one budgeted loop (12 tool calls, 30k tokens, 90 s) and read facts through an
   MCP server scoped to their audit; the validator rejects a finding whose observation does not exist,
   whose number is not in the cited payload, or whose accessibility claim cites no WCAG criterion.
@@ -168,6 +171,46 @@ Measured on 2026-11-12 against the fixture site, agent `sha256:668a9010f1b1e6d2`
   measured at three viewports is one.
 
 This is a single page of ten known defects. It is not precision, not recall, and not a benchmark.
+
+## Benchmark and evals
+
+The corpus is eight synthetic sites, thirteen pages each, with one defect per catalogued rule per
+site and three clean pages per site as the control for false positives. It is generated, not
+hand-edited, and frozen:
+
+```bash
+python benchmark/generate.py --check          # every page still matches the generator
+uv run sitewarrant eval --dataset benchmark --out evals/runs/latest.json
+```
+
+Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
+`sha256:b56c3636b4fad883`, 328.7 s):
+
+- precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
+- pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);
+- every rule scores 8/8 on its own denominators.
+
+A perfect score here is a floor, not a claim about the open web: the generator plants exactly the
+defects the catalogue promises to catch, so `1.0` means "no planted defect was lost and nothing was
+invented". Precision on real sites is what an eval run against real sites would measure — this
+corpus cannot.
+
+Two runs on the same corpus compare with `--compare`, and a comparison across different corpora is
+refused rather than reported.
+
+## Fixes and re-audit
+
+```bash
+uv run sitewarrant fix <audit_id> --site-dir benchmark/fixtures/site --out fixes/<audit_id>
+uv run sitewarrant reaudit <audit_id> --against-report old.json \
+    --patch fixes/<audit_id>/fixes.patch --site-dir benchmark/fixtures/site
+```
+
+`fix` writes a recommendation for every finding and a unified diff for the five rules that can be
+repaired without inventing text (`SEO-TITLE`, `SEO-META-DESC`, `SEO-H1`, `A11Y-LANG`,
+`LAYOUT-OCCLUSION`). `reaudit` applies that diff to a copy of the site, serves the copy on loopback,
+audits it again and reports closed / remaining / new — every new finding counts as a regression and
+the command exits `1`.
 
 ## Layout
 

@@ -9,10 +9,16 @@ from app.agents.specs import parse_agent_names
 from app.audit import run_audit
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.core.report import exit_code_for
+from app.core.report import Report, exit_code_for
 from app.core.version import compute_agent_version
 from app.crawl.crawler import crawl as crawl_site
 from app.crawl.models import CrawlLimits
+from app.eval.compare import compare_runs
+from app.eval.dataset import DatasetError
+from app.eval.models import EvalRun
+from app.eval.runner import run_eval
+from app.fixes.reaudit import ReauditError, reaudit
+from app.fixes.recommend import FixBuildError, build_fixes, write_fix_files
 from app.rules import store
 from app.rules.catalog import RULES
 from app.tools.axe import AXE_VERSION
@@ -173,6 +179,155 @@ def crawl(
         )
     typer.echo(f"crawl report written to {out}")
     raise typer.Exit(code=0)
+
+
+@cli.command("eval")
+def evaluate(
+    dataset: Path = typer.Option(
+        Path("benchmark/dataset.json"),
+        "--dataset",
+        help="Dataset manifest, or a directory holding dataset.json.",
+    ),
+    out: Path = typer.Option(
+        Path("evals/runs/latest.json"), "--out", help="Where to write the run."
+    ),
+    sites: str = typer.Option("", "--sites", help="Comma separated site slugs; default is all."),
+    agents: str = typer.Option("", "--agents", help="Comma separated agent names, or 'all'."),
+    compare: Path | None = typer.Option(
+        None, "--compare", help="Baseline run to diff this one against."
+    ),
+) -> None:
+    """Audit the frozen corpus and report precision, recall and false-positive rate."""
+    manifest = dataset / "dataset.json" if dataset.is_dir() else dataset
+    try:
+        run = asyncio.run(
+            run_eval(
+                manifest,
+                sites=[item.strip() for item in sites.split(",") if item.strip()] or None,
+                agents=[item.strip() for item in agents.split(",") if item.strip()] or None,
+            )
+        )
+    except DatasetError as error:
+        typer.echo(f"dataset: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(run.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    _print_eval(run)
+    typer.echo(f"run written to {out}")
+
+    if compare is None:
+        return
+    baseline = EvalRun.model_validate_json(compare.read_text(encoding="utf-8"))
+    comparison = compare_runs(baseline, run, baseline_label=str(compare), candidate_label=str(out))
+    typer.echo("")
+    typer.echo(f"compare {comparison.baseline} -> {comparison.candidate}: {comparison.note}")
+    if not comparison.compatible:
+        raise typer.Exit(code=2)
+    for metric, delta in comparison.deltas.items():
+        typer.echo(f"  {metric:<24} {delta:+.4f}")
+    for rule_id, rule_delta in comparison.per_rule.items():
+        typer.echo(
+            f"  {rule_id:<22} precision {rule_delta['precision']:+.4f}  "
+            f"recall {rule_delta['recall']:+.4f}"
+        )
+    typer.echo(f"  regressions: {', '.join(comparison.regressions) or 'none'}")
+    if comparison.regressions:
+        raise typer.Exit(code=1)
+
+
+def _print_eval(run: EvalRun) -> None:
+    metrics = run.metrics
+    typer.echo(
+        f"sites {len(run.per_site)}, pages {metrics['pages']}, labels {metrics['labels']}, "
+        f"agent {run.context.agent_version}"
+    )
+    typer.echo(
+        f"predicted {metrics['predicted']}: tp {metrics['true_positives']}, "
+        f"fp {metrics['false_positives']}, fn {metrics['false_negatives']}"
+    )
+    typer.echo(
+        f"precision {metrics['precision']} ({metrics['true_positives']}/{metrics['predicted']}), "
+        f"recall {metrics['recall']} ({metrics['true_positives']}/{metrics['labels']}), "
+        f"fp-rate {metrics['false_positive_rate']} "
+        f"({metrics['false_positives']}/{metrics['predicted']})"
+    )
+    typer.echo(
+        f"pages with false positives {metrics['pages_with_false_positives']}/{metrics['pages']}, "
+        f"duplicate rate {metrics['duplicate_rate']} "
+        f"({metrics['duplicates_removed']}/{metrics['findings_raw']})"
+    )
+    typer.echo(f"runtime {run.context.duration_s} s")
+    for rule_id, rule in metrics["per_rule"].items():
+        typer.echo(
+            f"  {rule_id:<20} p={rule['precision']:<7} r={rule['recall']:<7} "
+            f"labels {rule['labels']} predicted {rule['predicted']}"
+        )
+
+
+@cli.command("fix")
+def fix_command(
+    audit_id: str = typer.Argument(..., help="Audit id to turn into recommendations."),
+    out: Path | None = typer.Option(None, "--out", help="Directory for the fix files."),
+    site_dir: Path | None = typer.Option(
+        None, "--site-dir", help="Static site directory the patch is computed against."
+    ),
+) -> None:
+    """Recommendations for every finding, unified diff for the mechanically fixable rules."""
+    try:
+        report = asyncio.run(build_fixes(audit_id, site_dir=site_dir))
+    except (FixBuildError, ValueError) as error:
+        typer.echo(f"fix: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    target = out or Path("fixes") / audit_id
+    write_fix_files(report, target)
+    typer.echo(
+        f"{len(report.recommendations)} recommendation(s), {report.patchable} with a patch, "
+        f"{len(report.patches)} hunk(s)"
+    )
+    for item in report.recommendations:
+        marker = "patch" if item.patched else ("advisory" if item.note else "text")
+        typer.echo(f"  {item.rule_id:<20} {item.severity:<8} {marker:<8} {item.page_url}")
+    typer.echo(f"written to {target}")
+
+
+@cli.command("reaudit")
+def reaudit_command(
+    audit_id: str = typer.Argument(..., help="Audit id whose pages are re-audited."),
+    against: Path = typer.Option(
+        ..., "--against-report", help="The earlier report.json to compare with."
+    ),
+    site_dir: Path | None = typer.Option(
+        None, "--site-dir", help="Static site directory the patch applies to."
+    ),
+    patch_file: Path | None = typer.Option(
+        None, "--patch", help="Unified diff to apply to a copy of --site-dir first."
+    ),
+) -> None:
+    """Re-audit a page and report what closed, what stayed and what broke."""
+    before = Report.model_validate_json(against.read_text(encoding="utf-8"))
+    _ = audit_id
+    try:
+        result = asyncio.run(reaudit(before, site_dir=site_dir, patch_file=patch_file))
+    except ReauditError as error:
+        typer.echo(f"reaudit: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    typer.echo(
+        f"pages {result.pages}: closed {len(result.closed)}, "
+        f"remaining {len(result.remaining)}, new {len(result.new)}"
+    )
+    for label, items in (
+        ("closed", result.closed),
+        ("remaining", result.remaining),
+        ("new", result.new),
+    ):
+        for item in items:
+            typer.echo(f"  {label:<9} {item.rule_id:<20} {item.severity:<8} {item.page_url}")
+    if result.regressions:
+        typer.echo(f"regressions: {len(result.regressions)}")
+        raise typer.Exit(code=1)
 
 
 @cli.command("index-rules")

@@ -33,6 +33,7 @@ services:
     image: nginx:1.27-alpine
     volumes:
       - ../benchmark/fixtures/site:/usr/share/nginx/html:ro
+      - ../benchmark:/usr/share/nginx/benchmark:ro
       - ./fixtures.nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "127.0.0.1:8081:80"
