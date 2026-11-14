@@ -159,7 +159,7 @@ the gate exists, its first real decision will be the first prompt change someone
   facts — not editorial: nobody has labelled a set of good explanations, so "this sentence explains
   the cause better than that one" is a judgement, not a measurement here. What is measured is that a
   sentence the check rejects never reaches the report.
-- Concurrency and load. `POST /audits` runs the audit inside the request and answers once the page is
-  done, so a slow page holds the connection; there is no queue and no worker, a restart loses a
-  running audit and a burst of submissions runs several browsers. Fine for a demo, wrong for a
-  crawler of 50 pages.
+- Concurrency and load. `POST /audits` answers `202` with the audit id and runs the audit as a task in
+  the API process, so nothing holds the connection, but there is no queue and no worker: a restart
+  loses a running audit, and a burst of submissions runs several browsers at once. Fine for a demo,
+  wrong for a crawler of 50 pages.
