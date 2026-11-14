@@ -461,9 +461,12 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
   lock while its child lives, and the `setup-uv` action prunes that cache in its post step: a
   leftover `sitewarrant-api` turns a successful capture into a red job five minutes later ("Cache
   is currently in-use, waiting for other uv processes to finish"), with every step of the job marked
-  green. Each server is started under `setsid` and the step's `trap` kills its process group —
-  verified locally: prune waits while a `uv run` lives, and returns immediately once the group is
-  gone.
+  green. Each server is started under `setsid` and the step's `trap` kills its process group, waiting
+  up to five seconds and escalating to `SIGKILL` if the group ignores `SIGTERM`; the trap keeps the
+  step's own exit status and warns instead of dying quietly — verified locally: the success path,
+  a failing capture (status 7 preserved), a server that had already stopped, and a server that
+  ignores `SIGTERM` all end with no processes left, and `prune` waits while a `uv run` lives and
+  returns immediately once the group is gone.
 
 ## Where decisions live
 

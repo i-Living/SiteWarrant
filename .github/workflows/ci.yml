@@ -150,8 +150,34 @@ jobs:
           setsid uv run sitewarrant-api &
           api_pid=$!
           stop_servers() {
-            kill -TERM -- -"$web_pid" -"$api_pid" 2>/dev/null || true
-            wait 2>/dev/null || true
+            status=$?
+            set +e
+            for pid in "$web_pid" "$api_pid"; do
+              if kill -TERM -- "-$pid" 2>/dev/null; then
+                echo "signalled process group $pid"
+              elif ps -p "$pid" > /dev/null 2>&1; then
+                echo "::warning::could not signal process group $pid"
+              else
+                echo "process group $pid had already stopped"
+              fi
+            done
+            for pid in "$web_pid" "$api_pid"; do
+              for _ in $(seq 1 10); do
+                kill -0 -- "-$pid" 2>/dev/null || break
+                sleep 0.5
+              done
+              if kill -0 -- "-$pid" 2>/dev/null; then
+                echo "::warning::process group $pid ignored SIGTERM, sending SIGKILL"
+                kill -KILL -- "-$pid" 2>/dev/null
+              fi
+              code=0
+              wait "$pid" || code=$?
+              case "$code" in
+                0 | 137 | 143 | 127) ;;
+                *) echo "::warning::process group $pid exited with $code during cleanup" ;;
+              esac
+            done
+            exit "$status"
           }
           trap stop_servers EXIT
           for _ in $(seq 1 60); do
