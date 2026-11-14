@@ -105,6 +105,11 @@ export default function AuditsPage() {
       } catch {
         // Retried below; the list keeps its own error banner.
       }
+      if (cancelled) {
+        // The page was left while this request was in flight: a new timer here would poll
+        // forever, because the cleanup that would have cleared it has already run.
+        return;
+      }
       timer = setTimeout(refresh, REFRESH_MS);
     };
     void refresh();
