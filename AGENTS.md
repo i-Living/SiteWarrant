@@ -202,8 +202,10 @@ scripts/           report_screenshot.py — the CI job that captures the report 
 docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-There is no `api/app/worker/`: an audit runs inside the API request and holds it until the page is
-done, which is the documented residual — fine for a demo, wrong for a crawl of 50 pages.
+There is no `api/app/worker/`: `POST /audits` answers `202` with an id and runs the audit in a task
+inside the API process, so the row is written a moment after the answer — a client polling that id
+can see one `404` first — and a restart loses the task and leaves the row `running`. That is the
+documented residual: fine for a demo, wrong for a crawl of 50 pages.
 
 ## Code conventions
 
