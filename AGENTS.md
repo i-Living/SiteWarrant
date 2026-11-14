@@ -12,16 +12,19 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
-is a Next.js interface: the audited-site list, the audit form, the progress page and the stored
-report. `infra/` brings up Postgres, Redis and a fixture site with ten planted defects, and
-`infra/demo.yml` runs the same code on loopback.
+is a Next.js interface with one page: the stored report for `/?audit=<id>`. `infra/` brings up
+Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
+loopback.
 
 Still open, and the plan says so in each case:
 
-- a public URL for the demo stand — it needs the owner's VPS, domain and secrets (§17.3);
-- an audit of a public site of 50+ pages (§16.1): only single `example.com` audits and the synthetic
-  corpus have been run;
-- §17 questions 2 and 4–6 are undecided (only the provider, §17.1, is answered).
+- a public URL for the demo stand — the route is decided (existing VPS, §17 decision 3а), the deploy
+  waits on the owner's domain and DNS;
+- the vision instrument — decided as one full screenshot per viewport, three in total (§17 decision
+  5а), and not written, so no report claims anything about how a page looks.
+
+The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
+58 audited pages, two that timed out and stayed in the denominator as failures.
 
 The commands below were executed at least once on 2026-11-12 or 2026-11-13 and are annotated with the
 phase that makes them meaningful. Do not add a command to this file that has not been run.
@@ -117,6 +120,11 @@ uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant crawl https://example.com --max-pages 50 --max-depth 3 --out pages.json
 
+# Survey [P1 + DoD §16.1, verified 2026-11-13]: crawl, audit every selected page, merge into one report
+uv run sitewarrant survey https://docs.python.org/3/ --max-pages 60 --pages-per-template 50 \
+  --out ../evals/surveys/2026-11-13-docs-python.json
+uv run sitewarrant survey http://localhost:8081/ --allow-private --max-pages 4 --out /tmp/survey.json
+
 # Evals [P5, verified 2026-11-13]
 python3 ../benchmark/generate.py --check          # the corpus still matches its generator
 uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
@@ -162,6 +170,7 @@ What exists today:
 api/app/api/       FastAPI app: health, create audit, fetch stored report
 api/app/core/      config, database engine, ORM models, report schema, agent_version, page_key
 api/app/crawl/     crawler (BFS, limits), links, sitemap, template clustering, crawl report, digest
+api/app/survey.py  a site-level audit: crawl, audit every selected page, merge into one report
 api/app/rules/     catalog.py (10 rules), engine.py (facts to findings), corpus, store (pgvector)
 api/app/agents/    specs, prompts/, runner (budgeted loop), validator, orchestrator, llm client
 api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes, priority) and
@@ -301,6 +310,18 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 - **The chief prompt is in `agent_version`.** `app/chief/prompts/chief.md` is hashed by
   `compute_agent_version` next to the agent prompts, so editing the brief moves every published
   number and the eval baseline has to be re-run.
+- **A survey is N audits and one report.** `app/survey.py` discovers with the crawler, runs
+  `run_audit` per selected page and merges findings, causes, observations and durations into a
+  report whose `pages_audited` is the number of pages that were actually audited. A page that fails
+  makes the survey `partial` and is listed in the CLI output — a shorter report with no failure
+  line would read like a clean site.
+- **A survey does not re-cluster across pages.** `root_cause_id` already carries `page_key`, and a
+  cause is a block on a page: two pages with a `header` are two causes, and merging them would
+  claim one fix for two different blocks. `merge_reports` concatenates each page's causes as they
+  came.
+- **The template limit decides a survey's coverage.** Every page of one template counts against
+  `--pages-per-template`, so a single-template site yields that many pages however high
+  `--max-pages` is; a documentation site is a handful of templates and needs both raised.
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
@@ -439,5 +460,6 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 | Why the project exists and what it should feel like | [idea.md](idea.md) |
 | Why the name is SiteWarrant | [.agents/plans/2026-11-12-naming.md](.agents/plans/2026-11-12-naming.md) |
 
-Open questions are listed in `docs/PLAN.md` section 17. Do not answer them silently inside a change:
-either the owner answers with item numbers, or the change stays inside the stated assumption.
+Decisions are listed in `docs/PLAN.md` section 17 with the date they were taken. Do not change one
+inside a change: a decision moves when the owner answers with item numbers, and the change then cites
+the new answer.

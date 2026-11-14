@@ -3,11 +3,13 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: phases P0–P7 have landed, except the public demo stand.** Discovery, eight deterministic
+> **Stage: phases P0–P7 have landed; two pieces of work are deferred.** Discovery, eight deterministic
 > channels at three viewports, eight budgeted agents behind a validator, deterministic deduplication
 > and root causes with the Chief Auditor's narration, a frozen benchmark with published numbers, fixes
-> with re-audits, and traces with cost estimates all run. The one item the plan still lists as open is
-> a public URL for `infra/demo.yml`, which needs the owner's VPS and domain (PLAN §17.3).
+> with re-audits, and traces with cost estimates all run. The open questions are answered and recorded
+> in PLAN §17; what is still missing is the public URL for `infra/demo.yml` (the owner's VPS and
+> domain) and the vision instrument — decided as one full screenshot per viewport, three in total,
+> and not built yet.
 >
 > The numbers below come from stored runs under `evals/runs/`; a metric with no run behind it is
 > `null` and says so, never `0`.
@@ -109,7 +111,13 @@ docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, Redis, fix
 cd api && uv sync && uv run alembic upgrade head
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
+uv run sitewarrant survey https://example.com --max-pages 50 --out survey.json
 ```
+
+`survey` is the site-level command: it discovers the pages a crawl would reach, audits the selected
+ones and merges them into one report, so a fifty-page site produces one `survey.json` instead of
+fifty `report.json` files. Each page keeps its own root causes — a cause is a block on a page, and
+two pages that both carry a `header` do not share one.
 
 The fixture site at `http://localhost:8081/` is a static page with ten defects planted on purpose,
 one per rule in `api/app/rules/catalog.py`, plus a journal, a product list, an app shell and a
@@ -265,8 +273,7 @@ POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
   docker compose -f infra/demo.yml up -d --build
 curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
   -d '{"url": "https://example.com"}'
-# {"audit_id": "...", "status": "running"} — the run continues in the process
-curl -s http://127.0.0.1:8000/audits/<audit_id>          # poll until status is completed
+# {"audit_id": "...", "findings_total": 3, "by_severity": {...}} — the audit runs inside the request
 curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
 ```
 
@@ -282,8 +289,8 @@ environment; `/api/*` answers `401` without a valid session, and the API itself 
 Next app is the only entry point. Public report links will live under `/share/<token>` and will be an
 explicit exception in `web/middleware.ts` — never a blanket path.
 
-The stack is not deployed on a public URL yet: that needs the VPS and a domain, which is the owner's
-call (PLAN §17.3).
+Deployment on the existing VPS is the decided route (PLAN §17, decision 3а) and is not done: it needs
+the owner's domain and DNS. Until then `infra/demo.yml` is how the stack is checked, bound to loopback.
 
 ## Deployment
 
@@ -527,4 +534,5 @@ the same change.
 
 ## License
 
-Not chosen yet. Tracked as an open question in [docs/PLAN.md](docs/PLAN.md).
+MIT — see [LICENSE](LICENSE). The repository is public in full, prompts and rule corpus included, so a
+reader can recompute `agent_version` and check the published numbers (PLAN §17, decision 6а).

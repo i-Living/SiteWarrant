@@ -1,6 +1,7 @@
 # Engineering report
 
-Numbers in this file come from stored runs under `evals/runs/` and from the audit database. Where a
+Numbers in this file come from stored runs under `evals/runs/` and `evals/surveys/`, and from the
+audit database. Where a
 number is an estimate, the sentence says so; where a claim was not measured, the section says that
 instead of rounding it into existence.
 
@@ -33,7 +34,39 @@ rather than in the agent:
   name, so it planted `A11Y-CONTRAST` and `A11Y-LINK-NAME` as well. Its text is legible and the
   close control is named now.
 
-## 2. Two agent versions, compared
+## 2. A public site: 60 pages of docs.python.org
+
+Run `evals/surveys/2026-11-13-docs-python.json`, 2026-11-13, `sitewarrant survey
+https://docs.python.org/3/ --max-pages 60 --pages-per-template 50`, deterministic layer only (no
+agents, so `llm_calls: 0` and `cost_estimate_usd: 0.0`):
+
+| metric | value |
+| --- | --- |
+| pages discovered | 200 |
+| pages selected / audited / failed | 60 / 58 / 2 |
+| findings | 19 over 17 pages (`major` 11, `minor` 8, no blocker) |
+| root causes | 0 |
+| observations | 2 146 |
+| wall clock | 447.8 s (7.7 s per page including discovery) |
+| `agent_version` | `sha256:37d4af33aee7bb8b` |
+
+The two failures are field data, not noise to delete: one screenshot and one navigation each hit the
+30 s page timeout on pages with heavy generated markup. The report says `status: partial` and the CLI
+names both; a survey that dropped them quietly would read as a complete pass over 60 pages.
+
+**Zero root causes is the interesting number.** A cause needs two findings from two categories on one
+block, and on these pages the defects sit on different elements — two contrast failures on inline
+code, eight links whose name is just an icon, one page with no `lang`, eight meta descriptions the
+search result cuts. Calling any of that a shared cause would be inventing a block. On the fixture,
+where a banner really does cover the navigation, the same code finds one cause with six symptoms.
+
+What this run does not say: precision or recall. There are no labels for docs.python.org, so the claim
+is only that the tool crossed 50 real pages at a polite rate and produced one auditable artifact — not
+that its findings are right. The rules it fired were `A11Y-CONTRAST`, `A11Y-LANG`, `A11Y-LINK-NAME`
+and `SEO-META-DESC`; six of the ten catalogue rules stayed silent, which is also unlabelled and
+therefore neither a hit nor a miss.
+
+## 3. Two agent versions, compared
 
 The fixture audit is the only place where two versions were run against the same page with the same
 planted defects:
@@ -57,7 +90,7 @@ A benchmark comparison of two agent versions is now possible without new code: r
 twice and pass the two files to `sitewarrant prompt-check` or `sitewarrant eval --compare`. It has not
 been run, because each pass over the corpus with an agent costs about forty minutes of model time.
 
-## 3. Cost
+## 4. Cost
 
 The deterministic layer costs nothing: no model call is made when `--agents` is absent, and the
 report says `llm_calls: 0`, `cost_estimate_usd: 0.0`.
@@ -80,12 +113,13 @@ The same page without agents yields 14 findings and `llm_calls: 0`, `cost_estima
 deterministic layer is free, and every finding it loses by adding agents would be a finding the
 facts already proved.
 
-The Chief Auditor's explanation is a ninth model call, and it is billed like the others but costs a
-fraction of them. Run `evals/audits/2026-11-13-fixture-narrated.json` — the same fixture page with
+The Chief Auditor's explanation is an additional model call, and it is billed like the others but costs
+a fraction of them. Run `evals/audits/2026-11-13-fixture-narrated.json` — the same fixture page with
 `--agents a11y` and narration on, agent `sha256:0a57261de95be73a` — carries a `chief` row: 1 call,
 1 146 tokens in, 863 out, `$0.001379` estimated, status `ok`, next to the accessibility agent's 6
-calls and `$0.028806`. The paragraph it produced names the header links and says what a visitor loses
-— and every number in it was checked against the cluster's facts before it was kept.
+calls and `$0.028806`; the same audit records seven calls in total, not the eight the table above
+describes. The paragraph it produced names the header links and says what a visitor loses — and every
+number in it was checked against the cluster's facts before it was kept.
 
 At list price this is **$3.69 per 100 pages** (`0.036854 × 100`), or about 16.5 minutes of wall time
 per page on this machine (135 s for the fixture page including three viewports and both agents). The
@@ -93,7 +127,7 @@ ceiling `SITEWARRANT_AUDIT_COST_LIMIT_USD` defaults to `0.25` per audit, roughly
 profile, which is why a crawler run of 50+ pages needs the ceiling raised deliberately rather than
 discovered at the invoice.
 
-## 4. Traces
+## 5. Traces
 
 The fixture audit above records one trace holding `audit: 1, page: 3, agent: 2, llm.call: 8,
 tool.call: 8` spans. Nesting is checked in `tests/integration/test_observability.py`: the page and
@@ -102,7 +136,7 @@ span context — not a hand-passed parent — decides. `audits/<id>/trace.jsonl`
 as JSON lines, each carrying the trace id that `llm_calls.trace_id` points at, so a stored cost can
 be walked back to the call that produced it.
 
-## 5. The prompt gate
+## 6. The prompt gate
 
 `sitewarrant prompt-check --baseline old.json --candidate new.json` accepts a change only when
 precision does not fall and the false-positive rate does not rise; two runs on different corpora are
@@ -110,7 +144,7 @@ refused rather than compared. It is covered by `tests/test_prompt_gate.py` (8 ca
 tolerance buys measurement noise and not a regression). No prompt edit was shipped through it yet:
 the gate exists, its first real decision will be the first prompt change someone proposes.
 
-## 6. What is not measured
+## 7. What is not measured
 
 - Precision on real sites. The corpus is synthetic; nothing in this repository justifies a number for
   the open web.
