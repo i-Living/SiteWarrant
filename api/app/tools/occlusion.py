@@ -30,12 +30,24 @@ PROBE_SCRIPT = f"""() => {{
   // target: the label inside an absolutely positioned banner, not the banner. A repair has to move
   // the element that carries the position, so the probe records it instead of leaving the fixer to
   // guess from a tag name.
+  // `relative` moves a box without taking it out of the flow, so `top: -40px` on a static-looking
+  // banner still covers its neighbours. It only counts when an inset is set: nearly every wrapper
+  // on a real page is `position: relative` with every inset `auto`, and that one carries no offset.
+  const shifted = (style) =>
+    ['top', 'right', 'bottom', 'left'].some((side) => {{
+      const value = style[side];
+      return value && value !== 'auto';
+    }});
   const positioned = (el) => {{
     let node = el;
     while (node && node.nodeType === 1) {{
       const style = getComputedStyle(node);
-      const fixed = style.position === 'absolute' || style.position === 'fixed';
-      if (fixed || style.position === 'sticky') {{
+      if (
+        style.position === 'absolute' ||
+        style.position === 'fixed' ||
+        style.position === 'sticky' ||
+        (style.position === 'relative' && shifted(style))
+      ) {{
         return node;
       }}
       node = node.parentElement;

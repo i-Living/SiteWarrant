@@ -91,17 +91,24 @@ def apply_patch(site_dir: Path, patch_file: Path) -> Path:
         raise ReauditError(f"{site_dir} is not a directory")
     if not patch_file.is_file():
         raise ReauditError(f"{patch_file} is not a file")
-    copy = Path(tempfile.mkdtemp(prefix="sitewarrant-reaudit-")) / "site"
-    shutil.copytree(site_dir, copy)
-    result = subprocess.run(
-        ["patch", "-p1", "--forward", "--batch", "-i", str(patch_file.resolve())],
-        cwd=copy,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise ReauditError(f"patch failed: {result.stdout}{result.stderr}".strip())
+    parent = Path(tempfile.mkdtemp(prefix="sitewarrant-reaudit-"))
+    copy = parent / "site"
+    try:
+        shutil.copytree(site_dir, copy)
+        result = subprocess.run(
+            ["patch", "-p1", "--forward", "--batch", "-i", str(patch_file.resolve())],
+            cwd=copy,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ReauditError(f"patch failed: {result.stdout}{result.stderr}".strip())
+    except BaseException:
+        # The caller measures one repair after another and keeps going after a failure, so a leak
+        # here is one directory per rejected repair. Copy, launch and apply all fail the same way.
+        shutil.rmtree(parent, ignore_errors=True)
+        raise
     return copy
 
 

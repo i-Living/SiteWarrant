@@ -85,8 +85,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   of 1.0 on `applied` with `closed` below it is the fix layer failing.
 - **The element under the pointer is not the element that is positioned.** The occlusion probe records
   the chain `elementFromPoint` returns (`nth-of-type`, no classes, anchored at `html` — a fixed-depth
-  cap can name two elements in identical subtrees) and, since 2026-11-15, the nearest ancestor whose
-  computed `position` is absolute, fixed or sticky. A repair that names the element
+  cap can name two elements in identical subtrees) and, since 2026-11-15, the nearest ancestor that
+  carries an offset — `absolute`, `fixed`, `sticky`, or `relative` with a `top`/`right`/`bottom`/
+  `left` set. A plain `position: relative` wrapper carries no offset and is skipped, or every repair
+  would move the wrapper. A repair that names the element
   under the pointer — `span { position: static !important }` — applies cleanly, moves unrelated
   elements and closes nothing; the corpus found it, the fixture had not. `selector_of` prefers a
   class or an id, falls back to the measured chain (valid CSS), and refuses a single bare tag.

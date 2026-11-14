@@ -1,9 +1,9 @@
 {
-  "audit_id": "5178a50d-48df-4033-86ba-1a749d8dbcbb",
+  "audit_id": "bc69ef80-73d5-4be9-bdb0-43557fc8a236",
   "site": "http://localhost:8081/",
-  "agent_version": "sha256:1c45ce4bc59c9c9a",
+  "agent_version": "sha256:b6f6435fee6719ff",
   "status": "completed",
-  "generated_at": "2026-11-14T22:36:55.209347Z",
+  "generated_at": "2026-11-14T23:15:19.504603Z",
   "summary": {
     "pages_audited": 1,
     "findings_total": 14,
@@ -17,7 +17,7 @@
       "seo": 82.5,
       "a11y": 30.0
     },
-    "duration_ms": 3284,
+    "duration_ms": 3297,
     "observations_by_tool": {
       "http": 8,
       "dom": 3,
@@ -39,7 +39,7 @@
       "basis": "list price for the same model and tokens; the subscription plan bills a flat fee, so this is not an invoice",
       "unpriced_models": []
     },
-    "trace_id": "72fb962e2d7b33b3554823ead4dbf364",
+    "trace_id": "501545f2a9d38932aca0874c95e08497",
     "spans": {
       "audit": 1,
       "page": 3
@@ -50,7 +50,7 @@
   },
   "findings": [
     {
-      "id": "ecb4d5ed-478d-494a-80d7-819729c4f66a",
+      "id": "9a9b75bb-d600-4ade-aa71-9e5a938eba4a",
       "rule_id": "SEO-TITLE",
       "category": "seo",
       "severity": "major",
@@ -74,23 +74,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "5c13653d-3213-473e-91bb-156b5bb1fe08",
+          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
           "excerpt": "document.title is empty"
         },
         {
           "kind": "dom",
-          "observation_id": "cb9567f2-f563-468c-b078-500c12ca2880",
+          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
           "excerpt": "document.title is empty"
         },
         {
           "kind": "dom",
-          "observation_id": "d625c9fe-3049-4dbd-b846-8f212311a36a",
+          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
           "excerpt": "document.title is empty"
         }
       ]
     },
     {
-      "id": "bfd3b135-da80-4202-a5f0-5d8c6de7e51e",
+      "id": "9887e9aa-3151-4efb-a035-93cb5dab2974",
       "rule_id": "SEO-META-DESC",
       "category": "seo",
       "severity": "minor",
@@ -114,23 +114,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "5c13653d-3213-473e-91bb-156b5bb1fe08",
+          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
           "excerpt": "meta[name=description] is missing or empty"
         },
         {
           "kind": "dom",
-          "observation_id": "cb9567f2-f563-468c-b078-500c12ca2880",
+          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
           "excerpt": "meta[name=description] is missing or empty"
         },
         {
           "kind": "dom",
-          "observation_id": "d625c9fe-3049-4dbd-b846-8f212311a36a",
+          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
           "excerpt": "meta[name=description] is missing or empty"
         }
       ]
     },
     {
-      "id": "f552cc7d-c6ec-4f65-8a16-91584f2b3b5a",
+      "id": "8d0feef3-e014-4cc9-a027-08ce29911325",
       "rule_id": "SEO-H1",
       "category": "seo",
       "severity": "major",
@@ -154,23 +154,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "5c13653d-3213-473e-91bb-156b5bb1fe08",
+          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
           "excerpt": "the page has no h1 element"
         },
         {
           "kind": "dom",
-          "observation_id": "cb9567f2-f563-468c-b078-500c12ca2880",
+          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
           "excerpt": "the page has no h1 element"
         },
         {
           "kind": "dom",
-          "observation_id": "d625c9fe-3049-4dbd-b846-8f212311a36a",
+          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
           "excerpt": "the page has no h1 element"
         }
       ]
     },
     {
-      "id": "45a8ae96-6c4f-4bec-84ec-4b9801f4ad88",
+      "id": "d5270a35-aed4-417e-9c62-6cd54ea49121",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -194,13 +194,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "2ae43e03-6a54-4133-aef1-3cfae3e60700",
+          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "68fb3dbb-0134-4214-8c21-e116f2dfda62",
+      "id": "82b42648-f707-413c-9e3c-bde94d5f885e",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -224,13 +224,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "2ae43e03-6a54-4133-aef1-3cfae3e60700",
+          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "ff26e2db-3588-40b5-95f6-a4880bdf2696",
+      "id": "57f68608-307b-49ea-b659-46d8728ff713",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -254,13 +254,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "2ae43e03-6a54-4133-aef1-3cfae3e60700",
+          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(3) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "b8c16bd3-9a47-4003-ba6d-035b6e7230c6",
+      "id": "cb3f821e-2c34-4485-8665-c7853c6e92d6",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -284,13 +284,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "2ae43e03-6a54-4133-aef1-3cfae3e60700",
+          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(4) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "1796a682-5df0-49ec-a6f3-8edfcc8dc99f",
+      "id": "8b15aff9-9d19-47d7-8bb4-83f18d0286bc",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -314,13 +314,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "2ae43e03-6a54-4133-aef1-3cfae3e60700",
+          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "1c32748f-caf7-4801-a6da-23ec75e97a8d",
+      "id": "9a51951d-0011-44d1-8128-e82ad738fab4",
       "rule_id": "A11Y-BUTTON-NAME",
       "category": "a11y",
       "severity": "blocker",
@@ -344,23 +344,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "e7d5ceda-4390-4f85-a058-cbf74398fda6",
+          "observation_id": "af9f46b2-758b-434c-9277-83e4d9998b7f",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "d1a558b6-0880-4ada-97ec-147f79402ec6",
+          "observation_id": "1c61b68e-69ea-4965-ad9f-f4c4cd102b81",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "cd265b2f-d70a-4081-bcc2-cb59ed4e74cc",
+          "observation_id": "c0ca63b5-b94b-453f-87fc-3fbed55b41cf",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         }
       ]
     },
     {
-      "id": "b7663759-01f4-4aa5-9048-202639383cc3",
+      "id": "205a3839-8d45-44e0-ade0-074aa4ff8aea",
       "rule_id": "A11Y-CONTRAST",
       "category": "a11y",
       "severity": "major",
@@ -384,38 +384,38 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "c51a4d68-d7d3-434b-8f11-77ffed6dbaa5",
+          "observation_id": "397a33be-c9fd-40a3-b18c-7180d430ed5e",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "2145d6f4-afe1-4b66-8c86-fa81d54959d3",
+          "observation_id": "a8b15058-fea1-48ed-a3dd-3bad769373ed",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "2ef8efcb-ca28-4747-a052-784d13c99381",
+          "observation_id": "b0cac1a5-5056-45bd-9a4a-6bafce0d66cd",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "c51a4d68-d7d3-434b-8f11-77ffed6dbaa5",
+          "observation_id": "397a33be-c9fd-40a3-b18c-7180d430ed5e",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "2145d6f4-afe1-4b66-8c86-fa81d54959d3",
+          "observation_id": "a8b15058-fea1-48ed-a3dd-3bad769373ed",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "2ef8efcb-ca28-4747-a052-784d13c99381",
+          "observation_id": "b0cac1a5-5056-45bd-9a4a-6bafce0d66cd",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         }
       ]
     },
     {
-      "id": "97910ba9-6a47-4fb1-85e6-0ca0a8006533",
+      "id": "43f265fe-87ff-4b42-8bfe-2ffad1428c28",
       "rule_id": "A11Y-LANG",
       "category": "a11y",
       "severity": "major",
@@ -439,23 +439,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "40e00515-c7ed-4ca4-81dd-78717b2dc34a",
+          "observation_id": "49038968-edb5-48f5-87c8-c7b376a60de8",
           "excerpt": "html :: <html>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "3c58b9bc-e88f-4fd6-b51f-632d84526525",
+          "observation_id": "8fbf37f8-0a70-45f5-ac2e-037434d21f20",
           "excerpt": "html :: <html>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "9c6d00bd-27f9-4bda-9d3d-3f2d46224ba4",
+          "observation_id": "ba6148ea-2d12-4b3d-b70a-f0a399325069",
           "excerpt": "html :: <html>"
         }
       ]
     },
     {
-      "id": "5a966647-7a3e-4946-8c5d-8ab99588ff15",
+      "id": "30269145-0400-4fd8-b81c-2f8e5a22290d",
       "rule_id": "A11Y-IMG-ALT",
       "category": "a11y",
       "severity": "major",
@@ -479,23 +479,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "d0293d88-7c9b-437c-a56f-7c7a6993e0b0",
+          "observation_id": "f201f59d-7919-4aaa-885b-86e9c9d2879e",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "09e9b392-1ca2-4884-b2fe-2a166a437706",
+          "observation_id": "f9d7d7e6-fa95-4e16-beec-d0de7442fad1",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "694e14d3-e7cc-4409-b821-1877352c0f9b",
+          "observation_id": "f30d94f4-abe3-49e2-9f48-d0091d6e803b",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         }
       ]
     },
     {
-      "id": "b8024a4b-226e-4dfa-8bd8-83325ee950f9",
+      "id": "162c6489-b4ca-4c31-b310-6aa5b9bdd665",
       "rule_id": "A11Y-LABEL",
       "category": "a11y",
       "severity": "blocker",
@@ -519,23 +519,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "f636fadc-13cc-4455-833f-eeb0171bfc25",
+          "observation_id": "031de6d6-efc5-47c8-b5ef-0a951106da9f",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "fecf5528-de18-44c5-9aa1-c32c17f3ecf4",
+          "observation_id": "9643619b-700d-4b85-aeea-12a2281d18fb",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "49d86872-29be-4287-b691-8cda1a2e9bee",
+          "observation_id": "7f9099d9-9a58-4a67-a2d1-6a260ffbc916",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         }
       ]
     },
     {
-      "id": "043a2068-2614-47ed-826c-e5e9e34a4669",
+      "id": "49833325-8ded-4fb6-88fb-ce0ecb029c0a",
       "rule_id": "A11Y-LINK-NAME",
       "category": "a11y",
       "severity": "major",
@@ -559,32 +559,32 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "38e0a532-d0b2-4771-b6e4-39a9d9b04391",
+          "observation_id": "819159e8-f849-4432-8526-e07d25107087",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "29fa1e2a-9e9a-4e50-914c-2bffaecb4758",
+          "observation_id": "e07e6156-f8f4-4a3d-b27e-0501e4c74dc4",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "95ff121f-64e8-47b5-83e9-31322f550b13",
+          "observation_id": "13840236-f726-444c-bcac-ca34950dc07e",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "38e0a532-d0b2-4771-b6e4-39a9d9b04391",
+          "observation_id": "819159e8-f849-4432-8526-e07d25107087",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "29fa1e2a-9e9a-4e50-914c-2bffaecb4758",
+          "observation_id": "e07e6156-f8f4-4a3d-b27e-0501e4c74dc4",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "95ff121f-64e8-47b5-83e9-31322f550b13",
+          "observation_id": "13840236-f726-444c-bcac-ca34950dc07e",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         }
       ]
@@ -605,12 +605,12 @@
       "severity": "major",
       "priority": 9.0,
       "finding_ids": [
-        "45a8ae96-6c4f-4bec-84ec-4b9801f4ad88",
-        "68fb3dbb-0134-4214-8c21-e116f2dfda62",
-        "ff26e2db-3588-40b5-95f6-a4880bdf2696",
-        "b8c16bd3-9a47-4003-ba6d-035b6e7230c6",
-        "1796a682-5df0-49ec-a6f3-8edfcc8dc99f",
-        "043a2068-2614-47ed-826c-e5e9e34a4669"
+        "d5270a35-aed4-417e-9c62-6cd54ea49121",
+        "82b42648-f707-413c-9e3c-bde94d5f885e",
+        "57f68608-307b-49ea-b659-46d8728ff713",
+        "cb3f821e-2c34-4485-8665-c7853c6e92d6",
+        "8b15aff9-9d19-47d7-8bb4-83f18d0286bc",
+        "49833325-8ded-4fb6-88fb-ce0ecb029c0a"
       ]
     }
   ]

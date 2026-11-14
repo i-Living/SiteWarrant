@@ -1,7 +1,12 @@
 """The re-audit delta keeps enough of a finding to say which one closed."""
 
+import tempfile
+from pathlib import Path
+
+import pytest
+
 from app.core.report import FindingOut, ImpactOut
-from app.fixes.reaudit import diff_findings
+from app.fixes.reaudit import ReauditError, apply_patch, diff_findings
 
 
 def finding(rule_id: str, subject: str, page: str = "http://x/products/item-2.html") -> FindingOut:
@@ -44,3 +49,43 @@ def test_a_finding_that_moved_subject_is_a_regression_and_a_closure() -> None:
 
     assert [item.subject for item in result.closed] == ["html"]
     assert [item.subject for item in result.regressions] == ["html:nth-of-type(1)"]
+
+
+def copies() -> set[Path]:
+    return set(Path(tempfile.gettempdir()).glob("sitewarrant-reaudit-*"))
+
+
+def test_a_rejected_patch_leaves_no_copy_of_the_site_behind(tmp_path: Path) -> None:
+    """The measurement keeps going after a repair fails, so a leak here is one copy per failure."""
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text("<html></html>", encoding="utf-8")
+    patch = tmp_path / "repair.patch"
+    patch.write_text(
+        "--- a/missing.html\n+++ b/missing.html\n@@ -1 +1 @@\n-old\n+new\n", encoding="utf-8"
+    )
+
+    before = copies()
+    with pytest.raises(ReauditError, match="patch failed"):
+        apply_patch(site, patch)
+    assert copies() == before
+
+
+def test_a_patch_that_applies_is_left_in_place(tmp_path: Path) -> None:
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "index.html").write_text('<html lang="xx"></html>\n', encoding="utf-8")
+    patch = tmp_path / "repair.patch"
+    patch.write_text(
+        "--- a/index.html\n+++ b/index.html\n@@ -1 +1 @@\n"
+        '-<html lang="xx"></html>\n+<html lang="en"></html>\n',
+        encoding="utf-8",
+    )
+
+    copy = apply_patch(site, patch)
+    try:
+        assert (copy / "index.html").read_text(encoding="utf-8") == '<html lang="en"></html>\n'
+    finally:
+        import shutil
+
+        shutil.rmtree(copy.parent, ignore_errors=True)
