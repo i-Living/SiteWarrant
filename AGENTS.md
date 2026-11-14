@@ -12,16 +12,19 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
-is a Next.js interface: the audited-site list, the audit form, the progress page and the stored
-report. `infra/` brings up Postgres, Redis and a fixture site with ten planted defects, and
-`infra/demo.yml` runs the same code on loopback.
+is a Next.js interface with one page: the stored report for `/?audit=<id>`. `infra/` brings up
+Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
+loopback.
 
 Still open, and the plan says so in each case:
 
-- a public URL for the demo stand — it needs the owner's VPS, domain and secrets (§17.3);
-- an audit of a public site of 50+ pages (§16.1): only single `example.com` audits and the synthetic
-  corpus have been run;
-- §17 questions 2 and 4–6 are undecided (only the provider, §17.1, is answered).
+- a public URL for the demo stand — the route is decided (existing VPS, §17 decision 3а), the deploy
+  waits on the owner's domain and DNS;
+- the vision instrument — decided as one full screenshot per viewport, three in total (§17 decision
+  5а), and not written, so no report claims anything about how a page looks.
+
+The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
+58 audited pages, two that timed out and stayed in the denominator as failures.
 
 The commands below were executed at least once on 2026-11-12 or 2026-11-13 and are annotated with the
 phase that makes them meaningful. Do not add a command to this file that has not been run.
@@ -452,5 +455,6 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 | Why the project exists and what it should feel like | [idea.md](idea.md) |
 | Why the name is SiteWarrant | [.agents/plans/2026-11-12-naming.md](.agents/plans/2026-11-12-naming.md) |
 
-Open questions are listed in `docs/PLAN.md` section 17. Do not answer them silently inside a change:
-either the owner answers with item numbers, or the change stays inside the stated assumption.
+Decisions are listed in `docs/PLAN.md` section 17 with the date they were taken. Do not change one
+inside a change: a decision moves when the owner answers with item numbers, and the change then cites
+the new answer.
