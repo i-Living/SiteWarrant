@@ -5,7 +5,7 @@ from __future__ import annotations
 import difflib
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sqlalchemy import select
@@ -137,7 +137,9 @@ async def plan_repairs(audit_id: str, sources: Mapping[str, str]) -> list[Patch]
             subject=occluder if rule_id == "LAYOUT-OCCLUSION" else subject,
         )
         if repair is not None:
-            repairs.append(repair)
+            # The finding's subject, not the element the repair moves: the occlusion repair names
+            # the occluder, but the finding it answers is the covered target.
+            repairs.append(replace(repair, subject=(subject or "").strip()))
     return repairs
 
 

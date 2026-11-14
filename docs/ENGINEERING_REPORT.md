@@ -8,7 +8,7 @@ instead of rounding it into existence.
 ## 1. What the deterministic layer does on the benchmark
 
 Run `evals/runs/2026-11-15-baseline-occluder.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:132dea05079fc83d`, 2026-11-15, 317.8 s, whole corpus (8 synthetic sites, 104 pages, 80
+`sha256:1c45ce4bc59c9c9a`, 2026-11-15, 319.4 s, whole corpus (8 synthetic sites, 104 pages, 80
 planted defects, 24 clean pages). Every earlier run recorded the same score under its own agent version;
 this one followed the occlusion probe (see *Fixes over the same corpus* below), which moved the version
 and not the measured layer:
@@ -20,7 +20,7 @@ and not the measured layer:
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 317.8 s | 104 pages (3.06 s/page) |
+| duration | 319.4 s | 104 pages (3.04 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -39,7 +39,7 @@ rather than in the agent:
 ### Fixes over the same corpus
 
 Run `evals/runs/2026-11-15-fix-acceptance.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:132dea05079fc83d`, 2026-11-15, 474.1 s: every page audited, then every finding of a
+`sha256:1c45ce4bc59c9c9a`, 2026-11-15, 483.1 s: every page audited, then every finding of a
 mechanically fixable rule repaired on its own and the patched page re-audited.
 
 | metric | value | denominator |
@@ -50,7 +50,16 @@ mechanically fixable rule repaired on its own and the patched page re-audited.
 
 The corpus plants one defect per catalogue rule per site, so the population is 48 findings across
 five mechanical rules — `LAYOUT-OCCLUSION` contributes two per site, because the banner covers two
-links and each covered target is its own finding.
+links and each covered target is its own finding. That second finding is why `closed` is counted per
+finding and not per rule: one repair moves the banner and closes both, and a count by rule would
+credit each repair with the other's finding. `reaudit` identifies a finding by rule, page and subject,
+and the delta now carries the subject, so `closed` means "the finding this repair was computed for
+went away". `regression_free` means "the re-audit found no new findings" — other findings may stay
+open, because a repair answers one of them.
+
+Before auditing, the run digests each page file with the generator's own `page_digest` and refuses a
+corpus whose files no longer match the manifest, so an artifact cannot name a corpus it did not
+measure.
 
 Both rates are floors, and the reason is structural: the corpus is static, so a diff computed from the
 source it is applied to lands, and the repairs that only move markup do not disturb a page's other

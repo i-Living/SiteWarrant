@@ -6,10 +6,13 @@ INTERACTIVE = "a[href], button, input, select, textarea, [role='button'], [role=
 
 PROBE_SCRIPT = f"""() => {{
   const MAX = {MAX_ITEMS};
+  // Root-anchored on purpose: a chain truncated at a fixed depth can name two elements in two
+  // identical subtrees, and the repair would restyle both. An nth-of-type chain from `html` names
+  // exactly one element by construction.
   const path = (el) => {{
     const parts = [];
     let node = el;
-    while (node && node.nodeType === 1 && parts.length < 6) {{
+    while (node && node.nodeType === 1) {{
       const parent = node.parentElement;
       let index = 1;
       if (parent) {{

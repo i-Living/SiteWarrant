@@ -28,11 +28,11 @@ from app.audit import run_audit
 from app.core.config import get_settings
 from app.core.report import Report
 from app.core.version import compute_agent_version
-from app.eval.dataset import DatasetError, load_dataset
+from app.eval.dataset import DatasetError, SiteLabels, load_dataset, page_digest
 from app.eval.models import RunContext
 from app.eval.runner import select_sites
 from app.fixes.patch import FIXABLE, Patch
-from app.fixes.reaudit import PatchedSite, ReauditError, ReauditResult, reaudit
+from app.fixes.reaudit import Delta, PatchedSite, ReauditError, ReauditResult, reaudit
 from app.fixes.recommend import plan_repairs, unified_diff
 
 
@@ -83,6 +83,41 @@ def with_rates(counts: Counts) -> Counts:
     )
 
 
+def verify_sources(site: SiteLabels, site_dir: Path) -> None:
+    """The files this run serves must be the pages the manifest digests.
+
+    `load_dataset` checks the manifest against itself; it cannot see the files, so a page edited
+    behind it would be measured under the old identity and the artifact would name a corpus it did
+    not audit. `page_digest` is the generator's own contract, so a mismatch here is a corpus that
+    `benchmark/generate.py --check` would refuse as well.
+    """
+    for page in site.pages:
+        source = site_dir / page
+        if not source.is_file():
+            # Without the served source there is nothing to measure, and skipping the page would
+            # quietly shrink the denominator.
+            raise DatasetError(f"{site.slug}/{page}: no source file at {source}")
+        digest = page_digest(source.read_text(encoding="utf-8"))
+        expected = site.page_digests[page]
+        if digest != expected:
+            raise DatasetError(
+                f"{site.slug}/{page} is not the page the manifest digests ({digest} != {expected})"
+                "; regenerate the corpus instead of editing it"
+            )
+
+
+def closed_by(closed: list[Delta], repair: Patch) -> bool:
+    """Whether a repair closed the finding it was computed for.
+
+    A rule can fire twice on one page — the corpus banner covers two links — and moving it closes
+    both findings. Counting by rule alone would credit each repair with the other's finding, so the
+    subject has to match: `reaudit.key_of` identifies a finding by rule, page and subject, and the
+    subject is what is left once the other two are fixed.
+    """
+    subject = (repair.subject or "").strip()
+    return any(item.rule_id == repair.rule_id and item.subject == subject for item in closed)
+
+
 async def measure_fixes(dataset_path: Path, *, sites: list[str] | None = None) -> FixRun:
     """Audit every page, repair every mechanically fixable finding on its own, and re-audit it."""
     dataset = load_dataset(dataset_path)
@@ -99,6 +134,7 @@ async def measure_fixes(dataset_path: Path, *, sites: list[str] | None = None) -
     root = dataset_path.parent
     for site in selected:
         site_dir = root / "sites" / site.slug
+        verify_sources(site, site_dir)
         site_counts = per_site.setdefault(site.slug, Counts())
         # Serve the site's own directory, not the corpus host: a repair is a diff against these
         # files, and a URL path that only the web server knows (a `/bench/<slug>/` prefix) would
@@ -106,10 +142,6 @@ async def measure_fixes(dataset_path: Path, *, sites: list[str] | None = None) -
         with PatchedSite(site_dir) as server:
             for page in site.pages:
                 source = site_dir / page
-                if not source.is_file():
-                    # Without the served source there is nothing to measure, and skipping the
-                    # page would quietly shrink the denominator.
-                    raise DatasetError(f"{site.slug}/{page}: no source file at {source}")
                 url = f"{server.base_url}/{page}"
                 report = await run_audit(url, allow_private=True, agents=(), store_artifacts=False)
                 fixable = [finding for finding in report.findings if finding.rule_id in FIXABLE]
@@ -136,7 +168,7 @@ async def measure_fixes(dataset_path: Path, *, sites: list[str] | None = None) -
                     totals.applied += 1
                     site_counts.applied += 1
                     rule_counts.applied += 1
-                    if any(item.rule_id == repair.rule_id for item in result.closed):
+                    if closed_by(result.closed, repair):
                         totals.closed += 1
                         site_counts.closed += 1
                         rule_counts.closed += 1

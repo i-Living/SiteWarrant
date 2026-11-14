@@ -32,6 +32,9 @@ class Patch:
     before: str
     after: str
     note: str
+    # The finding this repair was computed for, as `reaudit.key_of` names it. Two findings of one
+    # rule on one page are two repairs, and a count has to say which one closed.
+    subject: str = ""
 
 
 def text_of(fragment: str) -> str:

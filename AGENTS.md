@@ -80,11 +80,13 @@ phase that makes them meaningful. Do not add a command to this file that has not
   repairs into one diff, which is right for a human and wrong for a count: a composed diff cannot say
   which repair failed to apply. `sitewarrant fixes` gives each repair its own diff, applies it to a
   copy of the site and re-audits the page, and the artifact keeps `applied`, `closed` and
-  `regression_free` apart — a diff that lands, a finding that goes away, and a re-audit that finds
-  nothing. A rate of 1.0 on `applied` with `closed` below it is the fix layer failing.
+  `regression_free` apart — a diff that lands, the finding it was computed for going away, and a
+  re-audit that finds no new findings (other findings may stay open: a repair answers one). A rate
+  of 1.0 on `applied` with `closed` below it is the fix layer failing.
 - **The element under the pointer is not the element that is positioned.** The occlusion probe records
-  the chain `elementFromPoint` returns (`nth-of-type`, no classes) and, since 2026-11-15, the nearest
-  ancestor whose computed `position` is absolute, fixed or sticky. A repair that names the element
+  the chain `elementFromPoint` returns (`nth-of-type`, no classes, anchored at `html` — a fixed-depth
+  cap can name two elements in identical subtrees) and, since 2026-11-15, the nearest ancestor whose
+  computed `position` is absolute, fixed or sticky. A repair that names the element
   under the pointer — `span { position: static !important }` — applies cleanly, moves unrelated
   elements and closes nothing; the corpus found it, the fixture had not. `selector_of` prefers a
   class or an id, falls back to the measured chain (valid CSS), and refuses a single bare tag.
