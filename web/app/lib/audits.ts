@@ -59,8 +59,13 @@ export async function getSite(host: string): Promise<SiteDetail | null> {
   const response = await fetch(`${apiBase}/sites/${encodeURIComponent(host)}`, {
     cache: "no-store",
   });
-  if (!response.ok) {
+  // Only a 404 means "no such site". A 500 or 503 is an API failure, and a page that
+  // calls it "not found" hides the difference.
+  if (response.status === 404) {
     return null;
+  }
+  if (!response.ok) {
+    throw new Error(`The audit API answered ${response.status}.`);
   }
   return (await response.json()) as SiteDetail;
 }
@@ -69,8 +74,11 @@ export async function getAudit(auditId: string): Promise<AuditSummary | null> {
   const response = await fetch(`${apiBase}/audits/${auditId}`, {
     cache: "no-store",
   });
-  if (!response.ok) {
+  if (response.status === 404) {
     return null;
+  }
+  if (!response.ok) {
+    throw new Error(`The audit API answered ${response.status}.`);
   }
   return (await response.json()) as AuditSummary;
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SeverityLine } from "../../components/severity-line";
 import { StatusStamp } from "../../components/status-stamp";
-import { getSite, type PageSummary } from "../../lib/audits";
+import { getSite, type PageSummary, type SiteDetail } from "../../lib/audits";
 import {
   formatDate,
   formatDuration,
@@ -50,7 +50,37 @@ export default async function SitePage({
 }) {
   const { host: rawHost } = await params;
   const host = decodeHost(rawHost);
-  const site = await getSite(host);
+  let site: SiteDetail | null = null;
+  let error: string | null = null;
+  try {
+    site = await getSite(host);
+  } catch (cause) {
+    // A 500 is not "no such site": say the API failed, or the page reads as an empty host.
+    error =
+      cause instanceof Error
+        ? cause.message
+        : "The audit API could not be reached.";
+  }
+
+  if (error !== null) {
+    return (
+      <main>
+        <p className="eyebrow">Site</p>
+        <h1>{host}</h1>
+        <div className="notice">
+          <p>{error}</p>
+          <p className="note">
+            The ledger could not be read; retry in a moment.
+          </p>
+        </div>
+        <p>
+          <Link className="button-link" href="/">
+            Back to sites
+          </Link>
+        </p>
+      </main>
+    );
+  }
 
   if (site === null) {
     return (

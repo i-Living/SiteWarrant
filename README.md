@@ -321,10 +321,15 @@ bun run start -- -H 127.0.0.1 -p 3000
 ```bash
 cd api
 uv sync --frozen
+uv run playwright install --with-deps chromium   # the browser every audit drives
 uv run alembic upgrade head
 uv run sitewarrant index-rules
 uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8000
 ```
+
+`uv sync` installs the Playwright Python package, not the browser binary: run
+`playwright install --with-deps chromium` once per host, as the same account that runs the API,
+or every audit fails when it tries to launch a browser that is not there.
 
 `infra/demo.yml` is the container path for Postgres and the API; it already publishes `8000` on
 loopback. Keep both services supervised (systemd, compose, or a process manager); the loopback bind
@@ -440,7 +445,7 @@ one happened in `$sent_http_location`.
 
 ```ini
 [Definition]
-failregex = ^<HOST> - \S+ \[[^\]]+\] "POST /auth/login HTTP/[0-9.]+" 303 \d+ "[^"]*" "[^"]*" "/login\?error=1[^"]*"$
+failregex = ^<HOST> - \S+ \[[^\]]+\] "POST /auth/login(?:\?[^ ]*)? HTTP/[0-9.]+" 303 \d+ "[^"]*" "[^"]*" "/login\?error=1[^"]*"$
 ignoreregex =
 ```
 

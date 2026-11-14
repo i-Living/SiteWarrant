@@ -77,7 +77,10 @@ def capture(
                 page.wait_for_load_state("networkidle", timeout=timeout_ms)
                 if urlsplit(page.url).path == LOGIN_PATH:
                     return f"sign-in was refused: the page stayed on {page.url}"
-                page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+                # Stay on the page the login redirected to. A loopback or proxied app answers
+                # with the origin the browser reached (`localhost` for a `127.0.0.1` request),
+                # and the session cookie is stored for that origin: re-requesting the literal
+                # URL we were given would arrive without it and bounce back to /login.
             page.wait_for_selector("main", timeout=timeout_ms)
             text = page.inner_text("main") or ""
             lowered = text.lower()

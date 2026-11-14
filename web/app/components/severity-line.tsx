@@ -4,10 +4,12 @@ export function SeverityLine({
   counts,
   total,
   status,
+  coverage,
 }: {
   counts: Record<string, number> | null;
   total: number | null;
   status: string;
+  coverage?: { measured: number; pages: number };
 }) {
   if (total === null) {
     return (
@@ -17,6 +19,15 @@ export function SeverityLine({
     );
   }
   if (total === 0) {
+    // Zero findings over a partly measured host is not "clean": the unmeasured pages
+    // have no verdict at all, so the row has to carry how much of it was audited.
+    if (coverage !== undefined && coverage.measured < coverage.pages) {
+      return (
+        <span className="severity-line">
+          0 findings · {coverage.measured}/{coverage.pages} pages measured
+        </span>
+      );
+    }
     return <span className="severity-line clean">clean</span>;
   }
   if (counts === null) {

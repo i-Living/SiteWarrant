@@ -3,18 +3,20 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { RunRow } from "../components/run-row";
-import type { AuditSummary } from "../lib/audits";
+import { type AuditSummary, getAudit } from "../lib/audits";
 import { formatClock, isBenchmarkSite, isLocalSite } from "../lib/format";
 
 const REFRESH_MS = 2000;
 
 export default function AuditsPage() {
   const [audits, setAudits] = useState<AuditSummary[] | null>(null);
+  const [pinned, setPinned] = useState<AuditSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [updated, setUpdated] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const scrolled = useRef(false);
+  const lookedUp = useRef<string | null>(null);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -70,8 +72,51 @@ export default function AuditsPage() {
     };
   }, []);
 
+  // The list is a bounded window of the newest runs. A submission older than that window
+  // would lose both its row and its "running" line, so the one audit the visitor came for
+  // is looked up by id and merged in while the poll keeps refreshing the window.
   useEffect(() => {
-    if (highlight === null || audits === null || scrolled.current) {
+    if (
+      highlight === null ||
+      audits === null ||
+      lookedUp.current === highlight
+    ) {
+      return;
+    }
+    if (audits.some((audit) => audit.audit_id === highlight)) {
+      return;
+    }
+    lookedUp.current = highlight;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await getAudit(highlight);
+        if (!cancelled && row !== null) {
+          setPinned(row);
+        }
+      } catch {
+        // A failed lookup adds nothing: the page already reports API errors above.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audits, highlight]);
+
+  const pinnedRow =
+    highlight !== null && pinned !== null && pinned.audit_id === highlight
+      ? pinned
+      : null;
+  const rows =
+    audits === null
+      ? null
+      : pinnedRow !== null &&
+          !audits.some((audit) => audit.audit_id === pinnedRow.audit_id)
+        ? [pinnedRow, ...audits]
+        : audits;
+
+  useEffect(() => {
+    if (highlight === null || rows === null || scrolled.current) {
       return;
     }
     const row = document.getElementById(highlight);
@@ -79,10 +124,10 @@ export default function AuditsPage() {
       row.scrollIntoView({ block: "center" });
       scrolled.current = true;
     }
-  }, [highlight, audits]);
+  }, [highlight, rows]);
 
-  const running = audits?.filter((audit) => audit.status === "running") ?? [];
-  const finished = audits?.filter((audit) => audit.status !== "running") ?? [];
+  const running = rows?.filter((audit) => audit.status === "running") ?? [];
+  const finished = rows?.filter((audit) => audit.status !== "running") ?? [];
   const publicFinished = finished.filter((audit) => !isLocalSite(audit.site));
   const recent = publicFinished.slice(0, 25);
   const fixtureFinished = finished.filter(

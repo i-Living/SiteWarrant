@@ -33,6 +33,7 @@ function SiteLedger({ sites }: { sites: SiteSummary[] }) {
               counts={site.by_severity}
               total={site.findings_total}
               status={site.running > 0 ? "running" : "completed"}
+              coverage={{ measured: site.measured_pages, pages: site.pages }}
             />
             <span className="site-flags">
               {site.running > 0 && (

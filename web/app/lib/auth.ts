@@ -40,7 +40,13 @@ export function safeNextPath(value: unknown): string {
     if (parsed.origin !== "http://placeholder.invalid") {
       return "/";
     }
-    return `${parsed.pathname}${parsed.search}`;
+    const path = `${parsed.pathname}${parsed.search}`;
+    // Normalisation can create a protocol-relative path out of a safe-looking one: `/.//host`
+    // parses to a pathname of `//host`, which a browser reads as another origin.
+    if (path.startsWith("//")) {
+      return "/";
+    }
+    return path;
   } catch {
     return "/";
   }
