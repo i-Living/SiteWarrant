@@ -264,30 +264,253 @@ uv run sitewarrant prompt-check --baseline ../evals/runs/base.json --candidate .
 
 ## Demo
 
-`infra/demo.yml` runs the same code as one command, with the API bound to loopback; the public face
-is a TLS proxy in front of it, because an unauthenticated crawler should not answer on `0.0.0.0`.
+`infra/demo.yml` runs Postgres and the API as one command, with the API bound to loopback; the
+public face is nginx in front of the Next app, which reaches the API over loopback (see
+[Deployment](#deployment)). An unauthenticated crawler should not answer on `0.0.0.0`.
 
 ```bash
 POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
   docker compose -f infra/demo.yml up -d --build
 curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
   -d '{"url": "https://example.com"}'
-# {"audit_id": "...", "findings_total": 3, "by_severity": {...}} — the audit runs inside the request
+# {"audit_id": "...", "status": "running"} — the audit continues as a task in the API process
+curl -s http://127.0.0.1:8000/audits/<audit_id>                 # poll until "status": "completed"
 curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
 ```
 
-The interface is one report page: run `bun run dev` from `web/` with `SITEWARRANT_API` set (default
-`http://127.0.0.1:8000`) and open `/?audit=<audit id>`. A site list, a progress page and a `202` answer
-arrive with the queue, and the plan says so rather than showing them here.
+The Next.js interface reads the same endpoints through a server-side rewrite: `/` groups the audited
+pages by host, `/sites/<host>` lists that host's pages with their latest results, `/audits` polls the
+current and recent runs, `/audits/new` starts one. Set `SITEWARRANT_API` (default
+`http://127.0.0.1:8000`) and run `bun run dev` from `web/`.
+
+The web app is closed: every route except `/login` needs a session. Set
+`SITEWARRANT_AUTH_LOGIN` and `SITEWARRANT_AUTH_PASSWORD` (the operator credentials) and
+`SITEWARRANT_AUTH_SECRET` (32+ random characters, signs the cookie) in `web/.env.local` or the
+environment; `/api/*` answers `401` without a valid session, and the API itself binds loopback, so the
+Next app is the only entry point. Public report links will live under `/share/<token>` and will be an
+explicit exception in `web/middleware.ts` — never a blanket path.
 
 Deployment on the existing VPS is the decided route (PLAN §17, decision 3а) and is not done: it needs
 the owner's domain and DNS. Until then `infra/demo.yml` is how the stack is checked, bound to loopback.
+
+## Deployment
+
+The target shape has one public entry point:
+
+```
+client ──TLS──▶ nginx :443 ──▶ Next :3000 (127.0.0.1) ──▶ FastAPI :8000 (127.0.0.1)
+```
+
+Only nginx binds a public interface. Every path, including `/api/*`, goes to the Next server: its
+middleware verifies the session cookie and the server-side rewrite reaches the API over loopback.
+Proxying `/api/*` straight to `:8000` would publish the auditor without a login; do not add such a
+location.
+
+### Processes and environment
+
+Run the web app from `web/` and the API from `api/` (the artifacts directory defaults to the relative
+`artifacts`, so the API must start in `api/`):
+
+```bash
+cd web
+bun install --frozen-lockfile
+bun run build
+bun run start -- -H 127.0.0.1 -p 3000
+```
+
+```bash
+cd api
+uv sync --frozen
+uv run playwright install --with-deps chromium   # the browser every audit drives
+uv run alembic upgrade head
+uv run sitewarrant index-rules
+uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8000
+```
+
+`uv sync` installs the Playwright Python package, not the browser binary: run
+`playwright install --with-deps chromium` once per host, as the same account that runs the API,
+or every audit fails when it tries to launch a browser that is not there.
+
+`infra/demo.yml` is the container path for Postgres and the API; it already publishes `8000` on
+loopback. Keep both services supervised (systemd, compose, or a process manager); the loopback bind
+is the invariant that matters here. The API reads its database, LLM and artifact settings from the
+same `SITEWARRANT_*` variables `infra/demo.yml` lists; when it runs on the host instead of in the
+container, export them before `alembic` and `uvicorn`.
+
+The web service needs:
+
+```dotenv
+SITEWARRANT_API=http://127.0.0.1:8000
+SITEWARRANT_AUTH_LOGIN=...
+SITEWARRANT_AUTH_PASSWORD=...   # long random, not the demo value
+SITEWARRANT_AUTH_SECRET=...     # openssl rand -hex 32
+```
+
+`SITEWARRANT_API` is baked into the Next rewrite, so set it before `bun run build`; changing it needs
+a rebuild. Set the same `SITEWARRANT_AUTH_*` values for the build and the running server: the Edge
+middleware and the login route must agree on the secret, and a build-time/runtime mismatch makes every
+freshly signed cookie fail verification. Rotating `SITEWARRANT_AUTH_SECRET` logs every session out.
+
+The demo password is a LAN convenience, not a deployment secret. Pick a long random one and keep the
+env file out of git (`web/.env.local` is ignored; a systemd `EnvironmentFile` works too).
+
+### nginx
+
+Add the auth log format to the `http` context, for example
+`/etc/nginx/conf.d/sitewarrant-log-format.conf`:
+
+```nginx
+log_format sitewarrant_auth '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" "$sent_http_location"';
+```
+
+`/etc/nginx/conf.d/sitewarrant.conf`:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+
+server {
+    listen 80;
+    server_name audit.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;      # nginx < 1.25.1; on newer use `http2 on;`
+    server_name audit.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/audit.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/audit.example.com/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location = /auth/login {
+        limit_req zone=login burst=3 nodelay;
+        limit_req_status 429;
+        limit_req_log_level warn;
+        access_log /var/log/nginx/sitewarrant-auth.log sitewarrant_auth;
+
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $server_name;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $server_name;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Issue the certificate with `certbot --nginx -d audit.example.com`; the block assumes the files exist.
+On Debian/Ubuntu the packages are `nginx`, `certbot`, `python3-certbot-nginx` and `fail2ban`.
+`limit_req` is per client address (`rate=5r/m`, `burst=3`): a person signing in is unaffected, while a
+script is answered `429` after a few immediate attempts. The login and logout handlers answer relative
+`Location` headers; the middleware builds its redirect from `Host` and `X-Forwarded-Proto`, so the
+internal `127.0.0.1:3000` origin never leaks through the proxy. `proxy_set_header Host $server_name`
+pins that value to the configured name, so a spoofed client `Host` cannot turn the login redirect into
+an open redirect.
+
+If a CDN or another proxy sits in front of nginx, configure `set_real_ip_from` and `real_ip_header`
+first. Without it `limit_req` counts the CDN address and fail2ban would ban the CDN, not the attacker.
+Keep the original scheme in `X-Forwarded-Proto`; the middleware uses it for the login redirect.
+
+Open only SSH and HTTP(S) on the VPS, and verify the app ports stayed on loopback:
+
+```bash
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw enable
+ss -ltnp | grep -E ':3000|:8000'    # both must say 127.0.0.1
+```
+
+Do not change the compose port to `"8000:8000"`; `"127.0.0.1:8000:8000"` is what keeps the crawler
+private.
+
+### Brute-force protection with fail2ban
+
+`limit_req` slows an attacker down; fail2ban removes the address for a while. The login route answers
+`303 /login?error=1&next=…` on a failed pair and `303 /` on success, so the access log records which
+one happened in `$sent_http_location`.
+
+`/etc/fail2ban/filter.d/sitewarrant-login.conf`:
+
+```ini
+[Definition]
+failregex = ^<HOST> - \S+ \[[^\]]+\] "POST /auth/login(?:\?[^ ]*)? HTTP/[0-9.]+" 303 \d+ "[^"]*" "[^"]*" "/login\?error=1[^"]*"$
+ignoreregex =
+```
+
+`/etc/fail2ban/jail.d/sitewarrant-login.local`:
+
+```ini
+[sitewarrant-login]
+enabled = true
+port = http,https
+filter = sitewarrant-login
+logpath = /var/log/nginx/sitewarrant-auth.log
+maxretry = 10
+findtime = 10m
+bantime = 1h
+ignoreip = 127.0.0.1/8 ::1
+```
+
+Test the filter against the real log before enabling the jail:
+
+```bash
+fail2ban-regex /var/log/nginx/sitewarrant-auth.log /etc/fail2ban/filter.d/sitewarrant-login.conf
+systemctl restart fail2ban
+fail2ban-client status sitewarrant-login
+```
+
+`limit_req` answers `429` without a URL to proxy, so its log line carries no `/login?error=1`
+`Location`; the filter counts credential failures, not rate-limit hits. fail2ban is reactive and an
+attacker can rotate addresses; keep the password long and random, and keep the per-IP limit in place.
+The app itself has no in-process limiter — nginx is the control. If the web server is ever run without
+nginx, add one in `/auth/login`; never publish `:3000`.
+
+### Verify on the VPS
+
+```bash
+curl -sI https://audit.example.com/ | grep -i '^location'                    # /login?next=%2F
+curl -s -o /dev/null -w '%{http_code}\n' https://audit.example.com/api/audits # 401
+JAR=$(mktemp); PWFILE=$(mktemp)
+printf '%s' "$SITEWARRANT_AUTH_PASSWORD" > "$PWFILE"
+curl -s -c "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}\n' -X POST \
+  https://audit.example.com/auth/login \
+  --data-urlencode "login=$SITEWARRANT_AUTH_LOGIN" \
+  --data-urlencode "password@$PWFILE" --data-urlencode 'next=/'               # 303 /
+curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' https://audit.example.com/ # 200
+rm -f "$JAR" "$PWFILE"
+```
+
+To see the limiter, send several wrong-password attempts in one burst and expect `429`:
+
+```bash
+for i in $(seq 1 6); do
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST https://audit.example.com/auth/login \
+    --data-urlencode 'login=x' --data-urlencode 'password=x'
+done
+```
+
+Public report sharing is not implemented. When `/share/<token>` lands it must be an explicit entry
+in `PUBLIC_PATHS` in `web/middleware.ts`, read-only, and rate-limited in nginx; the API stays on
+loopback. This section is the target runbook, not a record of a deployed host: the stack has not run
+on a public URL yet (PLAN §17.3).
 
 ## Layout
 
 ```
 api/          FastAPI service, crawler, audit tools, agents, evals, MCP server
-web/          Next.js interface: audited sites, audit form, progress, report
+web/          Next.js interface: sites, pages, audit form, progress, report
 benchmark/    site manifest, gold labels, CI fixtures
 rules/        WCAG 2.2, SEO and HTTP security rule corpus
 infra/        docker-compose, images, egress limits

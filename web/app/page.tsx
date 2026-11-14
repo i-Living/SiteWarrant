@@ -1,81 +1,60 @@
-type Evidence = {
-  kind: string;
-  observation_id: string;
-  excerpt: string | null;
-};
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { SeverityLine } from "./components/severity-line";
+import { listSites, type SiteSummary } from "./lib/audits";
+import { formatDate, isLocalHost } from "./lib/format";
 
-type Finding = {
-  id: string;
-  rule_id: string;
-  category: string;
-  severity: string;
-  title: string;
-  summary: string;
-  suggested_fix: string;
-  priority: number;
-  root_cause_id: string | null;
-  evidence: Evidence[];
-};
-
-type RootCause = {
-  id: string;
-  kind: string;
-  anchor: string;
-  label: string;
-  categories: string[];
-  summary: string;
-  rationale: string;
-  severity: string;
-  priority: number;
-  finding_ids: string[];
-};
-
-type Report = {
-  audit_id: string;
-  site: string;
-  agent_version: string;
-  status: string;
-  summary: {
-    findings_total: number;
-    by_severity: Record<string, number>;
-    scores: Record<string, number>;
-    root_causes: number;
-    duplicates_removed: number;
-    duplicate_rate: number;
-  };
-  findings: Finding[];
-  root_causes: RootCause[];
-};
-
-const apiBase = process.env.SITEWARRANT_API ?? "http://127.0.0.1:8000";
-
-async function loadReport(auditId: string): Promise<Report | null> {
-  const response = await fetch(`${apiBase}/audits/${auditId}/report`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    return null;
-  }
-  return (await response.json()) as Report;
-}
-
-function FindingItem({ finding }: { finding: Finding }) {
+function SiteLedger({ sites }: { sites: SiteSummary[] }) {
   return (
-    <li data-severity={finding.severity}>
-      <h3>
-        {finding.title} <span className="rule">{finding.rule_id}</span>
-      </h3>
-      <p className="why">
-        {finding.category} · {finding.severity} · priority {finding.priority}
-      </p>
-      <p>{finding.summary}</p>
-      <p className="fix">{finding.suggested_fix}</p>
-      {finding.evidence.map((item) => (
-        <pre key={`${item.kind}-${item.observation_id}-${item.excerpt ?? ""}`}>
-          {item.excerpt ?? item.kind}
-        </pre>
+    <ol className="ledger">
+      {sites.map((site) => (
+        <li key={site.host} className="ledger-row">
+          <Link
+            href={`/sites/${encodeURIComponent(site.host)}`}
+            className="row-grid row-link"
+            title={site.host}
+          >
+            <span className="row-main">
+              <span className="site-name">
+                <span className="site-host">
+                  {site.host}
+                  {isLocalHost(site.host) && (
+                    <span className="site-tag">local</span>
+                  )}
+                </span>
+              </span>
+              <span className="row-meta">
+                {site.pages} {site.pages === 1 ? "page" : "pages"} · {site.runs}{" "}
+                {site.runs === 1 ? "run" : "runs"} · last{" "}
+                {formatDate(site.last_activity)}
+              </span>
+            </span>
+            <SeverityLine
+              counts={site.by_severity}
+              total={site.findings_total}
+              status={site.running > 0 ? "running" : "completed"}
+              coverage={{ measured: site.measured_pages, pages: site.pages }}
+            />
+            <span className="site-flags">
+              {site.running > 0 && (
+                <span className="flag" data-state="running">
+                  <span className="status-dot" aria-hidden="true" />
+                  {site.running} running
+                </span>
+              )}
+              {site.failed > 0 && (
+                <span className="flag" data-state="failed">
+                  {site.failed} failed
+                </span>
+              )}
+            </span>
+            <span className="row-arrow" aria-hidden="true">
+              →
+            </span>
+          </Link>
+        </li>
       ))}
-    </li>
+    </ol>
   );
 }
 
@@ -85,89 +64,89 @@ export default async function Page({
   searchParams: Promise<{ audit?: string }>;
 }) {
   const { audit } = await searchParams;
-
-  if (!audit) {
-    return (
-      <main>
-        <h1>SiteWarrant</h1>
-        <p>
-          No audit selected. Run <code>sitewarrant audit &lt;url&gt;</code> and
-          open <code>/?audit=&lt;audit id&gt;</code>.
-        </p>
-      </main>
-    );
+  // The report used to live on the home page; old links keep working.
+  if (audit) {
+    redirect(`/audits/${audit}`);
   }
 
-  const report = await loadReport(audit);
-  if (report === null) {
-    return (
-      <main>
-        <h1>Report unavailable</h1>
-        <p>
-          Audit <code>{audit}</code> has no stored report.
-        </p>
-      </main>
-    );
+  let sites: SiteSummary[] = [];
+  let error: string | null = null;
+  try {
+    sites = await listSites();
+  } catch (cause) {
+    error =
+      cause instanceof Error
+        ? cause.message
+        : "The audit API could not be reached.";
   }
 
-  const byId = new Map(report.findings.map((finding) => [finding.id, finding]));
-  const grouped = new Set(
-    report.root_causes.flatMap((cause) => cause.finding_ids),
-  );
-  const ungrouped = report.findings
-    .filter((finding) => !grouped.has(finding.id))
-    .sort((left, right) => right.priority - left.priority);
+  const publicSites = sites.filter((site) => !isLocalHost(site.host));
+  const localSites = sites.filter((site) => isLocalHost(site.host));
+  const running = sites.reduce((total, site) => total + site.running, 0);
 
   return (
     <main>
-      <h1>{report.site}</h1>
-      <p className="meta">
-        {report.summary.findings_total} finding(s) ·{" "}
-        {report.summary.root_causes} root cause(s) · duplicate rate{" "}
-        {report.summary.duplicate_rate} · agent {report.agent_version}
-      </p>
-      <ul className="severities">
-        {Object.entries(report.summary.by_severity).map(([severity, count]) => (
-          <li key={severity}>
-            {severity}: {count}
-          </li>
-        ))}
-      </ul>
+      <header className="page-head">
+        <p className="eyebrow">Audit ledger</p>
+        <h1>Sites</h1>
+        <p className="lede">
+          Every audited host, with its latest result per page. Open a host to
+          see its pages.
+        </p>
+      </header>
 
-      {report.root_causes.map((cause) => (
-        <section
-          key={cause.id}
-          className="cause"
-          data-severity={cause.severity}
-        >
-          <h2>
-            {cause.label} <span className="rule">{cause.anchor}</span>{" "}
-            <span className="rule">{cause.categories.join(" + ")}</span>
-          </h2>
-          <p>{cause.summary}</p>
-          <p className="why">
-            priority {cause.priority} · {cause.rationale}
+      {running > 0 && (
+        <Link href="/audits" className="live-bar">
+          <span className="pulse" aria-hidden="true" />
+          <span>
+            {running === 1
+              ? "One page audit is running now"
+              : `${running} page audits are running now`}
+          </span>
+          <span className="live-bar-go">Follow →</span>
+        </Link>
+      )}
+
+      {error !== null && (
+        <div className="notice">
+          <p>{error}</p>
+          <p className="note">
+            Start the API with <code>uv run sitewarrant-api</code>, or point{" "}
+            <code>SITEWARRANT_API</code> at it.
           </p>
-          <ol className="findings">
-            {cause.finding_ids.map((id) => {
-              const finding = byId.get(id);
-              return finding ? (
-                <FindingItem key={id} finding={finding} />
-              ) : null;
-            })}
-          </ol>
-        </section>
-      ))}
+        </div>
+      )}
 
-      {ungrouped.length > 0 && (
-        <section className="standalone">
-          <h2>Findings without a shared cause</h2>
-          <ol className="findings">
-            {ungrouped.map((finding) => (
-              <FindingItem key={finding.id} finding={finding} />
-            ))}
-          </ol>
+      {error === null && sites.length === 0 && (
+        <div className="empty-state">
+          <p>No host has been audited yet.</p>
+          <Link className="button-link" href="/audits/new">
+            Run the first audit
+          </Link>
+        </div>
+      )}
+
+      {publicSites.length > 0 && (
+        <section>
+          <h2 className="section-label">
+            <span>Sites</span>
+            <span className="section-count">{publicSites.length}</span>
+          </h2>
+          <SiteLedger sites={publicSites} />
         </section>
+      )}
+
+      {localSites.length > 0 && (
+        <details className="ledger-group" open={publicSites.length === 0}>
+          <summary>
+            <span>Local hosts</span>
+            <span className="group-count">{localSites.length}</span>
+          </summary>
+          <p className="group-note">
+            Fixture and benchmark pages served from this machine.
+          </p>
+          <SiteLedger sites={localSites} />
+        </details>
       )}
     </main>
   );

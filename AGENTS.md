@@ -12,7 +12,8 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
-is a Next.js interface with one page: the stored report for `/?audit=<id>`. `infra/` brings up
+is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
+recent runs, a run form, the stored report, and a login gate in `web/middleware.ts`. `infra/` brings up
 Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
 loopback.
 
@@ -47,6 +48,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
 - **A prompt change is accepted on precision, not on enthusiasm.** `app/eval/gate.py` gates precision
   and the false-positive rate, refuses to compare different corpora, and defaults its tolerance to
   zero.
+- **Every route is closed except the login.** `web/middleware.ts` verifies an HMAC session cookie;
+  only `/login` and `/auth/login` are public, and `/api/*` answers `401` without a session. The API
+  binds loopback, so the Next app is the only entry point. A future share link is an explicit
+  exception in the middleware, never a blanket path.
 
 - **A benchmark number is only as good as its denominator.** `app/eval/metrics.py` keeps counts next
   to ratios, and the run file stores the label set it was measured against, so a reader can redo the
@@ -184,7 +189,8 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
                    and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
-web/app/           Next.js interface: sites, site pages, audit form, current audits, report
+web/app/           Next.js interface: sites, site pages, audit form, current audits, report, login
+web/middleware.ts  session gate: every route but /login and /auth/login needs a signed cookie
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
 benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests
@@ -196,8 +202,10 @@ scripts/           report_screenshot.py — the CI job that captures the report 
 docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-There is no `api/app/worker/`: an audit runs inside the API request and holds it until the page is
-done, which is the documented residual — fine for a demo, wrong for a crawl of 50 pages.
+There is no `api/app/worker/`: `POST /audits` answers `202` with an id and runs the audit in a task
+inside the API process, so the row is written a moment after the answer — a client polling that id
+can see one `404` first — and a restart loses the task and leaves the row `running`. That is the
+documented residual: fine for a demo, wrong for a crawl of 50 pages.
 
 ## Code conventions
 
@@ -445,6 +453,20 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 - **The initial migration refuses a silent downgrade.** It drops every table, so it raises unless
   `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` is set. That is deliberate; do not remove the guard to
   make a reset script shorter.
+- **The report screenshot job signs in; it never opens the app.** `scripts/report_screenshot.py` reads
+  `SITEWARRANT_AUTH_LOGIN` and `SITEWARRANT_AUTH_PASSWORD` and submits the login form when the
+  middleware redirects the capture to `/login`; the CI job mints a throwaway operator per run. A red
+  report job is a broken gate or a broken page, not a reason to turn the session off for the artifact.
+- **The screenshot job stops its own servers before the step ends.** `uv run` holds the uv cache
+  lock while its child lives, and the `setup-uv` action prunes that cache in its post step: a
+  leftover `sitewarrant-api` turns a successful capture into a red job five minutes later ("Cache
+  is currently in-use, waiting for other uv processes to finish"), with every step of the job marked
+  green. Each server is started under `setsid` and the step's `trap` kills its process group, waiting
+  up to five seconds and escalating to `SIGKILL` if the group ignores `SIGTERM`; the trap keeps the
+  step's own exit status and warns instead of dying quietly — verified locally: the success path,
+  a failing capture (status 7 preserved), a server that had already stopped, and a server that
+  ignores `SIGTERM` all end with no processes left, and `prune` waits while a `uv run` lives and
+  returns immediately once the group is gone.
 
 ## Where decisions live
 

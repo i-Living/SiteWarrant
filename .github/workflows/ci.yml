@@ -131,22 +131,75 @@ jobs:
           fi
           echo "audit exit $code (0 clean, 1 blocker proven — the fixture carries two)"
       # One step: a background process does not outlive the shell that started it, so serving and
-      # capturing happen together.
+      # capturing happen together. The web app is closed by default, so this run mints its own
+      # operator and the capture signs in with it: the screenshot has to show the product, and the
+      # gate is part of the product — it is not turned off for the artifact.
       - name: Serve the API and capture the report page
         run: |
+          export SITEWARRANT_AUTH_LOGIN=screenshot
+          export SITEWARRANT_AUTH_PASSWORD="$(openssl rand -hex 16)"
+          export SITEWARRANT_AUTH_SECRET="$(openssl rand -hex 32)"
           (cd ../web && bun install --frozen-lockfile \
             && SITEWARRANT_API=http://127.0.0.1:8000 bun run build)
-          (cd ../web && SITEWARRANT_API=http://127.0.0.1:8000 bun run start -- -H 127.0.0.1 -p 3000 &)
-          uv run sitewarrant-api &
+          # Each server gets its own process group, so stopping it stops what it spawned: a
+          # surviving `uv run` keeps the cache lock ("Cache is currently in-use, waiting for
+          # other uv processes to finish"), and the setup-uv post step then fails pruning the
+          # cache five minutes after a capture that worked.
+          setsid bash -c 'cd ../web && exec env SITEWARRANT_API=http://127.0.0.1:8000 bun run start -- -H 127.0.0.1 -p 3000' &
+          web_pid=$!
+          setsid uv run sitewarrant-api &
+          api_pid=$!
+          stop_servers() {
+            status=$?
+            set +e
+            for pid in "$web_pid" "$api_pid"; do
+              if kill -TERM -- "-$pid" 2>/dev/null; then
+                echo "signalled process group $pid"
+              elif ps -p "$pid" > /dev/null 2>&1; then
+                echo "::warning::could not signal process group $pid"
+              else
+                echo "process group $pid had already stopped"
+              fi
+            done
+            for pid in "$web_pid" "$api_pid"; do
+              for _ in $(seq 1 10); do
+                kill -0 -- "-$pid" 2>/dev/null || break
+                sleep 0.5
+              done
+              if kill -0 -- "-$pid" 2>/dev/null; then
+                echo "::warning::process group $pid ignored SIGTERM, sending SIGKILL"
+                if ! kill -KILL -- "-$pid" 2>/dev/null; then
+                  echo "::error::could not kill process group $pid"
+                fi
+              fi
+              for _ in $(seq 1 10); do
+                kill -0 -- "-$pid" 2>/dev/null || break
+                sleep 0.5
+              done
+              if kill -0 -- "-$pid" 2>/dev/null; then
+                # Waiting here risks the job timeout, and the capture already happened.
+                echo "::error::process group $pid is still alive after SIGKILL"
+                continue
+              fi
+              code=0
+              wait "$pid" || code=$?
+              case "$code" in
+                0 | 137 | 143 | 127) ;;
+                *) echo "::warning::process group $pid exited with $code during cleanup" ;;
+              esac
+            done
+            exit "$status"
+          }
+          trap stop_servers EXIT
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8000/health > /dev/null \
-              && curl -fsS -o /dev/null http://127.0.0.1:3000/; then
+              && curl -fsS -o /dev/null http://127.0.0.1:3000/login; then
               break
             fi
             sleep 2
           done
           curl -fsS http://127.0.0.1:8000/health > /dev/null
-          curl -fsS -o /dev/null http://127.0.0.1:3000/
+          curl -fsS -o /dev/null http://127.0.0.1:3000/login
           audit=$(python3 -c "import json;print(json.load(open('report.json'))['audit_id'])")
           uv run python ../scripts/report_screenshot.py \
             --url "http://127.0.0.1:3000/?audit=$audit" --out ../report-page.png
