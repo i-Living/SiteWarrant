@@ -3,7 +3,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import (
@@ -26,8 +27,12 @@ async def create_audit(
     site_url: str,
     agent_version: str,
     config: dict[str, Any],
+    audit_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     audit = Audit(
+        # A caller that already answered with the id (the HTTP API) hands it in, so the
+        # progress page can follow an audit from the first poll instead of guessing.
+        id=audit_id or uuid.uuid4(),
         site_url=site_url,
         status="running",
         agent_version=agent_version,
@@ -161,6 +166,34 @@ async def finish_audit(
 async def get_audit(session: AsyncSession, audit_id: uuid.UUID) -> Audit | None:
     result = await session.execute(select(Audit).where(Audit.id == audit_id))
     return result.scalar_one_or_none()
+
+
+async def list_audits(session: AsyncSession, *, limit: int) -> Sequence[Audit]:
+    """Newest first: the progress page reads the same order the list is written in."""
+    result = await session.execute(
+        select(Audit).order_by(Audit.started_at.desc(), Audit.id.desc()).limit(limit)
+    )
+    return result.scalars().all()
+
+
+async def latest_audit_per_url(session: AsyncSession) -> Sequence[Audit]:
+    """One row per exact URL: the newest audit of it.
+
+    The site views merge URL variants (trailing slash, query) in Python, so the number of
+    rows they transfer follows pages, not runs.
+    """
+    result = await session.execute(
+        select(Audit)
+        .ext(distinct_on(Audit.site_url))
+        .order_by(Audit.site_url, Audit.started_at.desc(), Audit.id.desc())
+    )
+    return result.scalars().all()
+
+
+async def audit_counts_per_url(session: AsyncSession) -> Sequence[tuple[str, int]]:
+    """Runs per exact URL, for the site rollups."""
+    result = await session.execute(select(Audit.site_url, func.count()).group_by(Audit.site_url))
+    return [(url, runs) for url, runs in result.all()]
 
 
 async def save_llm_calls(

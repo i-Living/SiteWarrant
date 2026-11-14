@@ -44,6 +44,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
 - **A prompt change is accepted on precision, not on enthusiasm.** `app/eval/gate.py` gates precision
   and the false-positive rate, refuses to compare different corpora, and defaults its tolerance to
   zero.
+- **Every route is closed except the login.** `web/middleware.ts` verifies an HMAC session cookie;
+  only `/login` and `/auth/login` are public, and `/api/*` answers `401` without a session. The API
+  binds loopback, so the Next app is the only entry point. A future share link is an explicit
+  exception in the middleware, never a blanket path.
 
 - **A benchmark number is only as good as its denominator.** `app/eval/metrics.py` keeps counts next
   to ratios, and the run file stores the label set it was measured against, so a reader can redo the
@@ -175,7 +179,8 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
                    and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
-web/app/           Next.js interface: sites, site pages, audit form, current audits, report
+web/app/           Next.js interface: sites, site pages, audit form, current audits, report, login
+web/middleware.ts  session gate: every route but /login and /auth/login needs a signed cookie
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
 benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests

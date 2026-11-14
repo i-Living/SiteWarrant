@@ -359,6 +359,7 @@ async def run_audit(
     ignore_robots: bool = False,
     agents: Sequence[str] = (),
     store_artifacts: bool | None = None,
+    audit_id: uuid.UUID | None = None,
 ) -> Report:
     """Audit one page and hand back a report whose spans cover the whole run."""
     settings = get_settings()
@@ -371,6 +372,7 @@ async def run_audit(
             agents=agents,
             store_artifacts=store_artifacts,
             tracer=trace,
+            audit_id=audit_id,
         )
     # The span tree is only complete once the audit span has closed, so the file and the summary
     # are written here rather than inside the page.
@@ -395,6 +397,7 @@ async def audit_page(
     agents: Sequence[str] = (),
     store_artifacts: bool | None = None,
     tracer: Tracer | None = None,
+    audit_id: uuid.UUID | None = None,
 ) -> Report:
     """Audit one page at every configured viewport: facts first, findings from facts."""
     settings = get_settings()
@@ -419,6 +422,7 @@ async def audit_page(
     async with session_scope() as session:
         audit_id = await repo.create_audit(
             session,
+            audit_id=audit_id,
             site_url=url,
             agent_version=agent_version,
             config={
