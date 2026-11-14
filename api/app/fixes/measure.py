@@ -97,7 +97,9 @@ def verify_sources(site: SiteLabels, site_dir: Path) -> None:
             # Without the served source there is nothing to measure, and skipping the page would
             # quietly shrink the denominator.
             raise DatasetError(f"{site.slug}/{page}: no source file at {source}")
-        digest = page_digest(source.read_text(encoding="utf-8"))
+        # Bytes, not text mode: `read_text` translates CRLF to LF, so a page whose line endings
+        # changed would hash to the old digest and pass a check that is about the served bytes.
+        digest = page_digest(source.read_bytes().decode("utf-8"))
         expected = site.page_digests[page]
         if digest != expected:
             raise DatasetError(

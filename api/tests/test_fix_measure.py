@@ -60,6 +60,17 @@ def test_sources_have_to_be_the_pages_the_manifest_digests(tmp_path: Path) -> No
         verify_sources(known, tmp_path)
 
 
+def test_a_page_whose_line_endings_changed_is_not_the_page_that_was_digested(
+    tmp_path: Path,
+) -> None:
+    """Text mode would read CRLF as LF and pass: the served bytes are what the digest names."""
+    known = site(tmp_path, "<html>\n<body>\n</body>\n</html>\n")
+    verify_sources(known, tmp_path)
+    (tmp_path / "index.html").write_bytes(b"<html>\r\n<body>\r\n</body>\r\n</html>\r\n")
+    with pytest.raises(DatasetError, match="not the page the manifest digests"):
+        verify_sources(known, tmp_path)
+
+
 def test_a_missing_page_is_refused_instead_of_shrinking_the_denominator(tmp_path: Path) -> None:
     known = site(tmp_path, "<html></html>")
     (tmp_path / "index.html").unlink()
