@@ -168,7 +168,18 @@ jobs:
               done
               if kill -0 -- "-$pid" 2>/dev/null; then
                 echo "::warning::process group $pid ignored SIGTERM, sending SIGKILL"
-                kill -KILL -- "-$pid" 2>/dev/null
+                if ! kill -KILL -- "-$pid" 2>/dev/null; then
+                  echo "::error::could not kill process group $pid"
+                fi
+              fi
+              for _ in $(seq 1 10); do
+                kill -0 -- "-$pid" 2>/dev/null || break
+                sleep 0.5
+              done
+              if kill -0 -- "-$pid" 2>/dev/null; then
+                # Waiting here risks the job timeout, and the capture already happened.
+                echo "::error::process group $pid is still alive after SIGKILL"
+                continue
               fi
               code=0
               wait "$pid" || code=$?

@@ -81,6 +81,7 @@ export default function AuditsPage() {
     }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let misses = 0;
     const refresh = async () => {
       try {
         const response = await fetch(
@@ -89,17 +90,28 @@ export default function AuditsPage() {
             cache: "no-store",
           },
         );
-        if (cancelled || response.status === 404) {
+        if (cancelled) {
           return;
         }
-        if (response.ok) {
-          const row = (await response.json()) as AuditSummary;
-          if (cancelled) {
+        if (response.status === 404) {
+          // `POST /audits` answers 202 before its row exists, so the first poll of a fresh
+          // submission can miss it. Keep trying for about half a minute; an id that never
+          // resolves is not worth polling forever.
+          misses += 1;
+          if (misses > 15) {
             return;
           }
-          setPinned(row);
-          if (row.status !== "running") {
-            return;
+        } else {
+          misses = 0;
+          if (response.ok) {
+            const row = (await response.json()) as AuditSummary;
+            if (cancelled) {
+              return;
+            }
+            setPinned(row);
+            if (row.status !== "running") {
+              return;
+            }
           }
         }
       } catch {
