@@ -4,6 +4,7 @@ Every function here takes the audit id explicitly, so a tool cannot reach anothe
 facts even if the model asks for an id it saw somewhere else.
 """
 
+import base64
 import uuid
 from typing import Any
 
@@ -15,6 +16,10 @@ from app.rules import corpus
 
 MAX_ROWS = 50
 SUMMARY_CHARS = 240
+# A full-page PNG above this is refused rather than silently shrunk: a downscale would change
+# what the model sees, and the refusal is a fact the report can carry.
+MAX_IMAGE_BYTES = 4_000_000
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def _short(payload: dict[str, Any], limit: int = SUMMARY_CHARS) -> str:
@@ -140,7 +145,10 @@ async def channel_report(
 async def screenshot_artifact(
     audit_id: uuid.UUID, *, viewport: str | None = None
 ) -> list[dict[str, Any]]:
-    """Where the captures are, for a later vision pass. No image bytes cross this tool."""
+    """Where the captures are, and whether this run stored them.
+
+    This lists keys only: `page_image` is the tool that returns the bytes for one viewport.
+    """
     async with session_scope() as session:
         query = (
             select(Snapshot, Page)
@@ -161,6 +169,81 @@ async def screenshot_artifact(
             }
             for snapshot, page in rows.all()
         ]
+
+
+async def page_image(
+    audit_id: uuid.UUID, *, viewport: str, page_key: str | None = None
+) -> dict[str, Any]:
+    """The stored full-page screenshot of one viewport, as bytes a model can look at.
+
+    Decision 5a in docs/PLAN.md section 17: one capture per viewport, three viewports. The
+    image is evidence of appearance, not a measurement — every number in a finding still has
+    to come from an observation — so the answer carries the capture's own dimensions beside
+    the bytes and refuses, rather than guesses, when there is nothing to show.
+    """
+    async with session_scope() as session:
+        query = (
+            select(Snapshot, Page)
+            .join(Page, Snapshot.page_id == Page.id)
+            .where(Page.audit_id == audit_id, Snapshot.viewport == viewport)
+            .order_by(Page.page_key)
+        )
+        if page_key:
+            query = query.where(Page.page_key == page_key)
+        found = (await session.execute(query.limit(1))).first()
+        if found is None:
+            return {"error": f"this audit has no capture at {viewport}"}
+        snapshot, page = found
+        facts = (
+            (
+                await session.execute(
+                    select(Observation).where(
+                        Observation.page_id == page.id,
+                        Observation.tool == "screenshot",
+                        Observation.viewport == viewport,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    if not snapshot.screenshot_key:
+        return {
+            "error": (
+                "this run stored no screenshot bytes (artifacts were off), "
+                "so there is no image to look at"
+            )
+        }
+    from app.audit import artifact_path
+
+    try:
+        path = artifact_path(snapshot.screenshot_key)
+    except ValueError:
+        return {"error": "the stored screenshot key escapes the artifacts directory"}
+    if not path.exists():
+        return {"error": f"the screenshot file is missing on disk: {snapshot.screenshot_key}"}
+    data = path.read_bytes()
+    if not data.startswith(PNG_SIGNATURE):
+        return {"error": "the stored screenshot is not a PNG"}
+    if len(data) > MAX_IMAGE_BYTES:
+        return {
+            "error": (
+                f"the screenshot is {len(data)} bytes, above the {MAX_IMAGE_BYTES}-byte limit "
+                f"for one request; visual review is skipped at {viewport}"
+            )
+        }
+    payload = facts.payload if facts is not None else {}
+    return {
+        "page_key": page.page_key,
+        "viewport": snapshot.viewport,
+        "mime_type": "image/png",
+        "data_b64": base64.b64encode(data).decode("ascii"),
+        "bytes": len(data),
+        "width": payload.get("width"),
+        "height": payload.get("height"),
+        "clipped": bool(payload.get("clipped")),
+    }
 
 
 async def rules_lookup(query: str, *, limit: int = 4) -> list[dict[str, Any]]:

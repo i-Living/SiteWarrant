@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from app.agents.llm import LlmClient, LlmReply
+from app.agents.models import ToolResult
 from app.agents.runner import ToolProvider
 from app.pricing import Price
 from app.telemetry import Tracer
@@ -85,8 +86,9 @@ class TracedTools:
     async def schemas(self, names: Sequence[str]) -> list[dict[str, Any]]:
         return await self._inner.schemas(names)
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         with self._tracer.span("tool.call", agent=self._agent, tool=name) as span:
             result = await self._inner.call(name, arguments)
-            span.attributes["result_chars"] = len(result)
+            span.attributes["result_chars"] = len(result.text)
+            span.attributes["result_images"] = len(result.images)
         return result

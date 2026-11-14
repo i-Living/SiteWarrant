@@ -15,6 +15,8 @@ from app.agents.models import (
     LlmCallStat,
     ObservationFacts,
     Rejection,
+    ToolImage,
+    ToolResult,
 )
 from app.agents.prompts import system_prompt, user_prompt
 from app.agents.validator import finding_identity, validate_all
@@ -91,11 +93,15 @@ SUBMIT_FINDINGS_TOOL: dict[str, Any] = {
 
 
 class ToolProvider(Protocol):
-    """The MCP surface the loop needs: schemas to offer, and a call that returns text."""
+    """The MCP surface the loop needs: schemas to offer, and a call that returns facts.
+
+    A call returns text, and an image when the tool looked at the page: the loop turns that
+    image into a user turn, because a tool message cannot carry one.
+    """
 
     async def schemas(self, names: Sequence[str]) -> list[dict[str, Any]]: ...
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str: ...
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult: ...
 
 
 class BudgetExceeded(RuntimeError):
@@ -112,6 +118,32 @@ def parse_candidates(raw: Any) -> list[CandidateFinding]:
 
 def tool_message(call_id: str, text: str) -> dict[str, Any]:
     return {"role": "tool", "tool_call_id": call_id, "content": text[:MAX_TOOL_RESULT_CHARS]}
+
+
+def image_message(images: Sequence[ToolImage]) -> dict[str, Any]:
+    """The capture a tool returned, as a user turn: an image needs more than a tool message.
+
+    The caption says what the picture is and what it is not: it shows appearance, and every
+    number in a finding still has to come from an observation the validator can check.
+    """
+    parts: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": (
+                f"Attached by the tool call above: {len(images)} full-page screenshot(s). "
+                "The picture shows how the page looked at that viewport; it is not a "
+                "measurement, so every number you state still has to come from an observation."
+            ),
+        }
+    ]
+    for image in images:
+        parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{image.mime_type};base64,{image.data_b64}"},
+            }
+        )
+    return {"role": "user", "content": parts}
 
 
 def rejection_text(rejected: Sequence[Rejection]) -> str:
@@ -298,15 +330,19 @@ async def run_agent(
                     )
                 try:
                     async with asyncio.timeout(remaining()):
-                        text = await tools.call(call.name, call.arguments)
+                        tool_result = await tools.call(call.name, call.arguments)
                 except TimeoutError:
                     return run(
                         status="timeout",
                         error=f"exceeded {spec.budget.timeout_s:.0f} s in tool {call.name}",
                     )
                 except Exception as error:
-                    text = f"tool {call.name} failed: {error}"
-                messages.append(tool_message(call.id, text))
+                    tool_result = ToolResult(text=f"tool {call.name} failed: {error}")
+                messages.append(tool_message(call.id, tool_result.text))
+                # A capture arrives as a picture the model can look at; the refusal or the
+                # facts arrive as text, and both end up in the transcript.
+                if tool_result.images:
+                    messages.append(image_message(tool_result.images))
                 continue
 
             try:

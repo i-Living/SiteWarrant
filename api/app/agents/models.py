@@ -55,6 +55,24 @@ class Rejection(BaseModel):
     reasons: list[str]
 
 
+class ToolImage(BaseModel):
+    """One image a tool handed back, in the shape the model receives it."""
+
+    mime_type: str
+    data_b64: str
+
+
+class ToolResult(BaseModel):
+    """What a tool call returns: text every time, an image when the tool captured one.
+
+    The text is what the transcript carries; the image becomes a separate user message,
+    because an OpenAI-compatible tool message holds text only.
+    """
+
+    text: str
+    images: list[ToolImage] = Field(default_factory=list)
+
+
 class ValidationResult(BaseModel):
     accepted: list[CandidateFinding]
     rejected: list[Rejection]

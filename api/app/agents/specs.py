@@ -32,13 +32,13 @@ SPECS: dict[str, AgentSpec] = {
         name="ui",
         category="ui",
         prompt_file="ui.md",
-        tools=("channel_report", "list_observations"),
+        tools=("channel_report", "list_observations", "page_image"),
     ),
     "ux": AgentSpec(
         name="ux",
         category="ux",
         prompt_file="ux.md",
-        tools=("list_observations", "channel_report", "get_observation"),
+        tools=("list_observations", "channel_report", "get_observation", "page_image"),
     ),
     "responsive": AgentSpec(
         name="responsive",

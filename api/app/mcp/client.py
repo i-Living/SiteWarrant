@@ -8,8 +8,9 @@ from typing import Any
 
 from mcp.client import Client
 from mcp.client.stdio import StdioServerParameters
-from mcp.types import TextContent
+from mcp.types import ImageContent, TextContent
 
+from app.agents.models import ToolImage, ToolResult
 from app.mcp.server import AUDIT_ENV
 
 API_DIR = Path(__file__).resolve().parents[2]
@@ -80,9 +81,14 @@ class McpToolProvider:
             raise RuntimeError(f"the fact server has no tool(s): {', '.join(missing)}")
         return [openai_schema(available[name]) for name in names]
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         result = await self.client.call_tool(name, arguments)
         texts = [block.text for block in result.content if isinstance(block, TextContent)]
-        if not texts:
-            return "the tool returned no text content"
-        return "\n".join(texts)
+        images = [
+            ToolImage(mime_type=block.mime_type, data_b64=block.data)
+            for block in result.content
+            if isinstance(block, ImageContent)
+        ]
+        if not texts and not images:
+            return ToolResult(text="the tool returned no content")
+        return ToolResult(text="\n".join(texts), images=images)
