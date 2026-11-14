@@ -28,7 +28,7 @@ async def run_eval(
 ) -> EvalRun:
     """One measured pass. Deterministic by construction: the same corpus, the same numbers."""
     dataset = load_dataset(dataset_path)
-    selected = _select_sites(dataset, sites)
+    selected = select_sites(dataset, sites)
     settings = get_settings()
     started_at = datetime.now(UTC)
     clock = time.monotonic()
@@ -140,7 +140,8 @@ def _mismatches(pairs: set[tuple[str, str]], sites: list[SiteLabels]) -> list[Mi
     return found
 
 
-def _select_sites(dataset: Dataset, sites: list[str] | None) -> list[SiteLabels]:
+def select_sites(dataset: Dataset, sites: list[str] | None) -> list[SiteLabels]:
+    """The sites a run measures: all of them, or the subset `--sites` names."""
     if not sites:
         return list(dataset.sites)
     selected: list[SiteLabels] = []

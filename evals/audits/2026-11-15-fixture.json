@@ -1,0 +1,617 @@
+{
+  "audit_id": "02f89ac8-57b5-4e55-8694-59436777f305",
+  "site": "http://localhost:8081/",
+  "agent_version": "sha256:132dea05079fc83d",
+  "status": "completed",
+  "generated_at": "2026-11-14T21:42:32.238285Z",
+  "summary": {
+    "pages_audited": 1,
+    "findings_total": 14,
+    "by_severity": {
+      "blocker": 2,
+      "major": 11,
+      "minor": 1,
+      "info": 0
+    },
+    "scores": {
+      "seo": 82.5,
+      "a11y": 30.0
+    },
+    "duration_ms": 3307,
+    "observations_by_tool": {
+      "http": 8,
+      "dom": 3,
+      "axe": 27,
+      "contrast": 9,
+      "responsive": 3,
+      "occlusion": 3,
+      "performance": 3,
+      "screenshot": 3
+    },
+    "agents": [],
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "llm_calls": 0,
+    "cost_estimate_usd": 0.0,
+    "pricing": {
+      "version": "2026-11-13",
+      "currency": "USD",
+      "basis": "list price for the same model and tokens; the subscription plan bills a flat fee, so this is not an invoice",
+      "unpriced_models": []
+    },
+    "trace_id": "b7e13045465709b52a6d66a62b0f5fca",
+    "spans": {
+      "audit": 1,
+      "page": 3
+    },
+    "root_causes": 1,
+    "duplicates_removed": 0,
+    "duplicate_rate": 0.0
+  },
+  "findings": [
+    {
+      "id": "308a9907-06ba-47c6-9f1b-d76531842962",
+      "rule_id": "SEO-TITLE",
+      "category": "seo",
+      "severity": "major",
+      "title": "Document title is missing or empty",
+      "summary": "The page has no usable <title>. Search results show a generated name instead of the intended one, which costs clicks. Observed: document.title is empty.",
+      "suggested_fix": "Add a unique 30 to 60 character title that names the page and the brand.",
+      "impact": {
+        "conversion": 0,
+        "seo": 3,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 12.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "ede38587-c554-4e62-8d12-91cf9a4c3583",
+          "excerpt": "document.title is empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "cfe156f9-c286-4c8b-8625-a25f3589d572",
+          "excerpt": "document.title is empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "bad1b983-c7e7-43e9-9a3d-9cc86fa2740a",
+          "excerpt": "document.title is empty"
+        }
+      ]
+    },
+    {
+      "id": "49d772a8-2897-4374-8eae-b570f218c957",
+      "rule_id": "SEO-META-DESC",
+      "category": "seo",
+      "severity": "minor",
+      "title": "Meta description is missing",
+      "summary": "Without a meta description, search engines assemble the snippet themselves, which usually reads worse than a written one. Observed: meta[name=description] is missing or empty.",
+      "suggested_fix": "Add a 120 to 160 character meta description that states the page offer.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 0
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 3.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "ede38587-c554-4e62-8d12-91cf9a4c3583",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "cfe156f9-c286-4c8b-8625-a25f3589d572",
+          "excerpt": "meta[name=description] is missing or empty"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "bad1b983-c7e7-43e9-9a3d-9cc86fa2740a",
+          "excerpt": "meta[name=description] is missing or empty"
+        }
+      ]
+    },
+    {
+      "id": "37a2c47e-ab6d-4edc-b574-308c3617c980",
+      "rule_id": "SEO-H1",
+      "category": "seo",
+      "severity": "major",
+      "title": "Page has no h1 heading",
+      "summary": "No first-level heading exists, so the page has no declared main topic for assistive technology or for search engines. Observed: the page has no h1 element.",
+      "suggested_fix": "Promote the page headline to a single <h1>.",
+      "impact": {
+        "conversion": 0,
+        "seo": 2,
+        "ux": 1
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "dom",
+          "observation_id": "ede38587-c554-4e62-8d12-91cf9a4c3583",
+          "excerpt": "the page has no h1 element"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "cfe156f9-c286-4c8b-8625-a25f3589d572",
+          "excerpt": "the page has no h1 element"
+        },
+        {
+          "kind": "dom",
+          "observation_id": "bad1b983-c7e7-43e9-9a3d-9cc86fa2740a",
+          "excerpt": "the page has no h1 element"
+        }
+      ]
+    },
+    {
+      "id": "91af4b37-8c60-46c2-bbfa-59593c394b44",
+      "rule_id": "LAYOUT-OCCLUSION",
+      "category": "responsive",
+      "severity": "major",
+      "title": "An interactive element is covered by another element",
+      "summary": "A hit test at the centre of an interactive element lands on a different element, so a pointer user cannot activate it where it appears to be. Observed: html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1) is covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1).",
+      "suggested_fix": "Move the covering element out of the target's box, or let the block reflow so the target is not covered at this viewport.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1)",
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "occlusion_hit",
+          "observation_id": "c567c319-0b1c-4cac-a3ad-10d84083ffbf",
+          "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
+        }
+      ]
+    },
+    {
+      "id": "b5774e0e-c3ef-47ac-a9d9-e2e9c3bfbc3b",
+      "rule_id": "LAYOUT-OCCLUSION",
+      "category": "responsive",
+      "severity": "major",
+      "title": "An interactive element is covered by another element",
+      "summary": "A hit test at the centre of an interactive element lands on a different element, so a pointer user cannot activate it where it appears to be. Observed: html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2) is covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1).",
+      "suggested_fix": "Move the covering element out of the target's box, or let the block reflow so the target is not covered at this viewport.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2)",
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "occlusion_hit",
+          "observation_id": "c567c319-0b1c-4cac-a3ad-10d84083ffbf",
+          "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
+        }
+      ]
+    },
+    {
+      "id": "36575b40-4401-436b-868a-08217ab41e88",
+      "rule_id": "LAYOUT-OCCLUSION",
+      "category": "responsive",
+      "severity": "major",
+      "title": "An interactive element is covered by another element",
+      "summary": "A hit test at the centre of an interactive element lands on a different element, so a pointer user cannot activate it where it appears to be. Observed: html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(3) is covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1).",
+      "suggested_fix": "Move the covering element out of the target's box, or let the block reflow so the target is not covered at this viewport.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(3)",
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "occlusion_hit",
+          "observation_id": "c567c319-0b1c-4cac-a3ad-10d84083ffbf",
+          "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(3) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
+        }
+      ]
+    },
+    {
+      "id": "6821392a-7dbc-44ea-8525-c99fef20c3c4",
+      "rule_id": "LAYOUT-OCCLUSION",
+      "category": "responsive",
+      "severity": "major",
+      "title": "An interactive element is covered by another element",
+      "summary": "A hit test at the centre of an interactive element lands on a different element, so a pointer user cannot activate it where it appears to be. Observed: html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(4) is covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1).",
+      "suggested_fix": "Move the covering element out of the target's box, or let the block reflow so the target is not covered at this viewport.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(4)",
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "occlusion_hit",
+          "observation_id": "c567c319-0b1c-4cac-a3ad-10d84083ffbf",
+          "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(4) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
+        }
+      ]
+    },
+    {
+      "id": "0b854aa4-1170-4ea6-967f-7cdce30a98c5",
+      "rule_id": "LAYOUT-OCCLUSION",
+      "category": "responsive",
+      "severity": "major",
+      "title": "An interactive element is covered by another element",
+      "summary": "A hit test at the centre of an interactive element lands on a different element, so a pointer user cannot activate it where it appears to be. Observed: html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2) is covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1).",
+      "suggested_fix": "Move the covering element out of the target's box, or let the block reflow so the target is not covered at this viewport.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2)",
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "occlusion_hit",
+          "observation_id": "c567c319-0b1c-4cac-a3ad-10d84083ffbf",
+          "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
+        }
+      ]
+    },
+    {
+      "id": "b75a65bc-7083-4830-ba8c-70b9da3499f9",
+      "rule_id": "A11Y-BUTTON-NAME",
+      "category": "a11y",
+      "severity": "blocker",
+      "title": "Button has no accessible name",
+      "summary": "A button exposes no text alternative. Voice control and screen readers cannot address it, so the action behind it is unreachable. Reported on 1 element(s).",
+      "suggested_fix": "Add visible text, aria-label, or an <svg> with <title> inside the button.",
+      "impact": {
+        "conversion": 3,
+        "seo": 0,
+        "ux": 3
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 32.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "8cb31eeb-0726-4f71-a709-8b30a0093dce",
+          "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "d69f235d-6d5b-4f18-a536-60e942cd71a8",
+          "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "52d5b620-2a03-4cf1-a283-20afb6b29da1",
+          "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
+        }
+      ]
+    },
+    {
+      "id": "8b68563e-513a-4e76-97f2-e3e814570edb",
+      "rule_id": "A11Y-CONTRAST",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Text contrast below WCAG AA",
+      "summary": "Text and background do not reach the 4.5:1 ratio required for normal text, which makes content hard to read in daylight and for low-vision users. Reported on 2 element(s).",
+      "suggested_fix": "Darken the text or lighten the background until the ratio reaches 4.5:1.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 3
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 12.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "1a8d903c-1dd1-4982-aa0f-1216b5f6912f",
+          "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "68f96ac4-c41f-4034-999a-394321aa4971",
+          "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "73f34543-ba8f-4e84-99d9-7b845369c82a",
+          "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "1a8d903c-1dd1-4982-aa0f-1216b5f6912f",
+          "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "68f96ac4-c41f-4034-999a-394321aa4971",
+          "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "73f34543-ba8f-4e84-99d9-7b845369c82a",
+          "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
+        }
+      ]
+    },
+    {
+      "id": "419edc38-2e36-4d93-a4d1-5f820aeb275a",
+      "rule_id": "A11Y-LANG",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Page language is not declared",
+      "summary": "The html element has no lang attribute, so screen readers may read the page with the wrong pronunciation rules. Reported on 1 element(s).",
+      "suggested_fix": "Set lang on the html element, for example <html lang=\"en\">.",
+      "impact": {
+        "conversion": 0,
+        "seo": 0,
+        "ux": 1
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 6.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "6a9894c0-1fba-4b3c-94bf-755f01f8ab06",
+          "excerpt": "html :: <html>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "3f236c29-65ba-407e-80ab-1d185679598d",
+          "excerpt": "html :: <html>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "2ba16b7b-7d14-4776-8e5d-7b9ef6343435",
+          "excerpt": "html :: <html>"
+        }
+      ]
+    },
+    {
+      "id": "07e6fc23-7fcd-40f8-9a9d-7ea3ffff20c0",
+      "rule_id": "A11Y-IMG-ALT",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Image has no text alternative",
+      "summary": "An image carries no alt attribute, so its content is lost for screen reader users and for search engines. Reported on 1 element(s).",
+      "suggested_fix": "Add alt text describing the content, or an empty alt if it is decorative.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "7aba88c1-21a2-4c25-98e4-e07b4ff036a1",
+          "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "d6553623-572c-4f84-8d51-8735256b2302",
+          "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "f4e15e9b-b788-4ae3-b10f-efe354caee83",
+          "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
+        }
+      ]
+    },
+    {
+      "id": "2cb98363-7109-48da-8bc8-2f8d0ed2f243",
+      "rule_id": "A11Y-LABEL",
+      "category": "a11y",
+      "severity": "blocker",
+      "title": "Form field has no accessible name",
+      "summary": "A field in the page form has no label, aria-label or title. A screen reader announces nothing, so the primary action cannot be completed without sight. Reported on 1 element(s).",
+      "suggested_fix": "Associate a visible <label for> with the field, or add aria-label.",
+      "impact": {
+        "conversion": 2,
+        "seo": 0,
+        "ux": 3
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 32.0,
+      "subject": null,
+      "root_cause_id": null,
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "a8575856-2d74-4197-add8-3daf85a24410",
+          "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "852234f3-164e-44be-93c0-64583e463457",
+          "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "21580b24-c464-49b1-86ee-834255627462",
+          "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
+        }
+      ]
+    },
+    {
+      "id": "b973bbaa-2a60-4727-87b0-a1b1d6eadf83",
+      "rule_id": "A11Y-LINK-NAME",
+      "category": "a11y",
+      "severity": "major",
+      "title": "Link has no accessible name",
+      "summary": "A link contains no text and no aria-label. Screen reader users hear the raw URL or nothing at all, and cannot tell where the link leads. Reported on 2 element(s).",
+      "suggested_fix": "Add link text or aria-label; for icon links describe the destination.",
+      "impact": {
+        "conversion": 0,
+        "seo": 1,
+        "ux": 2
+      },
+      "confidence": 1.0,
+      "agent": "rules",
+      "page_url": "http://localhost:8081/",
+      "page_key": "localhost",
+      "criterion": null,
+      "criterion_title": null,
+      "priority": 9.0,
+      "subject": null,
+      "root_cause_id": "rc-b30aa3bb89",
+      "evidence": [
+        {
+          "kind": "axe_node",
+          "observation_id": "300c2892-e1a2-4d92-b3f4-a1ae18d0f1bd",
+          "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "25f90f3c-6fff-4007-af3a-fc317c9a5e44",
+          "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "4a90ebd6-ef08-44d0-ab73-16e52e0d16f3",
+          "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "300c2892-e1a2-4d92-b3f4-a1ae18d0f1bd",
+          "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "25f90f3c-6fff-4007-af3a-fc317c9a5e44",
+          "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
+        },
+        {
+          "kind": "axe_node",
+          "observation_id": "4a90ebd6-ef08-44d0-ab73-16e52e0d16f3",
+          "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
+        }
+      ]
+    }
+  ],
+  "root_causes": [
+    {
+      "id": "rc-b30aa3bb89",
+      "kind": "dom_anchor",
+      "anchor": "header:nth-of-type(1)",
+      "label": "header",
+      "categories": [
+        "a11y",
+        "responsive"
+      ],
+      "summary": "6 findings in 2 categories share header; fixing the block is likely to close them together.",
+      "rationale": "A11Y-LINK-NAME, LAYOUT-OCCLUSION",
+      "severity": "major",
+      "priority": 9.0,
+      "finding_ids": [
+        "91af4b37-8c60-46c2-bbfa-59593c394b44",
+        "b5774e0e-c3ef-47ac-a9d9-e2e9c3bfbc3b",
+        "36575b40-4401-436b-868a-08217ab41e88",
+        "6821392a-7dbc-44ea-8525-c99fef20c3c4",
+        "0b854aa4-1170-4ea6-967f-7cdce30a98c5",
+        "b973bbaa-2a60-4727-87b0-a1b1d6eadf83"
+      ]
+    }
+  ]
+}

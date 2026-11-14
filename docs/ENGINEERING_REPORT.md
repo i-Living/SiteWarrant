@@ -7,10 +7,11 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-14-baseline-vision.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:0974495c97f1e7d5`, 2026-11-14, 321.3 s, whole corpus (8 synthetic sites, 104 pages, 80
-planted defects, 24 clean pages). The 2026-11-13 runs recorded the same score under the previous agent
-version; the vision pass changed the `ui` and `ux` briefs and the tool surface, not the measured layer:
+Run `evals/runs/2026-11-15-baseline-occluder.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:132dea05079fc83d`, 2026-11-15, 317.8 s, whole corpus (8 synthetic sites, 104 pages, 80
+planted defects, 24 clean pages). Every earlier run recorded the same score under its own agent version;
+this one followed the occlusion probe (see *Fixes over the same corpus* below), which moved the version
+and not the measured layer:
 
 | metric | value | denominator |
 | --- | --- | --- |
@@ -19,7 +20,7 @@ version; the vision pass changed the `ui` and `ux` briefs and the tool surface, 
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 321.3 s | 104 pages (3.09 s/page) |
+| duration | 317.8 s | 104 pages (3.06 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -34,6 +35,38 @@ rather than in the agent:
 - the banner planted for `LAYOUT-OCCLUSION` also had a faint text colour and a close control with no
   name, so it planted `A11Y-CONTRAST` and `A11Y-LINK-NAME` as well. Its text is legible and the
   close control is named now.
+
+### Fixes over the same corpus
+
+Run `evals/runs/2026-11-15-fix-acceptance.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:132dea05079fc83d`, 2026-11-15, 474.1 s: every page audited, then every finding of a
+mechanically fixable rule repaired on its own and the patched page re-audited.
+
+| metric | value | denominator |
+| --- | --- | --- |
+| fix acceptance | 1.0000 | 48/48 repairs applied to the served source |
+| regression-free fix rate | 1.0000 | 48/48 re-audits found nothing new |
+| repairs that closed their finding | 1.0000 | 48/48 |
+
+The corpus plants one defect per catalogue rule per site, so the population is 48 findings across
+five mechanical rules — `LAYOUT-OCCLUSION` contributes two per site, because the banner covers two
+links and each covered target is its own finding.
+
+Both rates are floors, and the reason is structural: the corpus is static, so a diff computed from the
+source it is applied to lands, and the repairs that only move markup do not disturb a page's other
+rules. The measurement is still worth the eight minutes, because it is the only place where a repair
+is applied and the result re-audited at corpus scale — and on its first run it found exactly the defect
+the fixture could not.
+
+The fixture's banner carries a class, so the fixture's repair named `.banner` and closed. On the corpus
+the banner is `div.promo`, the hit test at a covered link's centre returns the `span` inside it, and the
+repair wrote `span { position: static !important }`: the diff applied, it moved every span on the page,
+and it closed nothing. The metric said so — `applied` 6, `closed` 4 on one site — which is why the
+artifact keeps the three counts apart instead of publishing one acceptance ratio. The occlusion probe
+now records the nearest ancestor whose computed `position` is absolute, fixed or sticky, the repair
+names that element, and `selector_of` falls back to the measured `nth-of-type` chain (valid CSS) rather
+than a single bare tag. Re-measured: 48/48/48, and the corpus run after the probe change scores the
+same 1.0/1.0 — the probe changes what a repair moves, not what an audit finds.
 
 ## 2. A public site: 60 pages of docs.python.org
 

@@ -81,8 +81,8 @@
 | `pages_audited` | число страниц в аудите | охват |
 | `cost_per_100_pages` | 100 × суммарная стоимость / страниц (медиана по сайтам) | экономика |
 | `median_duration` | медиана времени аудита по бенчмарку | практическая пригодность |
-| `fix_acceptance_rate` | принятых правок / предложенных | полезность рекомендаций |
-| `regression_free_fix_rate` | повторных аудитов без новых находок (любая новая — регрессия, как в `reaudit`) / применённых правок | безопасность правок |
+| `fix_acceptance_rate` | правки, применившиеся к исходнику / предложенные правки (`sitewarrant fixes`, копия сайта и `patch -p1`) | применимость рекомендаций |
+| `regression_free_fix_rate` | правки, после которых повторный аудит не дал ни одной новой находки (любая новая — регрессия, как в `reaudit`) / применённые правки | безопасность правок |
 
 **Сопоставление находки с эталоном (TP/FP/FN).** Детерминированное, без суждений модели:
 
@@ -232,7 +232,7 @@ api/
                   occlusion, performance, screenshot + fetch, http_get, guard, robots
   app/agents/     specs, prompts/, runner (бюджетный цикл), validator, orchestrator, llm
   app/chief/      anchor (место находки), cluster (dedupe, root causes, приоритет)
-  app/fixes/      patch (пять механических правил), recommend, reaudit
+  app/fixes/      patch (пять механических правил), recommend, reaudit, measure (метрики правок)
   app/eval/       dataset (манифест и дайджест), metrics, runner, compare
   app/mcp/        MCP-сервер фактов (stdio) и MCP-клиент оркестратора
   app/cli.py      команды sitewarrant; telemetry.py и pricing.py рядом
@@ -301,6 +301,7 @@ uv run sitewarrant prompt-check --baseline ../evals/runs/a.json --candidate ../e
 uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fixes/<audit_id>
 uv run sitewarrant reaudit <audit_id> --against-report report.json \
   --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
+uv run sitewarrant fixes --dataset ../benchmark --out ../evals/runs/2026-11-15-fix-acceptance.json
 
 # Frontend (каталог — корень репозитория, из api/ это ../web)
 cd ../web && bun install
@@ -355,8 +356,9 @@ export const groupByRootCause = (findings: Finding[]): RootCauseGroup[] =>
   заложенными дефектами: контраст, отсутствующий alt, перекрытие CTA баннером, медленный ресурс, отсутствие HSTS).
 - Agent tests — прогон агента на записанных observations с записанными ответами LLM (кассеты), без вызовов сети.
   Проверяется: соблюдение схемы, обязательная улика, отсутствие выдуманных observation_id.
-- Evals — бенчмарк на реальных сайтах, запускается вручную и ночью, результаты коммитятся как JSON.
-  Гейтом в CI он не является: чужие сайты меняются.
+- Evals — бенчмарк по замороженному корпусу, запускается вручную или еженедельно по расписанию
+  (`.github/workflows/eval.yml`, понедельник 04:00 UTC), результаты коммитятся как JSON.
+  Гейтом в CI он не является: генератор фиксирует корпус, но прогон долгий и требует браузера.
 
 **Фикстура — источник истины для CI.** Ожидания фиксируются в `benchmark/fixtures/expected.json`;
 расхождение — падение теста. Это единственный способ заметить, что новый промпт стал врать.
@@ -584,6 +586,9 @@ pgvector (`rules.embedding`, `<=>`), команда `sitewarrant index-rules`, �
   Прогон 2026-11-14 после vision-инструмента (`agent sha256:0974495c97f1e7d5`, 321.3 с,
   `evals/runs/2026-11-14-baseline-vision.json`) даёт те же 1.0/1.0 при том же дайджесте корпуса:
   брифы `ui`/`ux` изменились, детерминированный слой — нет, и корпус не несёт визуальных меток.
+  Прогон 2026-11-15 после правки occlusion-пробы (`agent sha256:132dea05079fc83d`, 317.8 с,
+  `evals/runs/2026-11-15-baseline-occluder.json`) — тот же счёт в шестой раз: проба меняет то, какой
+  элемент чинит правка, а не что находит аудит.
   **Это пол — а не точность на реальном вебе:** генератор сажает ровно те дефекты, которые каталог
   обещает ловить, поэтому идеальный счёт означает «ни одна посаженная метка не потеряна и лишнего
   не придумано», а не «инструмент видит всё, что видит человек».
@@ -604,9 +609,18 @@ re-audit с диффом закрыто / осталось / новое и сп�
 - `sitewarrant reaudit <audit_id> --against-report old.json [--patch fixes.patch --site-dir DIR]`:
   применяет diff к копии сайта, поднимает копию на loopback и считает закрыто / осталось / новое;
   каждая новая находка попадает в регрессии, и команда выходит с кодом 1.
+- `sitewarrant fixes --dataset ../benchmark --out …`: измеряет обе метрики правок из §4 по корпусу.
+  Единица измерения — одна правка: её собственный diff, применённый к копии сайта, и повторный
+  аудит той же страницы. `fix` складывает правки страницы в один патч — это верная упаковка для
+  человека и неверная для счёта: по собранному diff'у не видно, какая правка не применилась.
+  Корпус обслуживается копией каталога сайта на loopback, а не адресом `/bench/<slug>/`: путь URL
+  к файлу правки отношения не имеет. Отчёт несёт `applied`, `closed` и `regression_free` отдельно:
+  применившийся diff, закрытая находка и чистое повторное измерение — три разных утверждения.
 - Acceptance: реальный патч фикстуры закрывает `SEO-TITLE` и `A11Y-LANG` и не добавляет ничего
   (`tests/integration/test_fixes_audit.py`); внесённый в тот же патч неразмеченный input
-  попадает в `regressions` как `A11Y-LABEL`.
+  попадает в `regressions` как `A11Y-LABEL`; по корпусу 48 из 48 правок применяются, закрывают
+  свою находку и не дают новых (`evals/runs/2026-11-15-fix-acceptance.json`,
+  `tests/integration/test_fix_acceptance.py`).
 - Verify: `uv run sitewarrant reaudit <audit_id> --against-report old.json`
 
 ### P7 — наблюдаемость, стоимость, самоулучшение, демо (неделя 7–8) — **выполнено, кроме публичного стенда**

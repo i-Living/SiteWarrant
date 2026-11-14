@@ -23,6 +23,22 @@ PROBE_SCRIPT = f"""() => {{
     }}
     return parts.join(' > ');
   }};
+  // The element under the pointer is often a child of the element that is positioned over the
+  // target: the label inside an absolutely positioned banner, not the banner. A repair has to move
+  // the element that carries the position, so the probe records it instead of leaving the fixer to
+  // guess from a tag name.
+  const positioned = (el) => {{
+    let node = el;
+    while (node && node.nodeType === 1) {{
+      const style = getComputedStyle(node);
+      const fixed = style.position === 'absolute' || style.position === 'fixed';
+      if (fixed || style.position === 'sticky') {{
+        return node;
+      }}
+      node = node.parentElement;
+    }}
+    return el;
+  }};
   const hits = [];
   for (const element of document.querySelectorAll("{INTERACTIVE}")) {{
     const style = getComputedStyle(element);
@@ -37,11 +53,14 @@ PROBE_SCRIPT = f"""() => {{
     const top = document.elementFromPoint(x, y);
     if (!top) continue;
     if (top === element || element.contains(top) || top.contains(element)) continue;
+    const cover = positioned(top);
     hits.push({{
       selector: path(element),
       tag: element.tagName.toLowerCase(),
       occluder_selector: path(top),
       occluder_tag: top.tagName.toLowerCase(),
+      occluder_positioned_selector: path(cover),
+      occluder_positioned_tag: cover.tagName.toLowerCase(),
     }});
     if (hits.length >= MAX) break;
   }}
@@ -61,6 +80,10 @@ class OccludedTarget(BaseModel):
     tag: str
     occluder_selector: str
     occluder_tag: str
+    # The element that carries the position (an ancestor of the one under the pointer). Empty on
+    # payloads recorded before the probe learned to look for it.
+    occluder_positioned_selector: str = ""
+    occluder_positioned_tag: str = ""
 
 
 async def probe(page: Page) -> list[OccludedTarget]:

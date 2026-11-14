@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,13 +53,12 @@ def unified_diff(patch: Patch, *, path: str | None = None) -> str:
     return "".join(lines)
 
 
-async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
-    """Read the audit's findings and the page source, and say how each one gets repaired.
+# (rule_id, severity, suggested_fix, subject, page_url, html_key, occluder): what a repair reads.
+FindingRow = tuple[str, str, str, str | None, str, str | None, str]
 
-    Patches are computed against the source file when `site_dir` names the site, because a browser
-    serialises its DOM: a diff made from the captured HTML reorders attributes and fails to apply.
-    Without a source directory the diff is advisory and says so.
-    """
+
+async def rows_of(audit_id: str) -> list[FindingRow]:
+    """The stored findings of one audit, with the element that covers the covered one."""
     identifier = uuid.UUID(audit_id)
     async with session_scope() as session:
         findings = (
@@ -85,7 +85,12 @@ async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
                 if not isinstance(hit, dict):
                     continue
                 covered = str(hit.get("selector") or "")
-                covering = str(hit.get("occluder_selector") or "")
+                # The element under the pointer is often a child of the positioned one; the fix
+                # has to move the element that carries the position. Old payloads have only the
+                # element under the pointer, and the repair falls back to it.
+                covering = str(
+                    hit.get("occluder_positioned_selector") or hit.get("occluder_selector") or ""
+                )
                 if covered and covering:
                     occluders.setdefault(row.page_id, {})[covered] = covering
         snapshots = {
@@ -107,6 +112,43 @@ async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
             for finding in findings
         ]
 
+    return rows
+
+
+async def plan_repairs(audit_id: str, sources: Mapping[str, str]) -> list[Patch]:
+    """One patch per finding, each computed against the page as it is served.
+
+    `fix` composes a page's repairs into one diff, which is the right packaging for a human and the
+    wrong one for a measurement: a composed diff cannot say which repair failed to apply. The caller
+    supplies the source text, because where a URL lives on disk is a property of the site, not of
+    the audit.
+    """
+    repairs: list[Patch] = []
+    for rule_id, _severity, _suggestion, subject, page_url, _html_key, occluder in await rows_of(
+        audit_id
+    ):
+        html = sources.get(page_url)
+        if html is None or rule_id not in FIXABLE:
+            continue
+        repair = patch_for(
+            rule_id,
+            page_url,
+            _with_final_newline(html),
+            subject=occluder if rule_id == "LAYOUT-OCCLUSION" else subject,
+        )
+        if repair is not None:
+            repairs.append(repair)
+    return repairs
+
+
+async def build_fixes(audit_id: str, site_dir: Path | None = None) -> FixReport:
+    """Read the audit's findings and the page source, and say how each one gets repaired.
+
+    Patches are computed against the source file when `site_dir` names the site, because a browser
+    serialises its DOM: a diff made from the captured HTML reorders attributes and fails to apply.
+    Without a source directory the diff is advisory and says so.
+    """
+    rows = await rows_of(audit_id)
     if not rows:
         raise FixBuildError(f"audit {audit_id} has no findings")
     report = FixReport(audit_id=audit_id)
