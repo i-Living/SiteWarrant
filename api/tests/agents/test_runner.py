@@ -291,6 +291,45 @@ async def test_a_capture_arrives_as_a_picture_the_model_can_look_at(tmp_path: Pa
     assert "not a measurement" in parts[0]["text"]
 
 
+async def test_two_captures_in_one_reply_follow_both_tool_responses(tmp_path: Path) -> None:
+    """A user turn between two tool replies is not a conversation a strict provider reads."""
+
+    class TwoImageTools(FakeTools):
+        async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+            self.calls.append((name, arguments))
+            index = len(self.calls)
+            return ToolResult(
+                text=f"screenshot {index}",
+                images=[ToolImage(mime_type="image/png", data_b64=f"img{index}")],
+            )
+
+    llm = cassette(
+        tmp_path,
+        [
+            reply(tool_calls=[image_call("c1"), image_call("c2")]),
+            reply(tool_calls=[submit("c3", [])]),
+        ],
+    )
+    run = await run_agent(
+        spec(tools=("page_image",)), llm=llm, tools=TwoImageTools(), observations=observations()
+    )
+
+    assert run.status == "ok"
+    sent = llm.recorded[1]["request"]["messages"]
+    roles = [message["role"] for message in sent]
+    first_tool = roles.index("tool")
+    assert roles[first_tool : first_tool + 2] == ["tool", "tool"]
+    image_index = next(
+        index
+        for index, message in enumerate(sent)
+        if message["role"] == "user" and isinstance(message["content"], list)
+    )
+    assert image_index > first_tool + 1
+    parts = sent[image_index]["content"]
+    urls = [part["image_url"]["url"] for part in parts if part["type"] == "image_url"]
+    assert urls == ["data:image/png;base64,img1", "data:image/png;base64,img2"]
+
+
 async def test_the_prompt_carries_the_claims_and_the_fact_ids(tmp_path: Path) -> None:
     llm = cassette(tmp_path, [reply(tool_calls=[submit("c1", [])])])
     await run_agent(spec(), llm=llm, tools=FakeTools(), observations=observations())

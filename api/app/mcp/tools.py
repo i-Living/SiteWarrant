@@ -240,6 +240,9 @@ async def page_image(
         "mime_type": "image/png",
         "data_b64": base64.b64encode(data).decode("ascii"),
         "bytes": len(data),
+        # The dimensions below are the screenshot observation's; a tool that hands over a
+        # number also names the row it came from, so the model can cite it.
+        "observation_id": str(facts.id) if facts is not None else None,
         "width": payload.get("width"),
         "height": payload.get("height"),
         "clipped": bool(payload.get("clipped")),

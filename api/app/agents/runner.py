@@ -307,6 +307,7 @@ async def run_agent(
             }
         )
 
+        pending_images: list[ToolImage] = []
         for call in reply.tool_calls:
             if call.name != "submit_findings":
                 if warned:
@@ -339,10 +340,10 @@ async def run_agent(
                 except Exception as error:
                     tool_result = ToolResult(text=f"tool {call.name} failed: {error}")
                 messages.append(tool_message(call.id, tool_result.text))
-                # A capture arrives as a picture the model can look at; the refusal or the
-                # facts arrive as text, and both end up in the transcript.
-                if tool_result.images:
-                    messages.append(image_message(tool_result.images))
+                # A capture cannot ride in a tool message, and it must not split the run of
+                # tool replies either: the pictures are collected here and handed over as one
+                # user turn after every response to this assistant message exists.
+                pending_images.extend(tool_result.images)
                 continue
 
             try:
@@ -368,3 +369,8 @@ async def run_agent(
                 messages.append(tool_message(call.id, rejection_text(result.rejected)))
                 continue
             return run(status="ok", accepted=accepted_so_far)
+
+        # One user turn with every capture of this reply, once all tool responses are in place:
+        # a user message between two tool messages is not a conversation a strict provider reads.
+        if pending_images:
+            messages.append(image_message(pending_images))

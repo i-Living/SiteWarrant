@@ -286,10 +286,12 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 - **MCP 2.x renamed things.** The server class is `MCPServer` (`mcp.server.mcpserver`), `FastMCP`
   is gone, and the tool schema field is `input_schema` on the model while OpenAI clients expect
   `inputSchema`. `app/mcp/client.py` reads both.
-- **A tool message carries text only.** An OpenAI-compatible tool result has no image part, so the
-  loop puts a returned capture in a user turn right after the tool message
-  (`app/agents/runner.py::image_message`); a tool that returns an image and expects it inside the
-  tool reply produces a transcript the model never sees.
+- **A tool message carries text only, and the images belong after all of them.** An
+  OpenAI-compatible tool result has no image part, so the loop collects the captures of one assistant
+  reply and hands them over as a single user turn once every tool response for that reply exists
+  (`app/agents/runner.py::image_message`, appended after the tool loop). A user message between two
+  `tool` messages is not a conversation a strict provider reads, and a tool that expects its image
+  inside the tool reply produces a transcript the model never sees.
 - **`mcp.types.ImageContent` is built with the alias and read by the field name.** The constructor
   takes `mimeType`, the model exposes `mime_type`; Pyright follows the stubs, runtime follows
   pydantic, and both spellings appear in this code for that reason.

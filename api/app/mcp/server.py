@@ -88,7 +88,11 @@ def build_server(audit_id: uuid.UUID) -> MCPServer:
             f"Full-page screenshot of {found['page_key']} at {found['viewport']}, "
             f"{found['width']}x{found['height']} px, {found['bytes']} bytes PNG"
             + (", clipped at the capture height cap" if found["clipped"] else "")
-            + ". Appearance only: cite the screenshot observation for what it shows."
+            + (
+                f". Cite observation {found['observation_id']} for what the picture shows."
+                if found.get("observation_id")
+                else ". Cite the screenshot observation for what the picture shows."
+            )
         )
         return [
             ImageContent(

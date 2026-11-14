@@ -140,7 +140,8 @@ refusal. Run `evals/audits/2026-11-14-fixture-vision.json` against
 | three full captures in the conversation | 5 | 8 | 48 102 | 1 534 | 0.016271 |
 
 Looking at the page therefore costs about **+14 600 input tokens and +$0.0054 per page** on this
-profile — roughly +15 % on a single-agent audit, and it buys one extra model call as well as the three
+profile — **+49 % of the `ui` agent's own estimate** ($0.010902 → $0.016271); the audit total with the
+chief call moves from $0.013480 to $0.018495, +37 %. It buys one extra model call as well as the three
 images, so the delta is not image tokens alone. The provider counts the images in `usage.prompt_tokens`
 and downsizes them before tokenising: a 1440×4000 capture measured 952 input tokens by itself, which is
 why the pass is affordable at all. On a deliberately tall scratch page (6000 px of text) the same agent

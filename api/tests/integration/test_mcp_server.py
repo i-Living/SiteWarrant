@@ -1,4 +1,5 @@
 import base64
+import re
 import uuid
 
 import pytest
@@ -66,6 +67,12 @@ async def test_the_page_reaches_the_model_as_an_image() -> None:
             assert image.mime_type == "image/png"
             assert base64.b64decode(image.data_b64)[:8] == b"\x89PNG\r\n\x1a\n"
             assert viewport in answer.text
+            # The caption names the observation the dimensions came from, and it resolves.
+            cited = re.search(r"observation ([0-9a-f-]{36})", answer.text)
+            assert cited, answer.text
+            fact = await tools.call("get_observation", {"observation_id": cited.group(1)})
+            assert f'"viewport": "{viewport}"' in fact.text
+            assert '"tool": "screenshot"' in fact.text
 
 
 async def test_a_run_that_stored_no_bytes_answers_with_a_refusal() -> None:
