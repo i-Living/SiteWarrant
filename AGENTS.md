@@ -20,8 +20,8 @@ Still open, and the plan says so in each case:
 
 - a public URL for the demo stand — the route is decided (existing VPS, §17 decision 3а), the deploy
   waits on the owner's domain and DNS;
-- the vision instrument — decided as three full screenshots per viewport (§17 decision 5а) and not
-  written, so no report claims anything about how a page looks.
+- the vision instrument — decided as one full screenshot per viewport, three in total (§17 decision
+  5а), and not written, so no report claims anything about how a page looks.
 
 The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
 58 audited pages, two that timed out and stayed in the denominator as failures.

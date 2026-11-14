@@ -8,7 +8,8 @@ to one root cause, and re-audits after the fix.
 > and root causes with the Chief Auditor's narration, a frozen benchmark with published numbers, fixes
 > with re-audits, and traces with cost estimates all run. The open questions are answered and recorded
 > in PLAN §17; what is still missing is the public URL for `infra/demo.yml` (the owner's VPS and
-> domain) and the vision instrument — decided as three full screenshots per viewport, not built yet.
+> domain) and the vision instrument — decided as one full screenshot per viewport, three in total,
+> and not built yet.
 >
 > The numbers below come from stored runs under `evals/runs/`; a metric with no run behind it is
 > `null` and says so, never `0`.
