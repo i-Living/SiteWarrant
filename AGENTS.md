@@ -455,6 +455,13 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
   `SITEWARRANT_AUTH_LOGIN` and `SITEWARRANT_AUTH_PASSWORD` and submits the login form when the
   middleware redirects the capture to `/login`; the CI job mints a throwaway operator per run. A red
   report job is a broken gate or a broken page, not a reason to turn the session off for the artifact.
+- **The screenshot job stops its own servers before the step ends.** `uv run` holds the uv cache
+  lock while its child lives, and the `setup-uv` action prunes that cache in its post step: a
+  leftover `sitewarrant-api` turns a successful capture into a red job five minutes later ("Cache
+  is currently in-use, waiting for other uv processes to finish"), with every step of the job marked
+  green. Each server is started under `setsid` and the step's `trap` kills its process group —
+  verified locally: prune waits while a `uv run` lives, and returns immediately once the group is
+  gone.
 
 ## Where decisions live
 

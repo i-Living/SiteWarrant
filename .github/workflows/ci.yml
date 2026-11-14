@@ -141,8 +141,19 @@ jobs:
           export SITEWARRANT_AUTH_SECRET="$(openssl rand -hex 32)"
           (cd ../web && bun install --frozen-lockfile \
             && SITEWARRANT_API=http://127.0.0.1:8000 bun run build)
-          (cd ../web && SITEWARRANT_API=http://127.0.0.1:8000 bun run start -- -H 127.0.0.1 -p 3000 &)
-          uv run sitewarrant-api &
+          # Each server gets its own process group, so stopping it stops what it spawned: a
+          # surviving `uv run` keeps the cache lock ("Cache is currently in-use, waiting for
+          # other uv processes to finish"), and the setup-uv post step then fails pruning the
+          # cache five minutes after a capture that worked.
+          setsid bash -c 'cd ../web && exec env SITEWARRANT_API=http://127.0.0.1:8000 bun run start -- -H 127.0.0.1 -p 3000' &
+          web_pid=$!
+          setsid uv run sitewarrant-api &
+          api_pid=$!
+          stop_servers() {
+            kill -TERM -- -"$web_pid" -"$api_pid" 2>/dev/null || true
+            wait 2>/dev/null || true
+          }
+          trap stop_servers EXIT
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8000/health > /dev/null \
               && curl -fsS -o /dev/null http://127.0.0.1:3000/login; then
