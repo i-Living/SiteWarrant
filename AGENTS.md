@@ -12,7 +12,8 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
-is a Next.js interface with one page: the stored report for `/?audit=<id>`. `infra/` brings up
+is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
+recent runs, a run form, the stored report, and a login gate in `web/middleware.ts`. `infra/` brings up
 Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
 loopback.
 
@@ -450,6 +451,10 @@ done, which is the documented residual — fine for a demo, wrong for a crawl of
 - **The initial migration refuses a silent downgrade.** It drops every table, so it raises unless
   `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` is set. That is deliberate; do not remove the guard to
   make a reset script shorter.
+- **The report screenshot job signs in; it never opens the app.** `scripts/report_screenshot.py` reads
+  `SITEWARRANT_AUTH_LOGIN` and `SITEWARRANT_AUTH_PASSWORD` and submits the login form when the
+  middleware redirects the capture to `/login`; the CI job mints a throwaway operator per run. A red
+  report job is a broken gate or a broken page, not a reason to turn the session off for the artifact.
 
 ## Where decisions live
 

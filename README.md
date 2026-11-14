@@ -273,7 +273,8 @@ POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
   docker compose -f infra/demo.yml up -d --build
 curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
   -d '{"url": "https://example.com"}'
-# {"audit_id": "...", "findings_total": 3, "by_severity": {...}} — the audit runs inside the request
+# {"audit_id": "...", "status": "running"} — the audit continues as a task in the API process
+curl -s http://127.0.0.1:8000/audits/<audit_id>                 # poll until "status": "completed"
 curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
 ```
 

@@ -4,8 +4,14 @@ CI runs this after building the web app and serving one audit: the page is the p
 and a contract test on JSX does not show whether the cause headings, the severities and the
 evidence lines actually render (docs/PLAN.md, P4 «Осталось из плана»).
 
-    uv run --project api python scripts/report_screenshot.py \
+    SITEWARRANT_AUTH_LOGIN=… SITEWARRANT_AUTH_PASSWORD=… \
+        uv run --project api python scripts/report_screenshot.py \
         --url "http://127.0.0.1:3000/?audit=<audit_id>" --out report-page.png
+
+Every route but `/login` needs a session, so a closed web app redirects the capture to the sign-in
+form. The credentials are read from the same environment variables the web app uses, and the capture
+signs in like a person: the gate is what the artifact is supposed to exercise, so the job does not
+turn it off. A redirect without credentials is reported as such, not as a missing finding count.
 
 `?audit=` is the URL the page has always accepted; a page that redirects it to `/audits/<id>` is
 followed, so the capture survives a route rename.
@@ -17,9 +23,11 @@ no artifact, because it looks like one.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
@@ -30,14 +38,46 @@ from playwright.sync_api import sync_playwright
 # opposite of what happened.
 ERROR_TEXT = ("report unavailable", "no audit selected")
 REPORT_TEXT = re.compile(r"\d+\s+finding", re.IGNORECASE)
+LOGIN_PATH = "/login"
 
 
-def capture(url: str, out: Path, *, width: int, height: int, timeout_ms: int) -> str:
+def credentials_from_env() -> tuple[str, str] | None:
+    """The operator credentials the web app was started with, or None when it is open."""
+    login = os.environ.get("SITEWARRANT_AUTH_LOGIN", "")
+    password = os.environ.get("SITEWARRANT_AUTH_PASSWORD", "")
+    if not login or not password:
+        return None
+    return login, password
+
+
+def capture(
+    url: str,
+    out: Path,
+    *,
+    width: int,
+    height: int,
+    timeout_ms: int,
+    credentials: tuple[str, str] | None,
+) -> str:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": width, "height": height})
             page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+            if urlsplit(page.url).path == LOGIN_PATH:
+                if credentials is None:
+                    return (
+                        "the page redirected to /login: set SITEWARRANT_AUTH_LOGIN and "
+                        "SITEWARRANT_AUTH_PASSWORD to capture a report behind the session"
+                    )
+                login, password = credentials
+                page.fill("#login", login)
+                page.fill("#password", password)
+                page.click(".login-submit")
+                page.wait_for_load_state("networkidle", timeout=timeout_ms)
+                if urlsplit(page.url).path == LOGIN_PATH:
+                    return f"sign-in was refused: the page stayed on {page.url}"
+                page.goto(url, wait_until="networkidle", timeout=timeout_ms)
             page.wait_for_selector("main", timeout=timeout_ms)
             text = page.inner_text("main") or ""
             lowered = text.lower()
@@ -63,7 +103,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         problem = capture(
-            args.url, args.out, width=args.width, height=args.height, timeout_ms=args.timeout_ms
+            args.url,
+            args.out,
+            width=args.width,
+            height=args.height,
+            timeout_ms=args.timeout_ms,
+            credentials=credentials_from_env(),
         )
     except (PlaywrightTimeout, PlaywrightError) as error:
         print(f"screenshot failed: {type(error).__name__}: {error}", file=sys.stderr)
