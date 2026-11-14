@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { RunRow } from "../components/run-row";
-import { type AuditSummary, getAudit } from "../lib/audits";
+import type { AuditSummary } from "../lib/audits";
 import { formatClock, isBenchmarkSite, isLocalSite } from "../lib/format";
 
 const REFRESH_MS = 2000;
@@ -16,7 +16,6 @@ export default function AuditsPage() {
   const [updated, setUpdated] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const scrolled = useRef(false);
-  const lookedUp = useRef<string | null>(null);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -72,36 +71,50 @@ export default function AuditsPage() {
     };
   }, []);
 
-  // The list is a bounded window of the newest runs. A submission older than that window
-  // would lose both its row and its "running" line, so the one audit the visitor came for
-  // is looked up by id and merged in while the poll keeps refreshing the window.
+  // The list is a bounded window of the newest runs, so the audit the visitor came for is read
+  // on its own path — same origin through the /api rewrite, never the browser reaching for the
+  // API's address — and kept fresh until it reaches a terminal status, because the window stops
+  // carrying it. A failed attempt is retried on the next tick instead of ending the recovery.
   useEffect(() => {
-    if (
-      highlight === null ||
-      audits === null ||
-      lookedUp.current === highlight
-    ) {
+    if (highlight === null) {
       return;
     }
-    if (audits.some((audit) => audit.audit_id === highlight)) {
-      return;
-    }
-    lookedUp.current = highlight;
     let cancelled = false;
-    void (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
       try {
-        const row = await getAudit(highlight);
-        if (!cancelled && row !== null) {
+        const response = await fetch(
+          `/api/audits/${encodeURIComponent(highlight)}`,
+          {
+            cache: "no-store",
+          },
+        );
+        if (cancelled || response.status === 404) {
+          return;
+        }
+        if (response.ok) {
+          const row = (await response.json()) as AuditSummary;
+          if (cancelled) {
+            return;
+          }
           setPinned(row);
+          if (row.status !== "running") {
+            return;
+          }
         }
       } catch {
-        // A failed lookup adds nothing: the page already reports API errors above.
+        // Retried below; the list keeps its own error banner.
       }
-    })();
+      timer = setTimeout(refresh, REFRESH_MS);
+    };
+    void refresh();
     return () => {
       cancelled = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
     };
-  }, [audits, highlight]);
+  }, [highlight]);
 
   const pinnedRow =
     highlight !== null && pinned !== null && pinned.audit_id === highlight
