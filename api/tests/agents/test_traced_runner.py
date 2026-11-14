@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from app.agents.llm import LlmReply, ToolCall
-from app.agents.models import AgentBudget, AgentSpec, ObservationFacts
+from app.agents.models import AgentBudget, AgentSpec, ObservationFacts, ToolResult
 from app.agents.runner import run_agent
 from app.agents.traced import CostLimitExceeded, TracedLlm, TracedTools
 from app.pricing import Price
@@ -45,9 +45,11 @@ class FakeTools:
             for name in names
         ]
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         self.calls.append((name, arguments))
-        return json.dumps({"observation_id": DOM_ID, "payload": observations()[DOM_ID].payload})
+        return ToolResult(
+            text=json.dumps({"observation_id": DOM_ID, "payload": observations()[DOM_ID].payload})
+        )
 
 
 class ScriptedClient:

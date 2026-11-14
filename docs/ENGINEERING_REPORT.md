@@ -7,9 +7,10 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-13-baseline-narration-v2.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:0a57261de95be73a`, 2026-11-13, 327.6 s, whole corpus (8 synthetic sites, 104 pages, 80
-planted defects, 24 clean pages):
+Run `evals/runs/2026-11-14-baseline-vision.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:0974495c97f1e7d5`, 2026-11-14, 321.3 s, whole corpus (8 synthetic sites, 104 pages, 80
+planted defects, 24 clean pages). The 2026-11-13 runs recorded the same score under the previous agent
+version; the vision pass changed the `ui` and `ux` briefs and the tool surface, not the measured layer:
 
 | metric | value | denominator |
 | --- | --- | --- |
@@ -18,7 +19,7 @@ planted defects, 24 clean pages):
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 327.6 s | 104 pages (3.15 s/page) |
+| duration | 321.3 s | 104 pages (3.09 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -127,6 +128,27 @@ ceiling `SITEWARRANT_AUDIT_COST_LIMIT_USD` defaults to `0.25` per audit, roughly
 profile, which is why a crawler run of 50+ pages needs the ceiling raised deliberately rather than
 discovered at the invoice.
 
+The vision pass has its own line, and it was measured rather than estimated from token arithmetic. The
+`ui` agent on the fixture page was run twice under the same agent version (`sha256:0974495c97f1e7d5`):
+once with the three captures available and once with artifacts off, so `page_image` answered with its
+refusal. Run `evals/audits/2026-11-14-fixture-vision.json` against
+`evals/audits/2026-11-14-fixture-novision.json`:
+
+| ui agent, fixture page | llm calls | tool calls | tokens in | tokens out | cost, USD (estimate) |
+| --- | --- | --- | --- | --- | --- |
+| `page_image` refuses (artifacts off) | 4 | 7 | 33 535 | 702 | 0.010902 |
+| three full captures in the conversation | 5 | 8 | 48 102 | 1 534 | 0.016271 |
+
+Looking at the page therefore costs about **+14 600 input tokens and +$0.0054 per page** on this
+profile — **+49 % of the `ui` agent's own estimate** ($0.010902 → $0.016271); the audit total with the
+chief call moves from $0.013480 to $0.018495, +37 %. It buys one extra model call as well as the three
+images, so the delta is not image tokens alone. The provider counts the images in `usage.prompt_tokens`
+and downsizes them before tokenising: a 1440×4000 capture measured 952 input tokens by itself, which is
+why the pass is affordable at all. On a deliberately tall scratch page (6000 px of text) the same agent
+called `page_image` once per viewport, filed `UI-SCREENSHOT-CLIPPED` for the two clipped captures with
+the screenshot observation as evidence, and wrote that visual review below the cap is impossible for
+that run — the behaviour the brief asks for.
+
 ## 5. Traces
 
 The fixture audit above records one trace holding `audit: 1, page: 3, agent: 2, llm.call: 8,
@@ -141,8 +163,15 @@ be walked back to the call that produced it.
 `sitewarrant prompt-check --baseline old.json --candidate new.json` accepts a change only when
 precision does not fall and the false-positive rate does not rise; two runs on different corpora are
 refused rather than compared. It is covered by `tests/test_prompt_gate.py` (8 cases, including that a
-tolerance buys measurement noise and not a regression). No prompt edit was shipped through it yet:
-the gate exists, its first real decision will be the first prompt change someone proposes.
+tolerance buys measurement noise and not a regression).
+
+The first shipped prompt change is the one that came with the vision instrument: `ui.md` and `ux.md` now
+tell the agent it may look at the page and must not take numbers from the picture. That change was not
+argued through the gate, and the reason is stated rather than hidden: the gate compares measured
+precision and false-positive rate, the corpus carries no visual labels, and the determinism it would
+measure is unaffected — the run after the change, `evals/runs/2026-11-14-baseline-vision.json`, scores
+the deterministic layer under the new `agent_version`. The gate remains the argument for a change whose
+effect lands in the measured layer.
 
 ## 7. What is not measured
 
@@ -150,6 +179,11 @@ the gate exists, its first real decision will be the first prompt change someone
   the open web.
 - Retrieval quality of the rule corpus. Embeddings are deterministic hash bag-of-words, chosen for
   reproducibility; whether they retrieve the right claim was never measured against a labelled set.
+- Whether looking at the page improves a finding. The vision instrument is measured in tokens and
+  in behaviour on one page (`UI-SCREENSHOT-CLIPPED` filed for the clipped captures, a refusal where a
+  picture is missing); no label set exists for "this page looks wrong", so no precision number for a
+  visual claim can be published, and the corpus run that follows the prompt change measures the
+  deterministic layer only.
 - A benchmark comparison of two LLM agent versions (§2), and the cost of a full agent pass over the
   corpus.
 - The public demo. `infra/demo.yml` and `api/Dockerfile` exist; the stack answers on loopback

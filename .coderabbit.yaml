@@ -118,6 +118,10 @@ reviews:
         The MCP server exposes tools and reads their results. Flag any tool that returns a number
         without the observation it came from, and any client code that retries or reshapes a tool
         result in a way that loses the evidence identifier.
+        - `page_image` returns a capture, never a measurement: flag any path that turns a pixel
+          estimate into a finding number, and any fallback that describes an image it did not send.
+        - A refusal (no stored bytes, a viewport the audit never captured, an oversized PNG) must
+          reach the model as text saying why; an empty result is a defect.
 
     - path: "api/tests/**"
       instructions: |

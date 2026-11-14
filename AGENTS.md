@@ -10,7 +10,8 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 
 **Phases P0–P7 have landed code; the plan is not closed.** `api/` holds the FastAPI service, the
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
-MCP fact server, eight budgeted agents behind the validator, the deterministic chief layer, the eval
+MCP fact server, eight budgeted agents behind the validator, the vision pass (`page_image`: `ui` and
+`ux` read the full screenshot of each viewport as an image), the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
 is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
 recent runs, a run form, the stored report, and a login gate in `web/middleware.ts`. `infra/` brings up
@@ -21,8 +22,9 @@ Still open, and the plan says so in each case:
 
 - a public URL for the demo stand — the route is decided (existing VPS, §17 decision 3а), the deploy
   waits on the owner's domain and DNS;
-- the vision instrument — decided as one full screenshot per viewport, three in total (§17 decision
-  5а), and not written, so no report claims anything about how a page looks.
+- element crops for the vision pass — deferred by §17 decision 5а until their cost is measured, so no
+  report claims anything it could only have seen in a crop. The full-viewport capture is in and
+  measured: `evals/audits/2026-11-14-fixture-vision.json` against `…-novision.json`.
 
 The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
 58 audited pages, two that timed out and stayed in the denominator as failures.
@@ -73,6 +75,11 @@ phase that makes them meaningful. Do not add a command to this file that has not
   sentence: fewer words, never fewer facts, never a new finding.
 - **Every new finding is a regression.** `reaudit` does not decide which new findings are acceptable;
   it lists them and exits `1`, and `diff_findings` keeps closed, remaining and new disjoint.
+- **An image is not a measurement.** `page_image` hands the model the stored full-page capture, one
+  per viewport; every number in a finding still comes from an observation and the validator checks it,
+  so a size or a ratio judged from the picture is rejected. The tool refuses — artifacts off, a
+  viewport the audit never captured, a PNG over 4 MB — with a reason it puts in the transcript, never by
+  shrinking the image or describing one it did not send.
 
 These are not style preferences. Breaking one silently invalidates the published metrics.
 
@@ -178,7 +185,8 @@ api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes,
                    narrate (one model call explaining the clusters) with prompts/chief.md
 api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new)
 api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare
-api/app/mcp/       fact server (stdio, one audit per process) and the agent loop's MCP client
+api/app/mcp/       fact server (stdio, one audit per process, seven tools including `page_image`, the
+                   full-page capture as an image) and the agent loop's MCP client
 api/app/storage/   repository functions over the ORM
 api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
                    performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
@@ -278,9 +286,25 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 - **MCP 2.x renamed things.** The server class is `MCPServer` (`mcp.server.mcpserver`), `FastMCP`
   is gone, and the tool schema field is `input_schema` on the model while OpenAI clients expect
   `inputSchema`. `app/mcp/client.py` reads both.
+- **A tool message carries text only, and the images belong after all of them.** An
+  OpenAI-compatible tool result has no image part, so the loop collects the captures of one assistant
+  reply and hands them over as a single user turn once every tool response for that reply exists
+  (`app/agents/runner.py::image_message`, appended after the tool loop). A user message between two
+  `tool` messages is not a conversation a strict provider reads, and a tool that expects its image
+  inside the tool reply produces a transcript the model never sees.
+- **`mcp.types.ImageContent` is built with the alias and read by the field name.** The constructor
+  takes `mimeType`, the model exposes `mime_type`; Pyright follows the stubs, runtime follows
+  pydantic, and both spellings appear in this code for that reason.
+- **`page_image` needs the artifacts on disk.** An eval run sets `store_artifacts=False`, keeps the
+  screenshot keys empty and therefore answers the vision tool with a refusal — a vision finding
+  cannot come out of a corpus run, and the refusal is the honest result.
+- **The provider downsizes an image before tokenising it.** A 1440x4000 capture measured 952 input
+  tokens on its own, so a full capture per viewport is affordable; do not budget from pixel counts,
+  and do not crop on the assumption that detail survives at full resolution.
 - **The model gateway is not a plain OpenAI endpoint.** Cloudflare answers 1010 to a request with
   no User-Agent, the Go plan requires an `x-opencode-session` header on every call, and the base URL
-  is `https://opencode.ai/zen/go/v1`. `deepseek-v4.1-flash` does support tool calling.
+  is `https://opencode.ai/zen/go/v1`. `deepseek-v4.1-flash` does support tool calling, and it accepts
+  images, which is what decision 5а relies on.
 - **Cassettes cannot contain observation ids**, because ids are generated per audit. A cassette
   writes `{{first:contrast_violation}}` and `CassetteClient` substitutes the first id of that channel
   or kind in the audit under test; a missing channel fails the call instead of inventing an id. A

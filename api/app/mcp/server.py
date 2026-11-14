@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ImageContent, TextContent
 
 from app.mcp import tools
 
@@ -68,6 +69,37 @@ def build_server(audit_id: uuid.UUID) -> MCPServer:
     async def screenshot_artifact(viewport: str | None = None) -> list[dict[str, Any]]:
         """List the screenshot artifact keys of this audit, for a vision pass."""
         return await tools.screenshot_artifact(audit_id, viewport=viewport)
+
+    @server.tool()
+    async def page_image(
+        viewport: str, page_key: str | None = None
+    ) -> list[TextContent | ImageContent]:
+        """Look at the page: the full-page screenshot of this audit at one viewport.
+
+        One capture per viewport, three viewports. The picture shows what the page looked
+        like; it is not a measurement, so every number you claim still has to come from an
+        observation. When the run stored no image or the capture is too large, the answer is
+        text saying so — never an invented description.
+        """
+        found = await tools.page_image(audit_id, viewport=viewport, page_key=page_key)
+        if "error" in found:
+            return [TextContent(type="text", text=str(found["error"]))]
+        caption = (
+            f"Full-page screenshot of {found['page_key']} at {found['viewport']}, "
+            f"{found['width']}x{found['height']} px, {found['bytes']} bytes PNG"
+            + (", clipped at the capture height cap" if found["clipped"] else "")
+            + (
+                f". Cite observation {found['observation_id']} for what the picture shows."
+                if found.get("observation_id")
+                else ". Cite the screenshot observation for what the picture shows."
+            )
+        )
+        return [
+            ImageContent(
+                type="image", data=str(found["data_b64"]), mimeType=str(found["mime_type"])
+            ),
+            TextContent(type="text", text=caption),
+        ]
 
     @server.tool()
     async def rules_lookup(query: str, limit: int = 4) -> list[dict[str, Any]]:

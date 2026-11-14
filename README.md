@@ -3,13 +3,14 @@
 **Evidence-first website quality auditor.** It proves each finding with a measurement, ties symptoms
 to one root cause, and re-audits after the fix.
 
-> **Stage: phases P0–P7 have landed; two pieces of work are deferred.** Discovery, eight deterministic
+> **Stage: phases P0–P7 have landed; one piece of work is deferred.** Discovery, eight deterministic
 > channels at three viewports, eight budgeted agents behind a validator, deterministic deduplication
-> and root causes with the Chief Auditor's narration, a frozen benchmark with published numbers, fixes
-> with re-audits, and traces with cost estimates all run. The open questions are answered and recorded
-> in PLAN §17; what is still missing is the public URL for `infra/demo.yml` (the owner's VPS and
-> domain) and the vision instrument — decided as one full screenshot per viewport, three in total,
-> and not built yet.
+> and root causes with the Chief Auditor's narration, a vision pass that hands the `ui` and `ux`
+> auditors the full screenshot of each viewport, a frozen benchmark with published numbers, fixes with
+> re-audits, and traces with cost estimates all run. The open questions are answered and recorded in
+> PLAN §17; what is still missing is the public URL for `infra/demo.yml` (the owner's VPS and domain).
+> Element crops were deferred by the same decision that fixed the depth (PLAN §17, 5а) and are still
+> not built, so no report claims anything about a defect it could only have seen in a crop.
 >
 > The numbers below come from stored runs under `evals/runs/`; a metric with no run behind it is
 > `null` and says so, never `0`.
@@ -33,7 +34,7 @@ independent findings. That case is a required acceptance test, not an aspiration
 | Performance | Core Web Vitals, LCP, CLS, TBT as INP proxy, JS and image weight | deep |
 | Responsive | mobile, tablet, desktop, overflow, occlusion, touch targets | three viewports |
 | Security | HTTPS, TLS, security headers, CSP, cookies, mixed content | passive checks |
-| UI | typography, contrast, spacing, visual hierarchy, consistency | vision over screenshots |
+| UI | typography, contrast, spacing, visual hierarchy, consistency | full-page screenshot per viewport, read by the model |
 | UX | navigation, user flows, CTAs, forms, information architecture | heuristic AI analysis |
 | Conversion | value proposition, CTA clarity, trust elements, friction | heuristic estimate |
 
@@ -47,6 +48,7 @@ URL
  └─ discovery        robots.txt, sitemap, BFS crawl, page-template clustering
      └─ fact layer    http_probe, dom_probe, axe-core, performance timings, screenshots (390/768/1440), occlusion
          └─ agents    8 specialised auditors read facts through MCP tools, write candidate findings
+                        (ui and ux also look at the full-page screenshot, through `page_image`)
              └─ validator    schema, mandatory evidence reference, rule citation
                  └─ chief auditor   dedup, root-cause clustering, priority, business impact
                      └─ report      findings, screenshots, recommendations, measured impact
@@ -62,8 +64,8 @@ that cannot.
 
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
-`evals/runs/2026-11-13-baseline-narration-v2.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:0a57261de95be73a`, 2026-11-13. A metric with no run behind it stays `null`.
+`evals/runs/2026-11-14-baseline-vision.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:0974495c97f1e7d5`, 2026-11-14. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -73,7 +75,7 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.06 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 327.6 s |
+| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 321.3 s |
 | Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
 | Regression-free fix rate | re-audits with no new finding at all / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
 
@@ -129,8 +131,8 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-13 against the fixture site, agent `sha256:0a57261de95be73a` (axe-core 4.14.0,
-10 SiteWarrant rules):
+Measured on 2026-11-14 against the fixture site, agent `sha256:0974495c97f1e7d5` (axe-core 4.14.0,
+10 SiteWarrant rules; run `evals/audits/2026-11-14-fixture-vision.json`):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
   covers five separate links, and each covered target is its own finding — collapsing them would
@@ -201,8 +203,9 @@ python3 ../benchmark/generate.py --check       # every page still matches the ge
 uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
-Measured on 2026-11-13 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:0a57261de95be73a`, 327.6 s, `evals/runs/2026-11-13-baseline-narration-v2.json`):
+Measured on 2026-11-14 over the whole corpus (104 pages, 80 planted defects, agent
+`sha256:0974495c97f1e7d5`, 321.3 s, `evals/runs/2026-11-14-baseline-vision.json` — the same score the
+2026-11-13 runs recorded under the previous agent version):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);

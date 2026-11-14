@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agents.llm import CassetteClient
-from app.agents.models import AgentBudget, AgentSpec, ObservationFacts
+from app.agents.models import AgentBudget, AgentSpec, ObservationFacts, ToolImage, ToolResult
 from app.agents.runner import run_agent
 
 DOM_ID = str(uuid.uuid4())
@@ -46,9 +46,11 @@ class FakeTools:
             for name in names
         ]
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         self.calls.append((name, arguments))
-        return json.dumps({"observation_id": DOM_ID, "payload": observations()[DOM_ID].payload})
+        return ToolResult(
+            text=json.dumps({"observation_id": DOM_ID, "payload": observations()[DOM_ID].payload})
+        )
 
 
 def spec(**overrides: Any) -> AgentSpec:
@@ -92,6 +94,14 @@ def fetch(call_id: str) -> dict[str, Any]:
         "id": call_id,
         "type": "function",
         "function": {"name": "list_observations", "arguments": "{}"},
+    }
+
+
+def image_call(call_id: str) -> dict[str, Any]:
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": "page_image", "arguments": json.dumps({"viewport": "1440x900"})},
     }
 
 
@@ -232,7 +242,7 @@ async def test_a_malformed_payload_is_reported_to_the_model(tmp_path: Path) -> N
 
 async def test_a_tool_failure_does_not_kill_the_agent(tmp_path: Path) -> None:
     class BrokenTools(FakeTools):
-        async def call(self, name: str, arguments: dict[str, Any]) -> str:
+        async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
             raise RuntimeError("database is down")
 
     llm = cassette(
@@ -243,6 +253,81 @@ async def test_a_tool_failure_does_not_kill_the_agent(tmp_path: Path) -> None:
 
     assert run.status == "ok"
     assert len(run.accepted) == 1
+
+
+async def test_a_capture_arrives_as_a_picture_the_model_can_look_at(tmp_path: Path) -> None:
+    """A tool message holds text only, so the image becomes the user turn after it."""
+
+    class LookingTools(FakeTools):
+        async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+            self.calls.append((name, arguments))
+            return ToolResult(
+                text="Full-page screenshot at 1440x900, 1440x2400 px, 40000 bytes PNG",
+                images=[ToolImage(mime_type="image/png", data_b64="iVBORw0KGgo=")],
+            )
+
+    llm = cassette(
+        tmp_path,
+        [reply(tool_calls=[image_call("c1")]), reply(tool_calls=[submit("c2", [])])],
+    )
+    run = await run_agent(
+        spec(tools=("page_image",)), llm=llm, tools=LookingTools(), observations=observations()
+    )
+
+    assert run.status == "ok"
+    sent = llm.recorded[1]["request"]["messages"]
+    tool_turn = [message for message in sent if message["role"] == "tool"][-1]
+    assert "1440x2400" in tool_turn["content"]
+    image_turns = [
+        message
+        for message in sent
+        if message["role"] == "user" and isinstance(message["content"], list)
+    ]
+    assert len(image_turns) == 1
+    parts = image_turns[0]["content"]
+    assert [part["type"] for part in parts] == ["text", "image_url"]
+    assert parts[1]["image_url"]["url"] == "data:image/png;base64,iVBORw0KGgo="
+    # The caption says what the picture is not: a number still has to come from an observation.
+    assert "not a measurement" in parts[0]["text"]
+
+
+async def test_two_captures_in_one_reply_follow_both_tool_responses(tmp_path: Path) -> None:
+    """A user turn between two tool replies is not a conversation a strict provider reads."""
+
+    class TwoImageTools(FakeTools):
+        async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+            self.calls.append((name, arguments))
+            index = len(self.calls)
+            return ToolResult(
+                text=f"screenshot {index}",
+                images=[ToolImage(mime_type="image/png", data_b64=f"img{index}")],
+            )
+
+    llm = cassette(
+        tmp_path,
+        [
+            reply(tool_calls=[image_call("c1"), image_call("c2")]),
+            reply(tool_calls=[submit("c3", [])]),
+        ],
+    )
+    run = await run_agent(
+        spec(tools=("page_image",)), llm=llm, tools=TwoImageTools(), observations=observations()
+    )
+
+    assert run.status == "ok"
+    sent = llm.recorded[1]["request"]["messages"]
+    roles = [message["role"] for message in sent]
+    first_tool = roles.index("tool")
+    assert roles[first_tool : first_tool + 2] == ["tool", "tool"]
+    image_index = next(
+        index
+        for index, message in enumerate(sent)
+        if message["role"] == "user" and isinstance(message["content"], list)
+    )
+    assert image_index > first_tool + 1
+    parts = sent[image_index]["content"]
+    urls = [part["image_url"]["url"] for part in parts if part["type"] == "image_url"]
+    assert urls == ["data:image/png;base64,img1", "data:image/png;base64,img2"]
 
 
 async def test_the_prompt_carries_the_claims_and_the_fact_ids(tmp_path: Path) -> None:
@@ -437,7 +522,7 @@ async def test_slow_tool_schema_loading_hits_the_deadline() -> None:
 
 
 class SlowCallTools(FakeTools):
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         await asyncio.sleep(0.5)
         return await super().call(name, arguments)
 

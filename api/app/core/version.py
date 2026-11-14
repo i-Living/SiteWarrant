@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from app.agents.prompts import prompts_digest
+from app.agents.specs import SPECS
 from app.chief.narrate import prompt_digest_sha as chief_prompt_digest
 from app.crawl.version import crawl_digest
 from app.rules import corpus
@@ -54,6 +55,9 @@ def compute_agent_version(
         "corpus": corpus.corpus_digest(),
         "prompts": prompts_digest(),
         "chief_prompt": chief_prompt_digest(),
+        # Which tools each agent is offered decides what it can claim: an agent that cannot
+        # look at the page is a different agent from one that can.
+        "agent_tools": {name: list(spec.tools) for name, spec in SPECS.items()},
         "llm_model": llm_model,
         "viewports": list(viewports),
         "page_timeout_ms": page_timeout_ms,
