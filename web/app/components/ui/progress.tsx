@@ -16,17 +16,19 @@ function Progress({
   label: string;
   indicatorClassName?: string;
 }) {
-  const ratio =
-    value === null || max <= 0 ? 0 : Math.min(1, Math.max(0, value / max));
+  // Zero findings over zero findings is not a proportion: with no denominator the widget says
+  // "not measured" instead of announcing a value it does not have.
+  const measured = value !== null && max > 0;
+  const ratio = measured ? Math.min(1, Math.max(0, value / max)) : 0;
   return (
     <div
       data-slot="progress"
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={max}
-      aria-valuenow={value ?? undefined}
-      aria-valuetext={value === null ? "not measured" : undefined}
+      aria-valuemax={measured ? max : undefined}
+      aria-valuenow={measured ? value : undefined}
+      aria-valuetext={measured ? undefined : "not measured"}
       className={cn(
         "relative h-1.5 w-full overflow-hidden rounded-full bg-muted",
         className,
