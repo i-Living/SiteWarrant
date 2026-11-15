@@ -323,11 +323,11 @@ def evaluate(
     if not comparison.compatible:
         raise typer.Exit(code=2)
     for metric, delta in comparison.deltas.items():
-        typer.echo(f"  {metric:<24} {delta:+.4f}")
+        typer.echo(f"  {metric:<24} {_signed(delta)}")
     for rule_id, rule_delta in comparison.per_rule.items():
         typer.echo(
-            f"  {rule_id:<22} precision {rule_delta['precision']:+.4f}  "
-            f"recall {rule_delta['recall']:+.4f}"
+            f"  {rule_id:<22} precision {_signed(rule_delta['precision'])}  "
+            f"recall {_signed(rule_delta['recall'])}"
         )
     typer.echo(f"  regressions: {', '.join(comparison.regressions) or 'none'}")
     if comparison.regressions:
@@ -345,20 +345,21 @@ def _print_eval(run: EvalRun) -> None:
         f"fp {metrics['false_positives']}, fn {metrics['false_negatives']}"
     )
     typer.echo(
-        f"precision {metrics['precision']} ({metrics['true_positives']}/{metrics['predicted']}), "
-        f"recall {metrics['recall']} ({metrics['true_positives']}/{metrics['labels']}), "
-        f"fp-rate {metrics['false_positive_rate']} "
+        f"precision {_rate(metrics['precision'])} "
+        f"({metrics['true_positives']}/{metrics['predicted']}), "
+        f"recall {_rate(metrics['recall'])} ({metrics['true_positives']}/{metrics['labels']}), "
+        f"fp-rate {_rate(metrics['false_positive_rate'])} "
         f"({metrics['false_positives']}/{metrics['predicted']})"
     )
     typer.echo(
         f"pages with false positives {metrics['pages_with_false_positives']}/{metrics['pages']}, "
-        f"duplicate rate {metrics['duplicate_rate']} "
+        f"duplicate rate {_rate(metrics['duplicate_rate'])} "
         f"({metrics['duplicates_removed']}/{metrics['findings_raw']})"
     )
     typer.echo(f"runtime {run.context.duration_s} s")
     for rule_id, rule in metrics["per_rule"].items():
         typer.echo(
-            f"  {rule_id:<20} p={rule['precision']:<7} r={rule['recall']:<7} "
+            f"  {rule_id:<20} p={_rate(rule['precision']):<7} r={_rate(rule['recall']):<7} "
             f"labels {rule['labels']} predicted {rule['predicted']}"
         )
 
@@ -529,6 +530,7 @@ def comparison_payload(result: Comparison) -> dict[str, Any]:
         "closed": [delta_payload(item) for item in result.closed],
         "remaining": [delta_payload(item) for item in result.remaining],
         "new": [delta_payload(item) for item in result.new],
+        "uncompared": [delta_payload(item) for item in result.uncompared],
         "causes": [
             {
                 "anchor": cause.anchor,
@@ -644,6 +646,11 @@ def _print_fixes(run: FixRun) -> None:
 
 def _rate(value: float | None) -> str:
     return "null" if value is None else f"{value:.4f}"
+
+
+def _signed(value: float | None) -> str:
+    """A delta needs two measured sides; without them it is null, not a change."""
+    return "null" if value is None else f"{value:+.4f}"
 
 
 @cli.command("index-rules")

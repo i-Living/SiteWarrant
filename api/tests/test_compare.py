@@ -146,6 +146,20 @@ def test_a_clean_page_is_still_audited_and_keeps_the_pair_comparable() -> None:
     assert [item.rule_id for item in result.closed] == ["SEO-TITLE"]
 
 
+def test_a_page_only_one_audit_covered_is_not_closed() -> None:
+    """The later run never looked at /pricing: its findings did not close, they went uncompared."""
+    gone = finding(rule_id="SEO-TITLE", page="/pricing")
+    before = report(findings=[gone], pages=["/", "/pricing"])
+    after = report(findings=[], pages=["/"])
+    result = compare_reports(before, after)
+    assert result.comparable
+    assert result.closed == []
+    assert [(item.rule_id, item.page_url) for item in result.uncompared] == [
+        ("SEO-TITLE", "http://localhost:8081/pricing")
+    ]
+    assert any("only one of the two audits" in note for note in result.notes)
+
+
 def test_one_place_stays_one_row_when_a_label_appears() -> None:
     """`label` is display, not identity: an old report without a tag name must not split a cause."""
     header = "header:nth-of-type(1)"

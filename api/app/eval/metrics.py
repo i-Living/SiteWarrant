@@ -5,8 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-def _ratio(numerator: int, denominator: int) -> float:
-    return round(numerator / denominator, 4) if denominator else 0.0
+def _ratio(numerator: int, denominator: int) -> float | None:
+    """A ratio with no denominator is unknown, not zero.
+
+    `0.0` reads as a measured zero — "this rule predicted nothing, and every prediction was
+    wrong" — while the truth is that nothing was predicted and no rate exists. Counts sit next
+    to their ratios precisely so a reader can tell the two apart.
+    """
+    return round(numerator / denominator, 4) if denominator else None
 
 
 @dataclass(frozen=True)
@@ -25,14 +31,14 @@ class RuleMetrics:
         return self.labels - self.true_positives
 
     @property
-    def precision(self) -> float:
+    def precision(self) -> float | None:
         return _ratio(self.true_positives, self.predicted)
 
     @property
-    def recall(self) -> float:
+    def recall(self) -> float | None:
         return _ratio(self.true_positives, self.labels)
 
-    def as_dict(self) -> dict[str, float | int | str]:
+    def as_dict(self) -> dict[str, float | int | str | None]:
         return {
             "rule_id": self.rule_id,
             "labels": self.labels,
@@ -61,24 +67,24 @@ class Metrics:
     per_rule: dict[str, RuleMetrics] = field(default_factory=dict)
 
     @property
-    def precision(self) -> float:
+    def precision(self) -> float | None:
         return _ratio(self.true_positives, self.predicted)
 
     @property
-    def recall(self) -> float:
+    def recall(self) -> float | None:
         return _ratio(self.true_positives, self.labels)
 
     @property
-    def false_positive_rate(self) -> float:
+    def false_positive_rate(self) -> float | None:
         """Share of reported findings that no label backs."""
         return _ratio(self.false_positives, self.predicted)
 
     @property
-    def duplicate_rate(self) -> float:
+    def duplicate_rate(self) -> float | None:
         return _ratio(self.duplicates_removed, self.findings_raw)
 
     @property
-    def page_false_positive_rate(self) -> float:
+    def page_false_positive_rate(self) -> float | None:
         """Share of pages that reported at least one finding nobody planted."""
         return _ratio(self.pages_with_false_positives, self.pages)
 

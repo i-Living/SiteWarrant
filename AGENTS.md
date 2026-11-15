@@ -336,15 +336,28 @@ the repository does not grow by a copy of somebody's site.
 - **`finish_audit` returns `False` instead of raising when the row is already terminal.** A
   cancellation can win the race with the last stage, and an error handler that raises while handling
   an error hides the original one.
+- **Recovery discards the dead attempt's facts.** `requeue_expired` deletes the audit's pages, and
+  the cascade takes its snapshots, observations, root causes and findings: the next attempt writes
+  its own pages under the same id, and the agents read the audit by id, so a leftover observation
+  would be citable evidence from a run that never finished. `llm_calls` stays — those tokens were
+  really spent — and feedback on a discarded finding goes with it.
 - **`claim_audit` rewrites `started_at` to the claim time.** The queue orders by it and the run page
   shows elapsed from it; a submission that waited ten minutes for a worker did not start ten minutes ago.
 - **A dedupe test needs no worker running.** `find_recent_duplicate` matches the URL and the agents list
   inside the window; a claimed row still matches, so a second submission gets that same audit with
   `deduplicated: true`. Only `failed` and `cancelled` are skipped — a retry after a failure is the
   caller's point.
-- **A label export includes only fully reviewed pages.** Every finding on the page needs a verdict;
-  an unreviewed finding would otherwise be counted as a false positive, and a page with no findings
-  is not a clean control until a human says so.
+- **A label export includes only fully reviewed pages, and reads the last verdict.** Every finding
+  on the page needs a verdict; an unreviewed finding would otherwise be counted as a false positive,
+  and a page with no findings is not a clean control until a human says so. Feedback is append-only,
+  so a `confirmed` corrected to `false_positive` is withdrawn: the export reads the newest row, never
+  any row.
+- **A live page is a whole URL.** The export names the audited URL (scheme, host, path and query), not
+  a path under one base: `?id=1` is a different page, and one base URL cannot serve two origins.
+  `Dataset.page_url` passes an absolute page through and only prefixes a relative one.
+- **A page only one audit covered is not a closed finding.** `compare` buckets findings on unshared
+  pages into `uncompared` and says so in its notes: the later run did not look, so nothing closed.
+  Coverage is `report.pages`, not the pages that happened to have a finding.
 - **`run_eval` takes `allow_private` from the manifest.** A snapshot is served from loopback, a live
   corpus is fetched from the internet; a live manifest without `captured_at` is refused.
 - **Network tests flake.** Third-party sites change hourly. CI uses the fixture site; the real benchmark

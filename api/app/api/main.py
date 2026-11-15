@@ -168,6 +168,7 @@ class ComparisonOut(BaseModel):
     closed: list[DeltaOut] = []
     remaining: list[DeltaOut] = []
     new: list[DeltaOut] = []
+    uncompared: list[DeltaOut] = []
     causes: list[CauseDeltaOut] = []
 
     @classmethod
@@ -201,6 +202,7 @@ class ComparisonOut(BaseModel):
             closed=[delta(item) for item in comparison.closed],
             remaining=[delta(item) for item in comparison.remaining],
             new=[delta(item) for item in comparison.new],
+            uncompared=[delta(item) for item in comparison.uncompared],
             causes=[cause(item) for item in comparison.causes],
         )
 

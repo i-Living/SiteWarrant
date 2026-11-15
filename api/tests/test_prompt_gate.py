@@ -6,7 +6,12 @@ from app.eval.gate import decide
 from app.eval.models import EvalRun, RunContext
 
 
-def run(*, digest: str = "sha256:same", precision: float = 0.9, fp_rate: float = 0.1) -> EvalRun:
+def run(
+    *,
+    digest: str = "sha256:same",
+    precision: float | None = 0.9,
+    fp_rate: float | None = 0.1,
+) -> EvalRun:
     return EvalRun(
         context=RunContext(
             dataset_digest=digest,
@@ -73,6 +78,14 @@ def test_two_runs_on_different_corpora_are_not_evidence() -> None:
 def test_the_decision_names_the_corpus_it_was_made_on() -> None:
     decision = decide(run(digest="sha256:corpus"), run(digest="sha256:corpus"))
     assert decision.corpus == "sha256:corpus"
+
+
+def test_an_undefined_precision_is_not_a_pass() -> None:
+    """A candidate that predicted nothing has no precision, and a gate cannot call that held."""
+    decision = decide(run(precision=0.9), run(precision=None, fp_rate=None))
+    assert not decision.accepted
+    assert decision.deltas["precision"] is None
+    assert any("undefined" in reason for reason in decision.reasons)
 
 
 @pytest.mark.parametrize("field", ["precision", "false_positive_rate"])

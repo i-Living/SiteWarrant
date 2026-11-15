@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -317,6 +317,11 @@ async def requeue_expired(session: AsyncSession, *, max_attempts: int) -> tuple[
     for audit in expired:
         if audit.attempts < max_attempts:
             lifecycle.ensure_transition(audit.status, lifecycle.QUEUED)
+            # The next attempt writes its own pages under the same audit id. The dead attempt's
+            # facts would otherwise be served to the next run's agents through
+            # `observation_index` and cited in its report, so they go with it. `llm_calls` stays:
+            # those tokens were really spent, and deleting the record would hide the cost.
+            await session.execute(delete(Page).where(Page.audit_id == audit.id))
             audit.status = lifecycle.QUEUED
             audit.stage = None
             audit.worker_id = None

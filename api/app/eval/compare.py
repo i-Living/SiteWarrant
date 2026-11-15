@@ -20,12 +20,20 @@ class Comparison(BaseModel):
     candidate: str
     dataset_digest: str
     agent_versions: dict[str, str]
-    deltas: dict[str, float]
-    per_rule: dict[str, dict[str, float]]
+    # A metric with no denominator is `None`, and a delta needs both sides: comparing against an
+    # unknown would report a change nobody measured.
+    deltas: dict[str, float | None]
+    per_rule: dict[str, dict[str, float | None]]
     regressions: list[str] = []
     improvements: list[str] = []
     compatible: bool
     note: str = ""
+
+
+def _delta(before: float | None, after: float | None) -> float | None:
+    if before is None or after is None:
+        return None
+    return round(after - before, 4)
 
 
 def compare_runs(
@@ -68,23 +76,28 @@ def compare_runs(
         )
 
     deltas = {
-        metric: round(float(candidate.metrics[metric]) - float(baseline.metrics[metric]), 4)
+        metric: _delta(baseline.metrics.get(metric), candidate.metrics.get(metric))
         for metric in METRICS
     }
-    per_rule: dict[str, dict[str, float]] = {}
+    per_rule: dict[str, dict[str, float | None]] = {}
     regressions: list[str] = []
     improvements: list[str] = []
     baseline_rules = baseline.metrics.get("per_rule", {})
     candidate_rules = candidate.metrics.get("per_rule", {})
     for rule in sorted(set(baseline_rules) | set(candidate_rules)):
-        before = baseline_rules.get(rule, {"precision": 0.0, "recall": 0.0})
-        after = candidate_rules.get(rule, {"precision": 0.0, "recall": 0.0})
-        delta_precision = round(float(after["precision"]) - float(before["precision"]), 4)
-        delta_recall = round(float(after["recall"]) - float(before["recall"]), 4)
+        # A rule absent from one run was not measured there, which is not the same as zero.
+        before = baseline_rules.get(rule, {})
+        after = candidate_rules.get(rule, {})
+        delta_precision = _delta(before.get("precision"), after.get("precision"))
+        delta_recall = _delta(before.get("recall"), after.get("recall"))
         per_rule[rule] = {"precision": delta_precision, "recall": delta_recall}
-        if delta_recall < 0 or delta_precision < 0:
+        moved_down = any(
+            delta is not None and delta < 0 for delta in (delta_recall, delta_precision)
+        )
+        moved_up = any(delta is not None and delta > 0 for delta in (delta_recall, delta_precision))
+        if moved_down:
             regressions.append(rule)
-        elif delta_recall > 0 or delta_precision > 0:
+        elif moved_up:
             improvements.append(rule)
 
     return Comparison(

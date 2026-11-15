@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field
 
 from app.core.report import FindingOut, Report
-from app.fixes.reaudit import Delta, diff_findings, key_of, path_of
+from app.fixes.reaudit import Delta, key_of, path_of
 
 FindingKey = tuple[str, str, str]
 # A root cause is a place: the anchor inside a page. Its display label is not part of the identity,
@@ -49,6 +49,9 @@ class Comparison(BaseModel):
     closed: list[Delta] = Field(default_factory=list)
     remaining: list[Delta] = Field(default_factory=list)
     new: list[Delta] = Field(default_factory=list)
+    # Findings on pages only one of the two audits covered: the later run did not check that
+    # page, so its findings did not close — they were never looked for.
+    uncompared: list[Delta] = Field(default_factory=list)
     causes: list[CauseDelta] = Field(default_factory=list)
 
 
@@ -102,17 +105,38 @@ def _cause_counter(
 
 def compare_reports(before: Report, after: Report) -> Comparison:
     reasons, notes = comparability(before, after)
-    result = diff_findings(list(before.findings), list(after.findings))
 
     previous = {key_of(finding): finding for finding in before.findings}
     current = {key_of(finding): finding for finding in after.findings}
-    closed = [previous[key] for key in previous.keys() - current.keys()]
-    new = [current[key] for key in current.keys() - previous.keys()]
-    remaining = [current[key] for key in previous.keys() & current.keys()]
+    shared = pages_of(before) & pages_of(after)
 
-    closed_counts, closed_labels = _cause_counter(closed, before)
-    new_counts, new_labels = _cause_counter(new, after)
-    remaining_counts, remaining_labels = _cause_counter(remaining, after)
+    def as_delta(finding: FindingOut) -> Delta:
+        return Delta(
+            rule_id=finding.rule_id,
+            page_url=finding.page_url,
+            severity=finding.severity,
+            subject=finding.subject or "",
+        )
+
+    # A page both runs audited and only the first reported means the defect closed; a page the
+    # later run never audited is a page nobody compared, and calling that "closed" would publish
+    # a repair that was never measured.
+    gone = [previous[key] for key in previous.keys() - current.keys()]
+    arrived = [current[key] for key in current.keys() - previous.keys()]
+    closed_findings = [item for item in gone if path_of(item.page_url) in shared]
+    uncompared_findings = [item for item in gone if path_of(item.page_url) not in shared]
+    new_findings = [item for item in arrived if path_of(item.page_url) in shared]
+    uncompared_findings.extend(item for item in arrived if path_of(item.page_url) not in shared)
+    remaining_findings = [current[key] for key in previous.keys() & current.keys()]
+
+    closed = [as_delta(item) for item in closed_findings]
+    new = [as_delta(item) for item in new_findings]
+    uncompared = [as_delta(item) for item in uncompared_findings]
+    remaining = [as_delta(item) for item in remaining_findings]
+
+    closed_counts, closed_labels = _cause_counter(closed_findings, before)
+    new_counts, new_labels = _cause_counter(new_findings, after)
+    remaining_counts, remaining_labels = _cause_counter(remaining_findings, after)
 
     causes: list[CauseDelta] = []
     for key in sorted(set(closed_counts) | set(new_counts) | set(remaining_counts)):
@@ -133,6 +157,11 @@ def compare_reports(before: Report, after: Report) -> Comparison:
             )
         )
 
+    if uncompared:
+        notes.append(
+            f"{len(uncompared)} finding(s) sit on pages only one of the two audits covered; "
+            "they are neither closed nor new"
+        )
     return Comparison(
         before=str(before.audit_id),
         after=str(after.audit_id),
@@ -141,9 +170,10 @@ def compare_reports(before: Report, after: Report) -> Comparison:
         comparable=not reasons,
         reasons=reasons,
         notes=notes,
-        closed=list(result.closed),
-        remaining=list(result.remaining),
-        new=list(result.new),
+        closed=closed,
+        remaining=remaining,
+        new=new,
+        uncompared=uncompared,
         causes=causes,
     )
 

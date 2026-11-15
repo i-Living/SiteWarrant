@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -39,6 +40,10 @@ logger = logging.getLogger(__name__)
 # in-flight run is the answer to the schedule's own question, and a second browser would only
 # duplicate the bill.
 SCHEDULE_RETRY_S = 60
+
+# The loop backs off on a database error and never exits on one: nothing restarts this process,
+# and a queue nobody is polling looks exactly like a queue with no work.
+BACKOFF_MAX_S = 30.0
 
 
 class WorkerContext(BaseModel):
@@ -181,23 +186,37 @@ async def execute(
 async def _heartbeat(
     audit_id: uuid.UUID, *, lease_lost: asyncio.Event, context: WorkerContext
 ) -> None:
-    """Keep the lease alive while the audit runs; stop when another worker owns the row."""
+    """Keep the lease alive while the audit runs; stop when another worker owns the row.
+
+    A failed renewal is not a lost lease by itself: the row stays ours until the lease we last
+    wrote runs out. The deadline is what decides — a database blip shorter than the lease is
+    retried, a longer one means another worker may already hold the row.
+    """
     interval = max(1.0, context.lease_s / 3)
+    deadline = time.monotonic() + context.lease_s
     while True:
         await asyncio.sleep(interval)
-        async with session_scope() as session:
-            renewed = await repo.renew_lease(
-                session,
-                audit_id=audit_id,
-                worker_id=context.worker_id,
-                lease_s=context.lease_s,
-            )
+        try:
+            async with session_scope() as session:
+                renewed = await repo.renew_lease(
+                    session,
+                    audit_id=audit_id,
+                    worker_id=context.worker_id,
+                    lease_s=context.lease_s,
+                )
+        except Exception:
+            logger.warning("lease renewal for %s failed", audit_id, exc_info=True)
+            if time.monotonic() >= deadline:
+                lease_lost.set()
+                return
+            continue
         if not renewed:
             # The run cannot be cancelled in the middle of a stage, but it can be told to stop
             # at the next boundary: the event is what `cancelled` consults.
             logger.warning("audit %s is no longer leased to this worker", audit_id)
             lease_lost.set()
             return
+        deadline = time.monotonic() + context.lease_s
 
 
 async def run_forever(
@@ -206,17 +225,28 @@ async def run_forever(
     """Recover, claim, run, sleep. The loop a deployment starts."""
     settings = settings or get_settings()
     stop = stop or asyncio.Event()
+    pause = context.poll_s
     while not stop.is_set():
-        requeued, abandoned = await recover(settings=settings)
-        if requeued or abandoned:
-            logger.info("recovered %s audit(s), abandoned %s", requeued, abandoned)
-        scheduled = await run_due_schedules(settings=settings)
-        if scheduled:
-            logger.info("queued %s scheduled audit(s)", scheduled)
-        if await run_once(context):
+        try:
+            requeued, abandoned = await recover(settings=settings)
+            if requeued or abandoned:
+                logger.info("recovered %s audit(s), abandoned %s", requeued, abandoned)
+            scheduled = await run_due_schedules(settings=settings)
+            if scheduled:
+                logger.info("queued %s scheduled audit(s)", scheduled)
+            worked = await run_once(context)
+            pause = context.poll_s
+        except Exception:
+            # `execute` already keeps one audit's failure inside itself; this catches the parts
+            # around it (recovery, schedules, the claim) so a database blip does not end the
+            # process. Cancellation and shutdown are `BaseException` and still propagate.
+            logger.exception("worker loop failed; retrying in %.1f s", pause)
+            worked = False
+            pause = min(pause * 2, BACKOFF_MAX_S)
+        if worked:
             continue
         try:
-            await asyncio.wait_for(stop.wait(), timeout=context.poll_s)
+            await asyncio.wait_for(stop.wait(), timeout=pause)
         except TimeoutError:
             continue
     logger.info("worker %s stopped", context.worker_id)

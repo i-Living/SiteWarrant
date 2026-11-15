@@ -82,7 +82,8 @@ class Dataset:
         raise DatasetError(f"unknown site {slug!r}")
 
     def page_url(self, site: SiteLabels, page: str) -> str:
-        return site.base_url + page
+        """A page may be a path inside `base_url` (a snapshot) or a full audited URL (live)."""
+        return page if "://" in page else site.base_url + page
 
     def rules(self) -> set[str]:
         return {label.rule_id for site in self.sites for label in site.labels}
@@ -169,14 +170,18 @@ def dataset_digest(
             {"page": label.page, "rule_id": label.rule_id} for label in site.labels
         ]
         labels_payload.sort(key=lambda item: (item["page"], item["rule_id"]))
-        site_payload.append(
-            {
-                "slug": site.slug,
-                "pages": list(site.pages),
-                "labels": labels_payload,
-                "page_digests": dict(site.page_digests),
-            }
-        )
+        entry: dict[str, Any] = {
+            "slug": site.slug,
+            "pages": list(site.pages),
+            "labels": labels_payload,
+            "page_digests": dict(site.page_digests),
+        }
+        if source == LIVE:
+            # A live corpus has no bytes to hash; its identity is where the pages live, which
+            # pages, which labels and when. `base_url` moves the audit target, so it is part of
+            # the measurement. The snapshot payload keeps its old shape so frozen digests hold.
+            entry["base_url"] = site.base_url
+        site_payload.append(entry)
     payload = json.dumps(
         site_payload
         if source == SNAPSHOT and captured_at is None

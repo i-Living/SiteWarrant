@@ -94,7 +94,8 @@ reviews:
         - Eval fixtures must not reach the public network. A live corpus (`source: "live"`) is the
           exception by construction: it names URLs, labels and `captured_at`, stores no page bytes,
           and must never become a CI job. Flag a live manifest without a date, and any label export
-          that includes a page whose findings were not all reviewed.
+          that includes a page whose findings were not all reviewed, reads any verdict instead of
+          the newest one, or names a path instead of the audited URL.
 
     - path: "api/app/fixes/**"
       instructions: |
@@ -136,8 +137,10 @@ reviews:
         A comparison says when it is not one: a different site or a disjoint page set must answer
         `comparable: false` with the reason, and a different `agent_version` is a note rather than
         a refusal. Coverage is the audited page list (`report.pages`), never the pages that happened
-        to have a finding — a repaired page is still audited. Flag a diff that hides rows to avoid
-        looking empty, and any root-cause grouping that merges two pages or two anchors into one cause.
+        to have a finding — a repaired page is still audited. A finding on a page only one audit
+        covered is `uncompared`, never `closed` or `new`: flag a classification that implies the
+        later run checked a page it never audited. Flag a diff that hides rows to avoid looking
+        empty, and any root-cause grouping that merges two pages or two anchors into one cause.
 
     - path: "api/app/api/**"
       instructions: |

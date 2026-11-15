@@ -39,7 +39,8 @@ def test_a_perfect_run_is_one_and_zero() -> None:
     assert metrics.duplicate_rate == 0.0
 
 
-def test_no_predictions_is_zero_precision_not_a_division_error() -> None:
+def test_no_predictions_has_no_precision_not_a_zero() -> None:
+    """A missing denominator is unknown. `0.0` would read as a measured zero."""
     metrics = measure(
         {label("SEO-TITLE", "index.html")},
         set(),
@@ -48,9 +49,11 @@ def test_no_predictions_is_zero_precision_not_a_division_error() -> None:
         findings_raw=0,
         duplicates_removed=0,
     )
-    assert metrics.precision == 0.0
+    assert metrics.precision is None
+    assert metrics.false_positive_rate is None
+    # The label exists and nothing was predicted: recall does have a denominator.
     assert metrics.recall == 0.0
-    assert metrics.false_positive_rate == 0.0
+    assert metrics.duplicate_rate is None
 
 
 def test_per_rule_counts_add_up_to_the_totals() -> None:

@@ -131,6 +131,36 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
         assert await repo.cancel_requested(session, running_id) is True
 
 
+async def test_recovery_discards_the_dead_attempts_facts() -> None:
+    """The next attempt must not see the previous one's pages: its agents would cite them."""
+    await drain()
+    audit_id = await enqueue("queue-clean.invalid")
+    async with session_scope() as session:
+        claimed = await repo.claim_audit(session, worker_id="worker-a", lease_s=0)
+    assert claimed is not None and claimed[0] == audit_id
+    async with session_scope() as session:
+        page_id = await repo.save_page(
+            session,
+            audit_id=audit_id,
+            url="http://queue-clean.invalid/",
+            key="queue-clean.invalid",
+            status_code=200,
+            render_mode="browser",
+        )
+        await repo.save_findings(
+            session, audit_id=audit_id, page_id=page_id, drafts=[draft("SEO-TITLE", "seo")]
+        )
+        await session.commit()
+    async with session_scope() as session:
+        requeued, _abandoned = await repo.requeue_expired(session, max_attempts=2)
+        assert requeued >= 1
+    async with session_scope() as session:
+        row = await repo.get_audit(session, audit_id)
+        findings = await repo.findings_for_audit(session, audit_id)
+    assert row is not None and row.status == lifecycle.QUEUED
+    assert findings == []
+
+
 async def test_a_reclaimed_audit_fences_the_stale_worker() -> None:
     """The fence is in storage: a worker that lost the row writes nothing, not even a stage."""
     await drain()
@@ -262,10 +292,45 @@ async def test_a_page_is_labelled_only_when_every_finding_was_reviewed(tmp_path:
     dataset = load_dataset(out)
     assert dataset.source == "live"
     site = dataset.sites[0]
-    assert site.pages == ("pricing",)
-    assert [(label.page, label.rule_id) for label in site.labels] == [("pricing", "SEO-TITLE")]
+    # The audited URL, not a path: a live corpus is fetched from the internet, and the query
+    # string is part of which page it is.
+    assert site.pages == (f"http://{HOST}/pricing",)
+    assert [(label.page, label.rule_id) for label in site.labels] == [
+        (f"http://{HOST}/pricing", "SEO-TITLE")
+    ]
     # The false positive is a page with no label, which is the control for precision.
     assert "A11Y-LANG" not in {label.rule_id for label in site.labels}
+
+
+async def test_a_withdrawn_verdict_leaves_no_label(tmp_path: Path) -> None:
+    """Feedback is append-only: the export must read the last verdict, not any verdict."""
+    await drain()
+    host = f"withdrawn-{uuid.uuid4().hex[:8]}.invalid"
+    audit_id = await enqueue(f"http://{host}/p", status=lifecycle.COMPLETED)
+    async with session_scope() as session:
+        page_id = await repo.save_page(
+            session,
+            audit_id=audit_id,
+            url=f"http://{host}/p",
+            key=host,
+            status_code=200,
+            render_mode="browser",
+        )
+        stored = await repo.save_findings(
+            session, audit_id=audit_id, page_id=page_id, drafts=[draft("SEO-TITLE", "seo")]
+        )
+        await session.commit()
+    finding_id = stored[0][0]
+    async with session_scope() as session:
+        await repo.add_feedback(
+            session, finding_id=finding_id, verdict="confirmed", source="operator", note=None
+        )
+        await repo.add_feedback(
+            session, finding_id=finding_id, verdict="false_positive", source="operator", note=None
+        )
+    manifest = await export_labels(host, out=tmp_path / "withdrawn.json")
+    # The page is reviewed, so it is a clean control: its defect was withdrawn.
+    assert manifest["totals"] == {"sites": 1, "pages": 1, "labels": 0}
 
 
 async def test_feedback_never_rewrites_the_finding() -> None:

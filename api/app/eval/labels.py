@@ -37,10 +37,6 @@ def base_of(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}/"
 
 
-def path_of(url: str) -> str:
-    return urlsplit(url).path.lstrip("/")
-
-
 def write_manifest(manifest: dict[str, Any], out: Path) -> None:
     """Write the file: a sync helper, because an async function must not block on the disk."""
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -70,18 +66,22 @@ async def export_labels(host: str, *, out: Path) -> dict[str, Any]:
                 # Nothing was reported, so nothing was reviewed: a page with no findings is not
                 # a clean control until a human says so, and this export has no way to ask.
                 continue
-            verdicts = {
-                str(finding.id): {
-                    row.verdict for row in await repo.list_feedback(session, finding.id)
-                }
-                for finding in findings
-            }
-            if any(not seen for seen in verdicts.values()):
+            # Feedback is append-only and read oldest first, so the last row is the current
+            # verdict: a finding confirmed and then corrected to `false_positive` is withdrawn,
+            # and an export that ORs the history would put it back in the corpus.
+            latest: dict[str, str] = {}
+            for finding in findings:
+                rows = await repo.list_feedback(session, finding.id)
+                if rows:
+                    latest[str(finding.id)] = rows[-1].verdict
+            if len(latest) < len(findings):
                 continue
-            page = path_of(audit.site_url)
+            # The full audited URL, not a path: a live corpus is fetched from the internet, and
+            # `?id=1` or a second scheme is a different page, not the same one.
+            page = audit.site_url
             pages.append(page)
             for finding in findings:
-                if verdicts[str(finding.id)] & POSITIVE_VERDICTS:
+                if latest[str(finding.id)] in POSITIVE_VERDICTS:
                     # One label per (rule, page): the layer reports one finding per rule per page
                     # however many nodes it names, so five covered links are one labelled defect.
                     labels.add(Label(page=page, rule_id=finding.rule_id))
