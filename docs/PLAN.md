@@ -262,7 +262,8 @@ cd api && uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy app
 uv run pytest -q -m "not integration and not network"   # unit, без сети и БД
-uv run pytest -q -m integration                          # БД + фикстура + Chromium
+uv run pytest -q -m "integration and not corpus"         # БД + фикстура + Chromium
+uv run pytest -q -m corpus                              # замороженный корпус, сайт на тест
 uv run alembic upgrade head
 
 # Аудит одной страницы (P0). Без --allow-private гейт SSRF отклонит localhost.

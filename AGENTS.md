@@ -113,7 +113,8 @@ cd api && uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy app
 uv run pytest -q -m "not integration and not network"    # unit, no network, no database
-uv run pytest -q -m integration                           # database, fixture site, Chromium
+uv run pytest -q -m "integration and not corpus"          # database, fixture site, Chromium
+uv run pytest -q -m corpus                                # the frozen benchmark, one site per test
 uv run alembic upgrade head
 
 # Audit [P0, verified]
@@ -445,6 +446,14 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 - **Performance numbers are excluded from the determinism check.** TTFB, FCP, LCP, CLS and TBT move
   between runs on the same machine; `tests/integration/test_fact_layer.py` compares every other channel
   and says so. Do not "fix" the comparison by loosening it for other tools.
+- **The corpus tests carry their own `corpus` marker, and the gate excludes them.** One of them
+  audits a whole benchmark site twice — 13 pages at three viewports — so
+  `-m "integration and not corpus"` is the gate a commit answers to (about 3.5 min) and `-m corpus`
+  is the measured half in its own CI job (about 1.5 min). Selecting `-m integration` alone returns
+  the suite to six minutes and lets a corpus failure read as a broken fixture. Repeatability,
+  self-description and "an eval writes no screenshot" share one test in `test_eval_corpus.py` for the
+  same reason: a second site audited only for the payload or the disk listing would pay the browser
+  price again for a fact the run in hand already carries.
 - **The benchmark digest covers the markup, not only the labels.** `dataset_digest` hashes each
   site's page paths, the digest of every page's rendered text, and the labels planted in them; a
   manifest carrying a digest that does not match is refused. Labels alone would let two corpora with

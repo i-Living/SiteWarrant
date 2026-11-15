@@ -1,4 +1,4 @@
-.PHONY: check lint types test integration up down migrate audit-fixture agents-fixture index-rules web-build
+.PHONY: check lint types test integration corpus up down migrate audit-fixture agents-fixture index-rules web-build
 
 # The single gate. AGENTS.md promises exactly this.
 check: lint types test web-check
@@ -13,7 +13,12 @@ test:
 	cd api && uv run pytest -q -m "not integration and not network"
 
 integration:
-	cd api && uv run pytest -q -m integration
+	cd api && uv run pytest -q -m "integration and not corpus"
+
+# The frozen benchmark, one whole site of real browser work per test. Kept out of the commit
+# gate (`integration`) and run as its own CI job, so a corpus run never hides a fixture failure.
+corpus:
+	cd api && uv run pytest -q -m corpus
 
 web-check:
 	cd web && bunx biome check . && bunx tsc --noEmit
