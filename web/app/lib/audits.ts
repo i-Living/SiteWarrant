@@ -50,6 +50,38 @@ export type SiteDetail = {
   pages: PageSummary[];
 };
 
+export type HistoryRun = {
+  audit_id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  agent_version: string;
+  error: string | null;
+  has_report: boolean;
+  pages_audited: number | null;
+  findings_total: number | null;
+  by_severity: Record<string, number> | null;
+  by_category: Record<string, number> | null;
+  scores: Record<string, number> | null;
+  duration_ms: number | null;
+  tokens_in: number;
+  tokens_out: number;
+  llm_calls: number;
+  cost_estimate_usd: number | null;
+  compared_to: string | null;
+  comparable: boolean | null;
+  comparison_notes: string[];
+  new: number | null;
+  closed: number | null;
+  remaining: number | null;
+};
+
+export type SiteHistory = {
+  host: string;
+  runs: HistoryRun[];
+  notes: string[];
+};
+
 export async function listSites(): Promise<SiteSummary[]> {
   const response = await fetch(`${apiBase}/sites`, { cache: "no-store" });
   if (!response.ok) {
@@ -84,4 +116,23 @@ export async function getAudit(auditId: string): Promise<AuditSummary | null> {
     throw new Error(`The audit API answered ${response.status}.`);
   }
   return (await response.json()) as AuditSummary;
+}
+
+export async function getSiteHistory(
+  host: string,
+  limit = 30,
+): Promise<SiteHistory | null> {
+  const response = await fetch(
+    `${apiBase}/sites/${encodeURIComponent(host)}/history?limit=${limit}`,
+    { cache: "no-store" },
+  );
+  // Only a 404 means "this host has no page audit". A 500 is the API failing, and
+  // showing an empty dashboard would read as "nothing was ever measured".
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`The audit API answered ${response.status}.`);
+  }
+  return (await response.json()) as SiteHistory;
 }

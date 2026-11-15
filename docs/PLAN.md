@@ -232,6 +232,7 @@ api/
                   occlusion, performance, screenshot + fetch, http_get, guard, robots
   app/agents/     specs, prompts/, runner (бюджетный цикл), validator, orchestrator, llm
   app/chief/      anchor (место находки), cluster (dedupe, root causes, приоритет)
+  app/dashboard.py серия прогонов хоста: числа из отчётов, дельты через compare
   app/fixes/      patch (пять механических правил), recommend, reaudit, measure (метрики правок)
   app/eval/       dataset (манифест и дайджест), metrics, runner, compare
   app/mcp/        MCP-сервер фактов (stdio) и MCP-клиент оркестратора
@@ -239,13 +240,13 @@ api/
   Dockerfile      образ API для demo.yml и CI
   migrations/
   tests/
-web/              Next.js: страница отчёта (причины, находки, улики)
+web/              Next.js: реестр хостов, страница хоста, дашборд динамики, форма запуска, отчёт
 benchmark/        fixtures/ (сайт P0–P4), sites/ (восемь сгенерированных сайтов + метки),
                   dataset.json, generate.py
 rules/            корпус WCAG 2.2 / SEO / HTTP-безопасности (claims.jsonl)
 evals/runs/       записанные прогоны; число в документах обязано называть один из файлов
 pricing/          pricing.yaml — версионированная прайс-таблица
-infra/            docker-compose.yml (Postgres+pgvector, Redis, фикстура), demo.yml, nginx-конфиг
+infra/            docker-compose.yml (Postgres+pgvector, фикстура), demo.yml, nginx-конфиг
 docs/             PLAN.md, ENGINEERING_REPORT.md
 .github/          workflows/ci.yml (гейт и сборка образа), workflows/eval.yml (недельный прогон)
 ```
@@ -827,6 +828,20 @@ CI-корпусом. `sitewarrant labels --host H --out manifest.json` соби�
 включённое ждёт целый интервал, а не догоняет пропущенное. API: `GET/POST /schedules`,
 `PATCH /schedules/{id}`; повторный `POST` с тем же URL правит существующее расписание.
 
+**Dashboard динамики (этап 5.2).** `GET /sites/{host}/history?limit=30` отдаёт серию прогонов хоста:
+дата, статус, `agent_version`, `pages_audited`, `findings_total`, `by_severity`, `by_category`,
+`scores`, длительность, токены/вызовы/стоимость и дельту к предыдущему прогону с отчётом
+(`new`/`closed`/`remaining`) вместе с вердиктом `compare_reports`. Числа берутся из сохранённого
+отчёта, а не из SQL-счётчика: таблица `findings` держит дубли, снятые chief-слоем, и счёт по
+категориям был бы больше отчёта. Токены и стоимость — из строки `audits` (это то, что прогон
+потратил, включая повторную попытку); без отчёта поле `null`, а не `0`. Несопоставимая пара (нет
+общей страницы) чисел не получает — только причину. Страница `/sites/[host]/dashboard` рисует
+Recharts v3: стек по severity, новые/закрытые, категории с фильтром и стоимость; точка ведёт на
+`/audits/{id}?category=…`, у отчёта появился фильтр по категории. Решение владельца 2026-11-15:
+1а (читать артефакт на запросе, без миграции), 2а (тренд, дельты, стоимость и длительность,
+фильтр по категориям; динамика производительности — отдельным шагом), 3а (точка — прогон по хосту,
+несопоставимые пары помечены), 4 + Recharts v3 (новая зависимость `web/package.json`).
+
 **Мультипользовательность.** В `audits` добавлен `owner_id` (`SITEWARRANT_OWNER_ID`, по умолчанию
 `local`). Таблиц пользователей и организаций нет — это отдельная работа, но миграция, которая будет
 угадывать владельца старых строк, уже не понадобится.
@@ -856,8 +871,6 @@ CI-корпусом. `sitewarrant labels --host H --out manifest.json` соби�
   привязки сайт → репозиторий/ветка; без этих секретов проверить нечего.
 - **Этап 4.1, расширение каталога исправлений.** Новое правило меняет `agent_version` и требует
   посадки в `benchmark/generate.py` (корпус генерируется, а не правится руками) — отдельный замер.
-- **Этап 5.2, dashboard.** Контракт сравнения готов (§19.2); страница показателей — отдельная работа
-  по `web/`.
 - **Этап 6.2, публичный API.** Сегодня API закрыт сессионной кукой и слушает loopback; токены, лимиты
   и идемпотентность — отдельное решение по безопасности.
 - **Этап 6.3, публичный стенд.** `infra/demo.yml` проверен на loopback; публичный URL по-прежнему ждёт
@@ -875,8 +888,9 @@ uv run sitewarrant labels --host example.com --out ../benchmark/live/example.jso
 `POST /audits` теперь отвечает `202 {audit_id, status: "queued", deduplicated}` и принимает
 `{url, scope, max_pages, force}` (`scope`: `page` по умолчанию или `sitemap`; `max_pages` — 1…50,
 по умолчанию 10, см. §19.6). Добавлены `POST /audits/{id}/cancel`, `GET /audits/{id}/compare`,
-`POST|GET /findings/{id}/feedback`, `GET|POST /schedules` и `PATCH /schedules/{id}`. У `GET /audits`
-появились `stage`, `scope` и `cancel_requested`.
+`POST|GET /findings/{id}/feedback`, `GET|POST /schedules`, `PATCH /schedules/{id}` и
+`GET /sites/{host}/history` (серия прогонов для дашборда, §19.2). У `GET /audits` появились `stage`,
+`scope` и `cancel_requested`.
 
 ### 19.5 Что это меняет в опубликованных числах
 

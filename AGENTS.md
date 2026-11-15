@@ -17,8 +17,9 @@ with a versioned cost estimate. Since 2026-11-15 the audit runs in a separate wo
 Postgres queue (§19): `POST /audits` only writes a `queued` row. `web/`
 is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
 recent runs (queued, running with its stage, finished), a run form that audits one page or walks the
-site's `sitemap.xml` (ten pages by default, fifty at most), the stored report, and a login
-gate in `web/middleware.ts`. `infra/` brings up Postgres and a fixture site with ten planted defects,
+site's `sitemap.xml` (ten pages by default, fifty at most), a per-host dashboard of stored runs
+(severity trend, opened/closed, categories, cost; `web/app/sites/[host]/dashboard`), the stored
+report, and a login gate in `web/middleware.ts`. `infra/` brings up Postgres and a fixture site with ten planted defects,
 and `infra/demo.yml` runs the API and the worker on loopback.
 
 Still open, and the plan says so in each case:
@@ -67,6 +68,13 @@ phase that makes them meaningful. Do not add a command to this file that has not
 - **A benchmark number is only as good as its denominator.** `app/eval/metrics.py` keeps counts next
   to ratios, and the run file stores the label set it was measured against, so a reader can redo the
   arithmetic. A comparison across two corpora is refused: it is not a comparison.
+- **A dashboard point is a report, not a findings count.** `GET /sites/{host}/history`
+  (`app/dashboard.py`) reads each run's stored report for the numbers and the audit row for what the
+  run spent; the `findings` table keeps the duplicates the chief layer merged, so a SQL count per
+  category would be larger than the report the chart shows. A run without a report keeps its
+  place with `null`, and a pair of runs with no shared page carries the reason instead of a
+  delta. The run before the window is read as comparison context and then dropped, so the
+  first point of a short window is still measured against the last report before it.
 - **The eval corpus is generated, never hand-edited.** `benchmark/generate.py --check` compares every
   byte; a hand-fixed page would make its label a lie. Its 1.0/1.0 is a floor (the generator plants
   exactly what the catalogue promises) and the README says so.
@@ -289,7 +297,8 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals,
                    queue and label export)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
-web/app/           Next.js interface: sites, site pages, audit form, current audits, report, login
+web/app/           Next.js interface: sites, site pages, the per-host dashboard, audit form, current
+                   audits, report, login
 web/middleware.ts  session gate: every route but /login and /auth/login needs a signed cookie
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
@@ -656,6 +665,11 @@ the repository does not grow by a copy of somebody's site.
   a failing capture (status 7 preserved), a server that had already stopped, and a server that
   ignores `SIGTERM` all end with no processes left, and `prune` waits while a `uv run` lives and
   returns immediately once the group is gone.
+- **A Recharts category axis keyed on a repeated label draws no bars.** Two runs in the same minute
+  share a time string, Recharts' category scale collapses the duplicates and the bar layer comes out
+  empty while the line still draws — which reads like a data problem in the endpoint. Key the axis on
+  the row index and put the readable label in `tickFormatter`/`labelFormatter`; keep
+  `isAnimationActive={false}` so a screenshot does not depend on an animation that may not have run.
 
 ## Where decisions live
 
