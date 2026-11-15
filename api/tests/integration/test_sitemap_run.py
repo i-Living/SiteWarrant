@@ -170,6 +170,7 @@ async def test_a_dispatch_row_does_not_hide_the_page_it_dispatched() -> None:
             config={"agents": [], "scope": "page"},
             status=lifecycle.COMPLETED,
         )
+        runs_before = dict(await repo.audit_counts_per_url(session))[url]
     async with session_scope() as session:
         # Written second, so it is the newer row of the same URL: without the scope filter it
         # would replace the page audit and the page would look unmeasured.
@@ -182,11 +183,11 @@ async def test_a_dispatch_row_does_not_hide_the_page_it_dispatched() -> None:
         )
     async with session_scope() as session:
         latest = {row.id for row in await repo.latest_audit_per_url(session)}
-        counts = dict(await repo.audit_counts_per_url(session))
+        runs_after = dict(await repo.audit_counts_per_url(session))[url]
 
     assert page_id in latest
     assert dispatch_id not in latest, "a dispatch must not become a page's newest row"
-    assert counts[url] >= 1
+    assert runs_after == runs_before, "a dispatch is not a run of the page"
     async with session_scope() as session:
         await session.execute(delete(Audit).where(Audit.id.in_([page_id, dispatch_id])))
         await session.commit()
