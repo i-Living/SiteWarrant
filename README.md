@@ -65,7 +65,7 @@ that cannot.
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
 `evals/runs/2026-11-15-baseline-occluder.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:b6f6435fee6719ff`, 2026-11-15. A metric with no run behind it stays `null`.
+`sha256:e132ad9b57c7f80a`, 2026-11-15. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -75,8 +75,8 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.05 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 319.3 s |
-| Fix acceptance rate | repairs that applied to the served source / repairs proposed | `1.0000` — 48/48, from `evals/runs/2026-11-15-fix-acceptance.json` (agent `sha256:b6f6435fee6719ff`, 473.3 s). A floor: the corpus is static, so a diff computed from the source it is applied to usually lands; what the run proves is that no repair was written that cannot be applied |
+| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 326.2 s |
+| Fix acceptance rate | repairs that applied to the served source / repairs proposed | `1.0000` — 48/48, from `evals/runs/2026-11-15-fix-acceptance.json` (agent `sha256:e132ad9b57c7f80a`, 512.6 s). A floor: the corpus is static, so a diff computed from the source it is applied to usually lands; what the run proves is that no repair was written that cannot be applied |
 | Regression-free fix rate | re-audits with no new finding at all / applied fixes | `1.0000` — 48/48 from the same run; every applied repair also closed the finding it was computed for (48/48), measured by re-auditing the patched page rather than by reading the diff |
 
 A zero denominator reports `null`, never `0`. Cost is an estimate from a versioned price table; tokens
@@ -131,7 +131,7 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-15 against the fixture site, agent `sha256:b6f6435fee6719ff` (axe-core 4.14.0,
+Measured on 2026-11-15 against the fixture site, agent `sha256:e132ad9b57c7f80a` (axe-core 4.14.0,
 10 SiteWarrant rules; run `evals/audits/2026-11-15-fixture.json`):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
@@ -141,7 +141,11 @@ Measured on 2026-11-15 against the fixture site, agent `sha256:b6f6435fee6719ff`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 354 tests green (301 unit, 53 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 332 unit tests green; the integration
+  suite is 60 passed and 2 failed on this machine, and both failures reproduce on a clean `origin/main`
+  against the same database — `test_agents_audit.py` reads the newest audit row in the whole database
+  rather than the one it started, and a database that holds earlier runs answers with a different row.
+  CI runs the suite on a fresh database, where it passes.
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
@@ -204,7 +208,7 @@ uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
 Measured on 2026-11-15 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:b6f6435fee6719ff`, 319.3 s, `evals/runs/2026-11-15-baseline-occluder.json` — the same score every
+`sha256:e132ad9b57c7f80a`, 326.2 s, `evals/runs/2026-11-15-baseline-occluder.json` — the same score every
 earlier run recorded; the change behind this version was the occlusion probe, and the fix measurements in
 `evals/runs/2026-11-15-fix-acceptance.json` carry the same version):
 

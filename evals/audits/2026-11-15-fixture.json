@@ -1,9 +1,9 @@
 {
-  "audit_id": "bc69ef80-73d5-4be9-bdb0-43557fc8a236",
+  "audit_id": "334cc403-6f6e-4d93-9a4c-db3f974e3d48",
   "site": "http://localhost:8081/",
-  "agent_version": "sha256:b6f6435fee6719ff",
+  "agent_version": "sha256:e132ad9b57c7f80a",
   "status": "completed",
-  "generated_at": "2026-11-14T23:15:19.504603Z",
+  "generated_at": "2026-11-14T23:54:36.075805Z",
   "summary": {
     "pages_audited": 1,
     "findings_total": 14,
@@ -17,7 +17,7 @@
       "seo": 82.5,
       "a11y": 30.0
     },
-    "duration_ms": 3297,
+    "duration_ms": 3418,
     "observations_by_tool": {
       "http": 8,
       "dom": 3,
@@ -39,7 +39,7 @@
       "basis": "list price for the same model and tokens; the subscription plan bills a flat fee, so this is not an invoice",
       "unpriced_models": []
     },
-    "trace_id": "501545f2a9d38932aca0874c95e08497",
+    "trace_id": "9a218109aadb138ad39dbdb3bd4fc04e",
     "spans": {
       "audit": 1,
       "page": 3
@@ -50,7 +50,7 @@
   },
   "findings": [
     {
-      "id": "9a9b75bb-d600-4ade-aa71-9e5a938eba4a",
+      "id": "ddcb0b64-6d52-44ed-8c2c-1b43719b9c95",
       "rule_id": "SEO-TITLE",
       "category": "seo",
       "severity": "major",
@@ -74,23 +74,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
+          "observation_id": "4ba4176f-b21b-48af-90b4-b9776423cea2",
           "excerpt": "document.title is empty"
         },
         {
           "kind": "dom",
-          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
+          "observation_id": "763e32db-96c8-468f-bd61-f18887baaad3",
           "excerpt": "document.title is empty"
         },
         {
           "kind": "dom",
-          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
+          "observation_id": "9c559c11-3003-4f7b-bfdd-39ade5c2a0bb",
           "excerpt": "document.title is empty"
         }
       ]
     },
     {
-      "id": "9887e9aa-3151-4efb-a035-93cb5dab2974",
+      "id": "276d7534-a7e5-4c97-996e-b828fd018484",
       "rule_id": "SEO-META-DESC",
       "category": "seo",
       "severity": "minor",
@@ -114,23 +114,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
+          "observation_id": "4ba4176f-b21b-48af-90b4-b9776423cea2",
           "excerpt": "meta[name=description] is missing or empty"
         },
         {
           "kind": "dom",
-          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
+          "observation_id": "763e32db-96c8-468f-bd61-f18887baaad3",
           "excerpt": "meta[name=description] is missing or empty"
         },
         {
           "kind": "dom",
-          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
+          "observation_id": "9c559c11-3003-4f7b-bfdd-39ade5c2a0bb",
           "excerpt": "meta[name=description] is missing or empty"
         }
       ]
     },
     {
-      "id": "8d0feef3-e014-4cc9-a027-08ce29911325",
+      "id": "f23b51c0-6cbf-4f64-b208-0c6a2f116092",
       "rule_id": "SEO-H1",
       "category": "seo",
       "severity": "major",
@@ -154,23 +154,23 @@
       "evidence": [
         {
           "kind": "dom",
-          "observation_id": "a35cf796-1e4e-4dc3-b6bc-725b41b179f9",
+          "observation_id": "4ba4176f-b21b-48af-90b4-b9776423cea2",
           "excerpt": "the page has no h1 element"
         },
         {
           "kind": "dom",
-          "observation_id": "139d0c1b-14f6-435f-bfd4-d8702f455c7e",
+          "observation_id": "763e32db-96c8-468f-bd61-f18887baaad3",
           "excerpt": "the page has no h1 element"
         },
         {
           "kind": "dom",
-          "observation_id": "8d698fd5-3c9e-4a10-93cf-b57e35a0199c",
+          "observation_id": "9c559c11-3003-4f7b-bfdd-39ade5c2a0bb",
           "excerpt": "the page has no h1 element"
         }
       ]
     },
     {
-      "id": "d5270a35-aed4-417e-9c62-6cd54ea49121",
+      "id": "97465c82-bb44-495c-8d9a-6b362c82253a",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -194,13 +194,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
+          "observation_id": "4f17bad0-fe93-4ac8-901a-71c41bfc107a",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(1) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "82b42648-f707-413c-9e3c-bde94d5f885e",
+      "id": "4b28c840-b240-454f-a028-7558f3d94206",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -224,13 +224,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
+          "observation_id": "4f17bad0-fe93-4ac8-901a-71c41bfc107a",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "57f68608-307b-49ea-b659-46d8728ff713",
+      "id": "a58f972b-fca0-4c6c-b218-2a4ca21bb69f",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -254,13 +254,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
+          "observation_id": "4f17bad0-fe93-4ac8-901a-71c41bfc107a",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(3) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "cb3f821e-2c34-4485-8665-c7853c6e92d6",
+      "id": "b17751d5-9fc6-4298-8ba5-6a1950d75011",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -284,13 +284,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
+          "observation_id": "4f17bad0-fe93-4ac8-901a-71c41bfc107a",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > nav:nth-of-type(1) > a:nth-of-type(4) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "8b15aff9-9d19-47d7-8bb4-83f18d0286bc",
+      "id": "86a92611-47ae-4465-ad64-278389da1fbb",
       "rule_id": "LAYOUT-OCCLUSION",
       "category": "responsive",
       "severity": "major",
@@ -314,13 +314,13 @@
       "evidence": [
         {
           "kind": "occlusion_hit",
-          "observation_id": "ae229aae-9d69-4631-b023-ae0fdf32194e",
+          "observation_id": "4f17bad0-fe93-4ac8-901a-71c41bfc107a",
           "excerpt": "html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > a:nth-of-type(2) covered by html:nth-of-type(1) > body:nth-of-type(1) > header:nth-of-type(1) > div:nth-of-type(1)"
         }
       ]
     },
     {
-      "id": "9a51951d-0011-44d1-8128-e82ad738fab4",
+      "id": "bb0509fa-4b1d-4673-b2cb-0a5e241a2d62",
       "rule_id": "A11Y-BUTTON-NAME",
       "category": "a11y",
       "severity": "blocker",
@@ -344,23 +344,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "af9f46b2-758b-434c-9277-83e4d9998b7f",
+          "observation_id": "8334d451-622d-43d4-b2a1-7b81d1590239",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "1c61b68e-69ea-4965-ad9f-f4c4cd102b81",
+          "observation_id": "37ab3f21-a848-44d9-bbb1-16fbb9ab1c82",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "c0ca63b5-b94b-453f-87fc-3fbed55b41cf",
+          "observation_id": "bfae3edf-c0fd-4933-bbad-aa697351eed8",
           "excerpt": "button[type=\"button\"] :: <button type=\"button\">\n          <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\">\n            <rect width=\"16\" height=\"16\" fill=\"currentColor\"></rect>\n          </svg>\n        </button>"
         }
       ]
     },
     {
-      "id": "205a3839-8d45-44e0-ade0-074aa4ff8aea",
+      "id": "6cbd9244-8f93-48b4-b1d3-ceb6d36f8b5d",
       "rule_id": "A11Y-CONTRAST",
       "category": "a11y",
       "severity": "major",
@@ -384,38 +384,38 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "397a33be-c9fd-40a3-b18c-7180d430ed5e",
+          "observation_id": "0331518c-0dd8-4380-891a-dc9a1e43fb9e",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "a8b15058-fea1-48ed-a3dd-3bad769373ed",
+          "observation_id": "673c7675-ee6d-4d21-8860-9ed8ac5a5419",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "b0cac1a5-5056-45bd-9a4a-6bafce0d66cd",
+          "observation_id": "da669b07-5627-443e-9f17-da1987bd8900",
           "excerpt": "span :: <span class=\"banner-text\">Autumn sale</span>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "397a33be-c9fd-40a3-b18c-7180d430ed5e",
+          "observation_id": "0331518c-0dd8-4380-891a-dc9a1e43fb9e",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "a8b15058-fea1-48ed-a3dd-3bad769373ed",
+          "observation_id": "673c7675-ee6d-4d21-8860-9ed8ac5a5419",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "b0cac1a5-5056-45bd-9a4a-6bafce0d66cd",
+          "observation_id": "da669b07-5627-443e-9f17-da1987bd8900",
           "excerpt": ".muted :: <p class=\"muted\">Prices start at 40 EUR per print, framed and shipped.</p>"
         }
       ]
     },
     {
-      "id": "43f265fe-87ff-4b42-8bfe-2ffad1428c28",
+      "id": "025984d1-c158-4605-9a14-6eb7e088067d",
       "rule_id": "A11Y-LANG",
       "category": "a11y",
       "severity": "major",
@@ -439,23 +439,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "49038968-edb5-48f5-87c8-c7b376a60de8",
+          "observation_id": "6433a1e9-9368-44ea-9a82-82b77be4c57e",
           "excerpt": "html :: <html>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "8fbf37f8-0a70-45f5-ac2e-037434d21f20",
+          "observation_id": "fd3ed9e5-e306-41ac-9d9a-4461ec31620a",
           "excerpt": "html :: <html>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "ba6148ea-2d12-4b3d-b70a-f0a399325069",
+          "observation_id": "8340f46e-83a2-4ef2-8718-085f2c1e91f6",
           "excerpt": "html :: <html>"
         }
       ]
     },
     {
-      "id": "30269145-0400-4fd8-b81c-2f8e5a22290d",
+      "id": "773ba60d-f350-4157-9e90-255a48e2c842",
       "rule_id": "A11Y-IMG-ALT",
       "category": "a11y",
       "severity": "major",
@@ -479,23 +479,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "f201f59d-7919-4aaa-885b-86e9c9d2879e",
+          "observation_id": "9f19824e-b8ec-41b2-b733-720aae1de3f3",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "f9d7d7e6-fa95-4e16-beec-d0de7442fad1",
+          "observation_id": "389fa1de-216f-42c5-b26a-a6d4d055c86b",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "f30d94f4-abe3-49e2-9f48-d0091d6e803b",
+          "observation_id": "c3051ba0-a06c-4aef-b184-28eb533accce",
           "excerpt": "main > img[src$=\"logo.png\"] :: <img src=\"logo.png\">"
         }
       ]
     },
     {
-      "id": "162c6489-b4ca-4c31-b310-6aa5b9bdd665",
+      "id": "055abe6f-20a4-4866-85ab-2a7dd3541917",
       "rule_id": "A11Y-LABEL",
       "category": "a11y",
       "severity": "blocker",
@@ -519,23 +519,23 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "031de6d6-efc5-47c8-b5ef-0a951106da9f",
+          "observation_id": "4004f11d-8d2d-41b0-b755-38a47322b49c",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "9643619b-700d-4b85-aeea-12a2281d18fb",
+          "observation_id": "707e8c13-056a-4db5-b8a6-84ab1d94f13e",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "7f9099d9-9a58-4a67-a2d1-6a260ffbc916",
+          "observation_id": "fdae915f-8e2f-41c5-a01c-5f53914438ee",
           "excerpt": "input :: <input type=\"email\" name=\"email\" required=\"\">"
         }
       ]
     },
     {
-      "id": "49833325-8ded-4fb6-88fb-ce0ecb029c0a",
+      "id": "d0cf9dc8-289c-434f-85b4-9580af69a904",
       "rule_id": "A11Y-LINK-NAME",
       "category": "a11y",
       "severity": "major",
@@ -559,32 +559,32 @@
       "evidence": [
         {
           "kind": "axe_node",
-          "observation_id": "819159e8-f849-4432-8526-e07d25107087",
+          "observation_id": "1cbea4f3-67af-428a-963f-c902ad6af1a0",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "e07e6156-f8f4-4a3d-b27e-0501e4c74dc4",
+          "observation_id": "db0a5a7a-f3ea-4e12-8c33-a6a5457bfced",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "13840236-f726-444c-bcac-ca34950dc07e",
+          "observation_id": "acb7b3bc-1a75-45d9-a72d-d0839d5182c3",
           "excerpt": ".icon-link :: <a class=\"icon-link\" href=\"/about\">"
         },
         {
           "kind": "axe_node",
-          "observation_id": "819159e8-f849-4432-8526-e07d25107087",
+          "observation_id": "1cbea4f3-67af-428a-963f-c902ad6af1a0",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "e07e6156-f8f4-4a3d-b27e-0501e4c74dc4",
+          "observation_id": "db0a5a7a-f3ea-4e12-8c33-a6a5457bfced",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         },
         {
           "kind": "axe_node",
-          "observation_id": "13840236-f726-444c-bcac-ca34950dc07e",
+          "observation_id": "acb7b3bc-1a75-45d9-a72d-d0839d5182c3",
           "excerpt": ".banner-close :: <a class=\"banner-close\" href=\"#dismiss\">\n          <svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" aria-hidden=\"true\">\n            <path d=\"M1 1 L13 13 M13 1 L1 13\" stroke=\"currentColor\"></path>\n          </svg>\n        </a>"
         }
       ]
@@ -605,12 +605,12 @@
       "severity": "major",
       "priority": 9.0,
       "finding_ids": [
-        "d5270a35-aed4-417e-9c62-6cd54ea49121",
-        "82b42648-f707-413c-9e3c-bde94d5f885e",
-        "57f68608-307b-49ea-b659-46d8728ff713",
-        "cb3f821e-2c34-4485-8665-c7853c6e92d6",
-        "8b15aff9-9d19-47d7-8bb4-83f18d0286bc",
-        "49833325-8ded-4fb6-88fb-ce0ecb029c0a"
+        "97465c82-bb44-495c-8d9a-6b362c82253a",
+        "4b28c840-b240-454f-a028-7558f3d94206",
+        "a58f972b-fca0-4c6c-b218-2a4ca21bb69f",
+        "b17751d5-9fc6-4298-8ba5-6a1950d75011",
+        "86a92611-47ae-4465-ad64-278389da1fbb",
+        "d0cf9dc8-289c-434f-85b4-9580af69a904"
       ]
     }
   ]
