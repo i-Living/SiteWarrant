@@ -108,6 +108,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   row can be reclaimed, and the writes of the old run are fenced on the worker id — `set_stage` and
   `finish_audit` update nothing for a worker that no longer holds the row, so the stale run stops at
   its next stage boundary and writes to its own attempt directory, never over the new owner's report.
+- **The heartbeat is one conditional `UPDATE`.** `renew_lease` does not read the row first: a
+  read-then-write blocks on recovery's lock and then stamps a lease onto a requeued row, or onto
+  the next worker's claim, and still reports success. The condition (`id`, `worker_id`, `running`)
+  is re-checked under the lock, so a lost row updates nothing and the worker stops.
 - **The facts commit is fenced too.** Before the commit the agents need, `audit_page` asks
   `repo.audit_owner` whether the row is still this worker's and raises `LeaseLost` otherwise; the
   final `finish_audit` returning `False` rolls the pending findings back instead of committing them
