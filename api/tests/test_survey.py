@@ -1,5 +1,6 @@
 """A survey merges pages without inventing a cause that lives on none of them."""
 
+import asyncio
 import uuid
 
 import pytest
@@ -240,3 +241,51 @@ def test_the_api_accepts_a_sitemap_scope_and_caps_it_at_fifty_pages() -> None:
         AuditRequest(url="https://example.test/", scope="sitemap", max_pages=51)
     with pytest.raises(ValidationError):
         AuditRequest(url="https://example.test/", scope="everywhere")
+
+
+def test_a_sitemap_that_yields_nothing_is_an_empty_run_not_one_page() -> None:
+    """An allowed submitted URL must not turn a filtered-out sitemap into a one-page run."""
+    pages = select_sitemap_pages(
+        "https://example.test/",
+        ["https://elsewhere.test/page", "https://example.test/guide.pdf"],
+        max_pages=10,
+    )
+
+    assert pages == []
+
+
+def test_the_submitted_page_takes_a_slot_from_the_capped_sitemap() -> None:
+    pages = select_sitemap_pages(
+        "https://example.test/elsewhere",
+        [
+            "https://example.test/a",
+            "https://example.test/b",
+            "https://example.test/c",
+        ],
+        max_pages=2,
+    )
+
+    assert pages == ["https://example.test/elsewhere", "https://example.test/a"]
+
+
+async def test_a_sitemap_that_never_answers_is_a_failed_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`http_get` bounds a read, so the discovery needs its own aggregate deadline."""
+    from app.core.config import get_settings
+    from app.survey import SitemapUnavailable, sitemap_pages
+
+    async def hangs(*_: object, **__: object) -> list[str]:
+        await asyncio.sleep(5)
+        return []
+
+    monkeypatch.setattr("app.survey.sitemap_urls", hangs)
+
+    with pytest.raises(SitemapUnavailable, match="took longer"):
+        await sitemap_pages(
+            "https://example.test/",
+            max_pages=3,
+            settings=get_settings(),
+            allowed_private_hosts=frozenset({"example.test"}),
+            deadline_s=0.05,
+        )

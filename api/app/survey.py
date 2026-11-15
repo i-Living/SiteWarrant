@@ -18,6 +18,7 @@ result per page.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
@@ -46,6 +47,11 @@ FAILURE_CHARS = 300
 # submission cannot turn into an hour of browsers. The number travels in the audit's config.
 SITEMAP_DEFAULT_PAGES = 10
 SITEMAP_MAX_PAGES = 50
+
+# The whole discovery — the sitemap and one level of index children, with the root fallback —
+# has to finish inside this. `http_get` bounds a read, not the discovery, and a slow-dripping
+# sitemap would otherwise hold the dispatch row in `running`.
+SITEMAP_TIMEOUT_S = 60.0
 
 
 class SurveyResult(BaseModel):
@@ -202,30 +208,49 @@ def select_sitemap_pages(
     policy: Protego | None = None,
     user_agent: str = "",
 ) -> list[str]:
-    """The pages a sitemap run audits: the submitted URL first, then the sitemap in its own order.
+    """The pages a sitemap run audits: the sitemap's entries, with the submitted URL first.
 
-    Everything else is the guard the crawler already applies to sitemap entries: the entry has to be
-    crawlable HTML on the audited host, robots.txt has to allow it (when a policy was fetched), and
-    two spellings of one page count once (`page_key`). The submitted URL goes first because it is
-    what the operator asked for and the sitemap does not necessarily list it; the cap is on the run,
-    not on the sitemap, so a sitemap of five hundred entries costs ten audits by default.
+    Everything here is the guard the crawler already applies to sitemap entries: the entry has
+    to be crawlable HTML on the audited host, robots.txt has to allow it (when a policy was
+    fetched), and two spellings of one page count once (`page_key`). The cap is on the run, not
+    on the sitemap, so a sitemap of five hundred entries costs ten audits by default.
+
+    An empty result means the sitemap yielded nothing this run may audit, and the caller fails
+    the dispatch: the submitted URL is only added in front once at least one entry survived,
+    because one page audited under a sitemap request would present a fallback as the thing that
+    was asked for.
     """
     host = (urlsplit(url).hostname or "").lower()
-    selected: list[str] = []
-    seen: set[str] = set()
-    for candidate in (url, *entries):
+
+    def allowed(candidate: str) -> str | None:
         page = normalize_url(candidate)
         if not is_crawlable(page) or not same_host(page, host):
-            continue
-        key = page_key(page)
-        if key in seen:
-            continue
+            return None
         if policy is not None and not policy.can_fetch(page, user_agent):
+            return None
+        return page
+
+    selected: list[str] = []
+    seen: set[str] = set()
+    for candidate in entries:
+        page = allowed(candidate)
+        if page is None or page_key(page) in seen:
             continue
-        seen.add(key)
+        seen.add(page_key(page))
         selected.append(page)
         if len(selected) >= max_pages:
             break
+    if not selected:
+        return []
+    seed = allowed(url)
+    if seed is None:
+        return selected
+    key = page_key(seed)
+    # The submitted page is audited first, and in the spelling the operator gave: a sitemap that
+    # already lists it must not leave a second spelling ahead of it in the queue.
+    selected = [page for page in selected if page_key(page) != key]
+    selected.insert(0, seed)
+    del selected[max_pages:]
     return selected
 
 
@@ -236,6 +261,7 @@ async def sitemap_pages(
     settings: Settings,
     allowed_private_hosts: frozenset[str],
     ignore_robots: bool = False,
+    deadline_s: float = SITEMAP_TIMEOUT_S,
 ) -> list[str]:
     """Read /sitemap.xml and keep the entries this run may audit.
 
@@ -250,21 +276,31 @@ async def sitemap_pages(
     timeout_s = settings.page_timeout_ms / 1000
     parts = urlsplit(url)
     origin = f"{parts.scheme}://{parts.netloc.strip()}/"
-    entries = await sitemap_urls(
-        url,
-        user_agent=settings.user_agent,
-        allowed_private_hosts=allowed_private_hosts,
-        timeout_s=timeout_s,
-    )
     tried = url
-    if not entries and page_key(origin) != page_key(url):
-        entries = await sitemap_urls(
-            origin,
-            user_agent=settings.user_agent,
-            allowed_private_hosts=allowed_private_hosts,
-            timeout_s=timeout_s,
-        )
-        tried = origin
+    try:
+        # `http_get` bounds each read, not the discovery: a sitemap host that drips a byte at a
+        # time would keep the dispatch row running and its operator waiting. The aggregate
+        # deadline is what bounds it, and a sitemap that misses it fails the dispatch with a
+        # reason instead of hanging in `running`.
+        async with asyncio.timeout(deadline_s):
+            entries = await sitemap_urls(
+                url,
+                user_agent=settings.user_agent,
+                allowed_private_hosts=allowed_private_hosts,
+                timeout_s=timeout_s,
+            )
+            if not entries and page_key(origin) != page_key(url):
+                entries = await sitemap_urls(
+                    origin,
+                    user_agent=settings.user_agent,
+                    allowed_private_hosts=allowed_private_hosts,
+                    timeout_s=timeout_s,
+                )
+                tried = origin
+    except TimeoutError as error:
+        raise SitemapUnavailable(
+            f"reading /sitemap.xml of {url} took longer than {deadline_s:g} s"
+        ) from error
     if not entries:
         raise SitemapUnavailable(f"{tried} publishes no readable /sitemap.xml")
     policy = (
@@ -321,11 +357,9 @@ async def run_sitemap_audit(
     carry the findings.
     """
     limit = max(1, min(pages_limit, SITEMAP_MAX_PAGES))
-    try:
-        # The stage write is fenced: a row another worker has claimed raises LeaseLost here, and
-        # the except below lets that through instead of finishing somebody else's run.
-        if progress is not None:
-            await progress("discover")
+
+    async def stop_if_cancelled() -> None:
+        """A cancel is honoured at both boundaries: before discovery and before the queue."""
         if cancelled is not None and await cancelled():
             await finish_dispatch(
                 audit_id,
@@ -334,6 +368,13 @@ async def run_sitemap_audit(
                 worker_id=worker_id,
             )
             raise AuditCancelled("cancelled by the operator")
+
+    try:
+        # The stage write is fenced: a row another worker has claimed raises LeaseLost here, and
+        # the except below lets that through instead of finishing somebody else's run.
+        if progress is not None:
+            await progress("discover")
+        await stop_if_cancelled()
         pages = await sitemap_pages(
             url,
             max_pages=limit,
@@ -341,6 +382,9 @@ async def run_sitemap_audit(
             allowed_private_hosts=settings.allowed_private_host_set,
             ignore_robots=ignore_robots,
         )
+        # Discovery can take a minute on a slow site; an operator who cancelled while it ran must
+        # not get page audits queued behind a row that then claims to be completed.
+        await stop_if_cancelled()
         async with session_scope() as session:
             queued = [
                 await repo.create_audit(

@@ -487,11 +487,18 @@ the repository does not grow by a copy of somebody's site.
   finishes its own row with `pages_count` and no `report_key`. Writing the merged report onto that
   row would count every finding twice once the page rows land in `/sites/{host}`; claiming it is a
   page audit would describe a page nobody opened. The submitted URL goes first, the cap
-  (`max_pages`, 10 by default, 50 at most) is stored in `audits.config`, and a site whose sitemap is
-  missing or filtered to nothing fails the dispatch instead of quietly auditing one page.
+  (`max_pages`, 10 by default, 50 at most) is stored in `audits.config`, and a sitemap that is
+  missing or filtered to nothing fails the dispatch instead of quietly auditing one page — the
+  submitted URL is only added once an entry survived, so an allowed seed cannot mask an empty run.
+- **Dispatch rows are not pages, and the site views say so in SQL.** `repo.page_scope_only()` filters
+  `latest_audit_per_url` and `audit_counts_per_url` to `scope: "page"` (a missing scope reads as
+  `page`). Filtering in Python would not do: a dispatch row would already have replaced the page's
+  newest row in the result, so the page would vanish from the ledger rather than fall back to its
+  own report.
 - **A dispatch row is fenced like any other.** `finish_audit(worker_id=…)` refuses the write when
-  the lease moved on, and the page rows it queues are written in one transaction with that finish:
-  a half-queued batch would be a run that says ten pages and audits three.
+  the lease moved on, the page rows it queues are written in one transaction with that finish, and a
+  cancel is checked on both sides of discovery (which runs under a 60 s aggregate deadline, because
+  `http_get` bounds a read, not the discovery).
 - **Typer collapses a single-command app to the root.** With one command, `sitewarrant audit <url>` becomes
   `sitewarrant <url>` and the documented command breaks. The `version` command exists partly to keep the
   subcommand shape that `docs/PLAN.md` promises.
