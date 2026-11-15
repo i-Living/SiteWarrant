@@ -5,6 +5,7 @@ import pytest
 from app.core.config import get_settings
 from app.crawl.crawler import CrawlFailed, crawl, normalize_url, same_host
 from app.crawl.models import CrawlLimits
+from app.crawl.sitemap import sitemap_urls
 
 ALLOW = frozenset({"127.0.0.1"})
 Route = tuple[int, dict[str, str], bytes]
@@ -92,6 +93,52 @@ def sitemap_site(origin: str) -> dict[str, Route]:
     return {
         "/robots.txt": ROBOTS_ALLOW_ALL,
         "/sitemap.xml": (200, {"Content-Type": "application/xml"}, sitemap),
+        "/": (200, {}, page("home", [])),
+        "/orphan.html": (200, {}, page("orphan", [])),
+    }
+
+
+def sitemap_site_with_disallowed_sitemap(origin: str) -> dict[str, Route]:
+    """robots.txt forbids /sitemap.xml itself: the orphan page must not be seeded from it."""
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{origin}/orphan.html</loc></url>"
+        "</urlset>"
+    ).encode()
+    return {
+        "/robots.txt": (
+            200,
+            {"Content-Type": "text/plain"},
+            b"User-agent: *\nDisallow: /sitemap.xml\n",
+        ),
+        "/sitemap.xml": (200, {"Content-Type": "application/xml"}, sitemap),
+        "/": (200, {}, page("home", [])),
+        "/orphan.html": (200, {}, page("orphan", [])),
+    }
+
+
+def sitemap_redirecting_off_host(origin: str) -> dict[str, Route]:
+    """`/sitemap.xml` answers 302 to the same server under another hostname.
+
+    Following the hop would read a sitemap (`/sitemap-1.xml`) and seed it, so an empty result is
+    the proof that the redirect was refused before the request went out.
+    """
+    elsewhere = origin.replace("127.0.0.1", "localhost")
+    return {
+        "/robots.txt": ROBOTS_ALLOW_ALL,
+        "/sitemap.xml": (
+            302,
+            {"Location": f"{elsewhere}/sitemap-1.xml"},
+            b"",
+        ),
+        "/sitemap-1.xml": (
+            200,
+            {"Content-Type": "application/xml"},
+            b'<?xml version="1.0" encoding="UTF-8"?>'
+            b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            b"<url><loc>/orphan.html</loc></url></urlset>",
+        ),
         "/": (200, {}, page("home", [])),
         "/orphan.html": (200, {}, page("orphan", [])),
     }
@@ -221,6 +268,35 @@ async def test_sitemap_seeds_discovery_and_is_host_filtered(site) -> None:  # ty
     by_url = {page.url: page for page in report.pages}
     assert by_url[site.url("/orphan.html")].source == "sitemap"
     assert all("elsewhere.example" not in page.url for page in report.pages)
+
+
+@pytest.mark.parametrize("site", [sitemap_site_with_disallowed_sitemap], indirect=True)
+async def test_robots_refusing_the_sitemap_still_crawls_the_site(site) -> None:  # type: ignore[no-untyped-def]
+    """A sitemap robots.txt forbids is a sitemap this run does not have — not a failed crawl."""
+    report = await crawl(
+        site.url("/"),
+        limits=limits(include_sitemap=True),
+        settings=get_settings(),
+        allowed_private_hosts=ALLOW,
+    )
+    assert [page.url for page in report.pages] == [site.url("/")]
+
+
+@pytest.mark.parametrize("site", [sitemap_redirecting_off_host], indirect=True)
+async def test_a_sitemap_redirect_off_host_is_not_followed(site) -> None:  # type: ignore[no-untyped-def]
+    """A redirect is a fetch: the hop is refused before the request leaves for another host.
+
+    `localhost` is allowed for this test on purpose: `is_blocked` runs before `hop_check`, so a
+    hop the SSRF guard already refuses would prove nothing about the host rule — the test would
+    pass with `stay_on_host` deleted.
+    """
+    entries = await sitemap_urls(
+        site.url("/"),
+        user_agent=get_settings().user_agent,
+        allowed_private_hosts=ALLOW | {"localhost"},
+        timeout_s=5.0,
+    )
+    assert entries == [], "the redirected sitemap would have seeded /orphan.html"
 
 
 @pytest.mark.parametrize("site", [broken], indirect=True)

@@ -31,6 +31,27 @@ def one_page(origin: str) -> dict[str, Route]:
     return {"/index.html": (200, {"Content-Type": "text/html; charset=utf-8"}, body)}
 
 
+def sitemap_disallowed_by_robots(origin: str) -> dict[str, Route]:
+    """A sitemap that exists but robots.txt forbids reading: the run has none to walk."""
+    body = b'<!doctype html><html lang="en"><body><h1>page</h1></body></html>'
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{origin}/page.html</loc></url>"
+        "</urlset>"
+    ).encode()
+    return {
+        "/robots.txt": (
+            200,
+            {"Content-Type": "text/plain"},
+            b"User-agent: *\nDisallow: /sitemap.xml\n",
+        ),
+        "/sitemap.xml": (200, {"Content-Type": "application/xml"}, sitemap),
+        "/index.html": (200, {"Content-Type": "text/html; charset=utf-8"}, body),
+        "/page.html": (200, {"Content-Type": "text/html; charset=utf-8"}, body),
+    }
+
+
 async def clear_queue() -> None:
     """A dispatch test claims the oldest row, so leftovers from other tests have to go first."""
     async with session_scope() as session:
@@ -155,6 +176,23 @@ async def test_a_site_without_a_sitemap_fails_the_dispatch_instead_of_one_page(
     assert dispatch is not None
     assert dispatch.status == lifecycle.FAILED
     assert "sitemap" in (dispatch.error or "")
+    assert await queued_pages(dispatch_id) == [], "a failed dispatch queues nothing"
+
+
+@pytest.mark.parametrize("site", [sitemap_disallowed_by_robots], indirect=True)
+async def test_a_sitemap_disallowed_by_robots_fails_the_dispatch(site: Site) -> None:
+    """`/sitemap.xml` is a URL this tool fetches, so the policy applies to it too."""
+    await clear_queue()
+    dispatch_id = await enqueue_dispatch(site.url("/index.html"), 3)
+
+    assert await run_once(context_for(get_settings())) is True
+
+    async with session_scope() as session:
+        dispatch = await repo.get_audit(session, dispatch_id)
+
+    assert dispatch is not None
+    assert dispatch.status == lifecycle.FAILED
+    assert "robots" in (dispatch.error or ""), dispatch.error
     assert await queued_pages(dispatch_id) == [], "a failed dispatch queues nothing"
 
 

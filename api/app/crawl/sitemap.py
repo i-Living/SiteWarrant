@@ -1,9 +1,17 @@
 import xml.etree.ElementTree as ElementTree
+from urllib.parse import urlsplit
 
-from app.tools.http_get import HttpGetBlocked, HttpGetFailed, http_get
+from app.crawl.links import same_host
+from app.tools.http_get import HopCheck, HttpGetBlocked, HttpGetFailed, http_get
+from app.tools.robots import RobotsDisallowed, RobotsUnavailable
 
 MAX_SITEMAP_URLS = 500
 MAX_CHILD_SITEMAPS = 5
+
+# A refusal by the policy, or an unreadable policy, means this run has no sitemap to read. It is
+# not an error of the caller: the crawler still walks the start page and its links, and a sitemap
+# dispatch fails with "no readable /sitemap.xml", which is what it has.
+SITEMAP_REFUSED = (HttpGetBlocked, HttpGetFailed, RobotsDisallowed, RobotsUnavailable)
 
 
 def local_name(tag: str) -> str:
@@ -38,23 +46,51 @@ def locs(text: str) -> tuple[list[str], bool]:
 
 
 async def sitemap_urls(
-    start_url: str, *, user_agent: str, allowed_private_hosts: frozenset[str], timeout_s: float
+    start_url: str,
+    *,
+    user_agent: str,
+    allowed_private_hosts: frozenset[str],
+    timeout_s: float,
+    hop_check: HopCheck | None = None,
 ) -> list[str]:
     """URLs published by /sitemap.xml, one level of a sitemap index deep.
 
-    Every entry is returned as written; the caller re-validates the host and the robots
-    policy, because a sitemap can list anything, including another host.
+    `hop_check` is the caller's policy for a fetched URL — `robots_hop_check` in the audit and in
+    the crawler — and it is consulted for the sitemap itself as well as for each index child,
+    because /sitemap.xml is a URL this tool fetches like any other. A policy that refuses, or a
+    policy that cannot be read, leaves this run without a sitemap: the refusal is not a finding.
+
+    An index child is only fetched when it stays on the audited host, and every redirect hop of
+    either fetch is held to the same host, because a redirect is a fetch too: discovery does not
+    leave the host set. Every entry is returned as written; the caller re-validates the extension
+    and applies the policy to the pages, because a sitemap can list anything, including another
+    host.
     """
     root = start_url.split("?", 1)[0].rstrip("/")
+    host = (urlsplit(start_url).hostname or "").lower()
     found: list[str] = []
+
+    async def stay_on_host(url: str) -> None:
+        """Every hop stays on the audited host, and the caller's policy still applies to it.
+
+        A redirect is a URL this tool fetches, so a child sitemap that answers `302` to another
+        domain would otherwise reach that domain: `http_get` follows the hop and asks this check
+        first, which is the only place that sees the target before the request is sent.
+        """
+        if not same_host(url, host):
+            raise HttpGetBlocked(f"{url} leaves the audited host {host}")
+        if hop_check is not None:
+            await hop_check(url)
+
     try:
         response = await http_get(
             f"{root}/sitemap.xml",
             user_agent=user_agent,
             allowed_private_hosts=allowed_private_hosts,
             timeout_s=timeout_s,
+            hop_check=stay_on_host,
         )
-    except (HttpGetBlocked, HttpGetFailed):
+    except SITEMAP_REFUSED:
         return []
     if response.status_code >= 400 or response.truncated:
         return []
@@ -62,14 +98,17 @@ async def sitemap_urls(
     if not is_index:
         return entries
     for child in entries[:MAX_CHILD_SITEMAPS]:
+        if not same_host(child, host):
+            continue
         try:
             nested = await http_get(
                 child,
                 user_agent=user_agent,
                 allowed_private_hosts=allowed_private_hosts,
                 timeout_s=timeout_s,
+                hop_check=stay_on_host,
             )
-        except (HttpGetBlocked, HttpGetFailed):
+        except SITEMAP_REFUSED:
             continue
         if nested.status_code >= 400 or nested.truncated:
             continue
