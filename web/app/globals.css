@@ -808,6 +808,44 @@ h1 {
   cursor: default;
 }
 
+/* The run's scope and its page cap: two mono selects under the URL line, on
+   their own rules so they read as settings rather than as fields to type. */
+.scope-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1.75rem;
+}
+
+.scope-line .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.scope-line select {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.scope-line select:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.scope-line select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .form-error {
   margin: 1rem 0 0;
   overflow-wrap: anywhere;

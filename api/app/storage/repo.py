@@ -7,6 +7,7 @@ from sqlalchemy import CursorResult, Numeric, delete, func, select, update
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app import lifecycle
 from app.core.models import (
@@ -407,14 +408,32 @@ async def list_audits(session: AsyncSession, *, limit: int) -> Sequence[Audit]:
     return result.scalars().all()
 
 
+PAGE_SCOPE = "page"
+
+
+def page_scope_only() -> ColumnElement[bool]:
+    """SQL predicate: the rows that are page audits.
+
+    A dispatch row (`scope: "sitemap"`) is a batch, not a page, and it has no report; a row
+    written before `scope` existed reads as a page audit, which is what it was.
+    """
+    return func.coalesce(Audit.config["scope"].as_string(), PAGE_SCOPE) == PAGE_SCOPE
+
+
 async def latest_audit_per_url(session: AsyncSession) -> Sequence[Audit]:
-    """One row per exact URL: the newest audit of it.
+    """One row per exact URL: the newest page audit of it.
 
     The site views merge URL variants (trailing slash, query) in Python, so the number of
     rows they transfer follows pages, not runs.
+
+    Dispatch rows (`scope: "sitemap"`) are left out: they carry no report, and a dispatch
+    recorded for the same URL as a page audit would otherwise become that page's newest row
+    and hide the report it was measured with. A row written before `scope` existed reads as a
+    page audit.
     """
     result = await session.execute(
         select(Audit)
+        .where(page_scope_only())
         .ext(distinct_on(Audit.site_url))
         .order_by(Audit.site_url, Audit.started_at.desc(), Audit.id.desc())
     )
@@ -422,8 +441,10 @@ async def latest_audit_per_url(session: AsyncSession) -> Sequence[Audit]:
 
 
 async def audit_counts_per_url(session: AsyncSession) -> Sequence[tuple[str, int]]:
-    """Runs per exact URL, for the site rollups."""
-    result = await session.execute(select(Audit.site_url, func.count()).group_by(Audit.site_url))
+    """Runs per exact URL, for the site rollups. Dispatch rows are not page runs."""
+    result = await session.execute(
+        select(Audit.site_url, func.count()).where(page_scope_only()).group_by(Audit.site_url)
+    )
     return [(url, runs) for url, runs in result.all()]
 
 
@@ -524,12 +545,14 @@ async def find_recent_duplicate(
     site_url: str,
     agents: Sequence[str],
     window_s: int,
+    scope: str = "page",
 ) -> Audit | None:
-    """An audit of the same URL with the same agents, started inside the window.
+    """An audit of the same URL, scope and agents, started inside the window.
 
     A double-clicked form and a retried request both describe one intention; a second run of
     the same page also costs another model call. `force` in the request body is how a caller
-    says it wants a new one anyway.
+    says it wants a new one anyway. The scope is part of the identity: a page audit of a URL
+    does not answer a request to walk its sitemap.
     """
     since = datetime.now(UTC) - timedelta(seconds=window_s)
     rows = (
@@ -546,7 +569,9 @@ async def find_recent_duplicate(
         # hide the retry behind a `deduplicated: true`.
         if audit.status in (lifecycle.FAILED, lifecycle.CANCELLED):
             continue
-        if list(audit.config.get("agents") or []) == wanted:
+        if list(audit.config.get("agents") or []) != wanted:
+            continue
+        if str(audit.config.get("scope") or "page") == scope:
             return audit
     return None
 

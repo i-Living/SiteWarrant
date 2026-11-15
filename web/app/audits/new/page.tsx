@@ -24,6 +24,8 @@ function normalizeSite(value: string): string | null {
 export default function NewAuditPage() {
   const router = useRouter();
   const [site, setSite] = useState("");
+  const [scope, setScope] = useState<"page" | "sitemap">("page");
+  const [pages, setPages] = useState("10");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,7 +42,11 @@ export default function NewAuditPage() {
       const response = await fetch("/api/audits", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: target }),
+        body: JSON.stringify(
+          scope === "sitemap"
+            ? { url: target, scope, max_pages: Number(pages) }
+            : { url: target, scope },
+        ),
       });
       if (!response.ok) {
         setError(
@@ -65,23 +71,31 @@ export default function NewAuditPage() {
     <main>
       <header className="page-head">
         <p className="eyebrow">New audit</p>
-        <h1>Point it at one page.</h1>
+        <h1>Point it at a page or a sitemap.</h1>
         <p className="lede">
           SiteWarrant captures the page at every configured viewport and reports
-          each finding with the fact behind it. The run continues in the
-          background, so this tab can close once it starts.
+          each finding with the fact behind it. A sitemap run queues one audit
+          per entry — ten by default, fifty at most — and each page keeps its
+          own report. The run continues in the background, so this tab can close
+          once it starts.
         </p>
       </header>
 
       <form className="audit-form" onSubmit={submit}>
-        <label htmlFor="site">Page URL</label>
+        <label htmlFor="site">
+          {scope === "sitemap" ? "Site URL" : "Page URL"}
+        </label>
         <div className="input-line">
           <input
             id="site"
             name="site"
             value={site}
             onChange={(event) => setSite(event.target.value)}
-            placeholder="https://example.com/pricing"
+            placeholder={
+              scope === "sitemap"
+                ? "https://example.com/"
+                : "https://example.com/pricing"
+            }
             autoComplete="url"
             spellCheck={false}
             disabled={submitting}
@@ -90,13 +104,45 @@ export default function NewAuditPage() {
             {submitting ? "Starting…" : "Start audit"}
           </button>
         </div>
+        <div className="scope-line">
+          <div className="field">
+            <label htmlFor="scope">Scope</label>
+            <select
+              id="scope"
+              name="scope"
+              value={scope}
+              onChange={(event) =>
+                setScope(event.target.value === "sitemap" ? "sitemap" : "page")
+              }
+              disabled={submitting}
+            >
+              <option value="page">This page</option>
+              <option value="sitemap">Every page in sitemap.xml</option>
+            </select>
+          </div>
+          {scope === "sitemap" && (
+            <div className="field">
+              <label htmlFor="pages">Pages</label>
+              <select
+                id="pages"
+                name="pages"
+                value={pages}
+                onChange={(event) => setPages(event.target.value)}
+                disabled={submitting}
+              >
+                <option value="10">Up to 10</option>
+                <option value="50">All (50 at most)</option>
+              </select>
+            </div>
+          )}
+        </div>
         {error !== null && <p className="form-error">{error}</p>}
       </form>
 
       <dl className="facts">
         <div>
           <dt>Scope</dt>
-          <dd>One public page</dd>
+          <dd>One page, or up to 50 sitemap pages</dd>
         </div>
         <div>
           <dt>Passes</dt>

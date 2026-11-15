@@ -865,10 +865,11 @@ uv run sitewarrant compare <id|report.json> <id|report.json> [--out comparison.j
 uv run sitewarrant labels --host example.com --out ../benchmark/live/example.json
 ```
 
-`POST /audits` теперь отвечает `202 {audit_id, status: "queued", deduplicated}`; добавлены
-`POST /audits/{id}/cancel`, `GET /audits/{id}/compare`, `POST|GET /findings/{id}/feedback`,
-`GET|POST /schedules` и `PATCH /schedules/{id}`. У `GET /audits` появились `stage` и
-`cancel_requested`.
+`POST /audits` теперь отвечает `202 {audit_id, status: "queued", deduplicated}` и принимает
+`{url, scope, max_pages, force}` (`scope`: `page` по умолчанию или `sitemap`; `max_pages` — 1…50,
+по умолчанию 10, см. §19.6). Добавлены `POST /audits/{id}/cancel`, `GET /audits/{id}/compare`,
+`POST|GET /findings/{id}/feedback`, `GET|POST /schedules` и `PATCH /schedules/{id}`. У `GET /audits`
+появились `stage`, `scope` и `cancel_requested`.
 
 ### 19.5 Что это меняет в опубликованных числах
 
@@ -876,3 +877,45 @@ uv run sitewarrant labels --host example.com --out ../benchmark/live/example.jso
 две вещи и обе видны в отчёте: у агентских находок другое `confidence` (и появился `basis`), а статус
 аудита теперь проходит через `queued`. Числа из `evals/runs/*` не пересчитывались и не переписывались.
 
+
+### 19.6 Область запуска: страница или sitemap (2026-11-15)
+
+Запрос владельца: сейчас запуск аудита покрывает одну указанную страницу, нужна опция «все страницы,
+перечисленные в sitemap» — по умолчанию не больше 10, с возможностью пройтись по всем, но не больше 50
+за раз. Решения, принятые в этой правке:
+
+| № | Вопрос | Решение |
+| --- | --- | --- |
+| 1 | Как читать «все страницы из sitemap» | `/sitemap.xml` (включая один уровень `sitemapindex`), а не полный обход ссылок: обход уже есть у `sitewarrant survey`, а запрос был именно про sitemap |
+| 2 | Сколько страниц по умолчанию и максимум | 10 по умолчанию, 50 максимум; оба числа проверяются на API (`max_pages`, `ge=1, le=50`) и повторно в воркере, и записываются в `audits.config` |
+| 3 | Что такое прогон по sitemap в данных | Строка-диспетчер: она ставит в очередь по одному обычному аудиту страницы на каждую запись и завершается без отчёта (`report_key = null`, `pages_count` = сколько поставлено). Слитый отчёт сюда не пишется — он посчитал бы каждую находку дважды, когда строки страниц попадут в реестр сайта |
+
+**Как работает.** `POST /audits` принимает `{url, scope: "page" | "sitemap", max_pages}`; `scope`
+попадает в `audits.config` рядом с `pages_limit`, поэтому завершённый прогон читается обратно как то,
+что у него просили, а не как то, что получилось. Воркер по `scope` выбирает ветку: `page` — прежний
+`run_audit`, `sitemap` — `app/survey.py::run_sitemap_audit`. Тот берёт записи `sitemap.xml` (если рядом
+со страницей его нет — корневой `/sitemap.xml` сайта), оставляет только HTML на том же хосте, что
+разрешён robots.txt (политика берётся один раз на прогон), убирает дубли по `page_key` и режет список
+по `pages_limit`. Указанный оператором URL идёт первым — его просили явно, и sitemap не обязан его
+перечислять; но добавляется он только когда хотя бы одна запись sitemap прошла фильтры: если sitemap
+пуст или после фильтров ничего не осталось, диспетчер падает с `failed` и причиной, а не тихо аудитит
+одну страницу — «одна страница» это не то, что просили. Всё чтение sitemap (вместе с дочерними
+`<sitemapindex>`) ограничено общим дедлайном 60 с: `http_get` ограничивает чтение, а не discovery, и
+медленно капающий sitemap иначе держал бы строку в `running`. Отмена проверяется дважды — до discovery
+и перед постановкой в очередь. Страницы ставятся в очередь обычными строками (`scope: page`,
+`pages_limit: 1`), поэтому их исполняет тот же воркер, у них свои отчёты, своя аренда и своя строка в
+`/sites/{host}`; строки-диспетчеры в реестр сайта не попадают вообще (`repo.page_scope_only`), иначе
+диспетчер, записанный на тот же URL, что и аудит страницы, затенил бы её отчёт и обнулил
+`measured_pages`. Дедуп `POST /audits` учитывает `scope`: аудит одной страницы не отвечает на запрос
+«пройти по sitemap».
+
+**Что это меняет в интерфейсе.** `GET /audits` и `GET /audits/{id}` отдают `scope`; строка прогона в
+`/audits` пишет «sitemap · N pages queued» вместо пустого места в находках, а `/audits/new` получил
+переключатель «This page / Every page in sitemap.xml» и выбор «Up to 10 / All (50 at most)».
+
+**Приёмка.** `tests/test_survey.py` (порядок и потолок, хост/robots/расширение, дедуп по `page_key`,
+пустой sitemap при разрешённом стартовом URL, границы `max_pages`), `tests/integration/test_sitemap_run.py`
+(воркер ставит ровно три страницы фикстуры, `/blocked.html` и чужой хост не попадают, у диспетчера нет
+отчёта; корневой sitemap, когда рядом со страницей его нет; сайт без sitemap даёт `failed` и ни одной
+строки в очереди; отмена во время discovery не ставит ничего; строка-диспетчер не вытесняет аудит
+страницы из `latest_audit_per_url`), `make check`.

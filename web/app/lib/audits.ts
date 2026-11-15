@@ -4,6 +4,7 @@ export type AuditSummary = {
   audit_id: string;
   site: string;
   status: string;
+  scope: string;
   stage: string | null;
   cancel_requested: boolean;
   pages_count: number;

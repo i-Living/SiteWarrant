@@ -339,7 +339,10 @@ asks for a new one.
 
 The Next.js interface reads the same endpoints through a server-side rewrite: `/` groups the audited
 pages by host, `/sites/<host>` lists that host's pages with their latest results, `/audits` polls the
-current and recent runs, `/audits/new` starts one. Set `SITEWARRANT_API` (default
+current and recent runs, `/audits/new` starts one. A run covers one page (`scope: "page"`, the
+default) or walks the site's `sitemap.xml` (`scope: "sitemap"`): the worker queues one ordinary page
+audit per entry, ten pages by default and fifty at most (`max_pages`, 1–50), and that dispatch row
+keeps their count instead of a report of its own. Set `SITEWARRANT_API` (default
 `http://127.0.0.1:8000`) and run `bun run dev` from `web/`.
 
 The web app is closed: every route except `/login` needs a session. Set

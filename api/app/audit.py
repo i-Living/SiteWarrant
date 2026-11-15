@@ -396,13 +396,24 @@ def current_agent_version(settings: Settings) -> str:
 
 
 def audit_config(
-    settings: Settings, *, agents: Sequence[str], ignore_robots: bool
+    settings: Settings,
+    *,
+    agents: Sequence[str],
+    ignore_robots: bool,
+    scope: str = "page",
+    pages_limit: int = 1,
 ) -> dict[str, object]:
-    """What an audit was asked to do, stored with the row before it runs."""
+    """What an audit was asked to do, stored with the row before it runs.
+
+    `scope` says what the row covers: `page` audits the URL it names, `sitemap` dispatches one page
+    audit per sitemap entry and stops at `pages_limit`. The number is stored so a finished run can
+    be read back as what it was asked for, not as what it happened to do.
+    """
     return {
         "viewports": list(settings.viewport_list),
         "tools": list(AUDIT_TOOLS),
-        "pages_limit": 1,
+        "scope": scope,
+        "pages_limit": pages_limit,
         "robots": "ignored" if ignore_robots else "enforced",
         "agents": list(agents),
         # The price file in force: an old audit must not be re-priced by new rates.
