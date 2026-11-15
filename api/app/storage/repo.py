@@ -260,13 +260,24 @@ async def audit_owner(session: AsyncSession, audit_id: uuid.UUID) -> str | None:
 async def renew_lease(
     session: AsyncSession, *, audit_id: uuid.UUID, worker_id: str, lease_s: int
 ) -> bool:
-    """Say the worker is still alive. A row another worker took over is not renewed."""
-    audit = await session.get(Audit, audit_id)
-    if audit is None or audit.worker_id != worker_id or audit.status != lifecycle.RUNNING:
-        return False
-    audit.lease_expires_at = datetime.now(UTC) + timedelta(seconds=lease_s)
+    """Say the worker is still alive. A row another worker took over is not renewed.
+
+    One conditional `UPDATE`, not a read followed by a write: while recovery holds the row,
+    a heartbeat that read the row first would block on the write and then stamp its lease onto
+    a row recovery has requeued, or onto the next worker's claim. The condition is re-checked
+    under the lock, so a lost row updates nothing and the caller stops.
+    """
+    result = await session.execute(
+        update(Audit)
+        .where(
+            Audit.id == audit_id,
+            Audit.worker_id == worker_id,
+            Audit.status == lifecycle.RUNNING,
+        )
+        .values(lease_expires_at=datetime.now(UTC) + timedelta(seconds=lease_s))
+    )
     await session.commit()
-    return True
+    return bool(cast(CursorResult[Any], result).rowcount)
 
 
 async def set_stage(

@@ -1,5 +1,6 @@
 """The queue's contract against a real database, and the label export built on feedback."""
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -130,6 +131,32 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
     assert asked.cancel_requested is True
     async with session_scope() as session:
         assert await repo.cancel_requested(session, running_id) is True
+
+
+async def test_a_heartbeat_cannot_renew_a_lease_recovery_is_holding() -> None:
+    """The renewal is one conditional UPDATE: a row recovery took cannot be stamped back."""
+    await drain()
+    audit_id = await enqueue("heartbeat.invalid")
+    async with session_scope() as session:
+        await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+
+    async def beat() -> bool:
+        async with session_scope() as session:
+            return await repo.renew_lease(
+                session, audit_id=audit_id, worker_id="worker-a", lease_s=60
+            )
+
+    async with session_scope() as recovery:
+        await recovery.execute(select(Audit).where(Audit.id == audit_id).with_for_update())
+        # The row is locked first, so the heartbeat's UPDATE has to wait for this transaction.
+        heartbeat = asyncio.create_task(beat())
+        await asyncio.sleep(0.2)
+        row = await recovery.get(Audit, audit_id)
+        assert row is not None
+        row.status = lifecycle.QUEUED
+        row.worker_id = None
+        await recovery.commit()
+    assert await asyncio.wait_for(heartbeat, timeout=10) is False
 
 
 async def test_a_reclaim_before_the_facts_commit_stops_the_run() -> None:
