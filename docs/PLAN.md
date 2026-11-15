@@ -594,8 +594,8 @@ pgvector (`rules.embedding`, `<=>`), команда `sitewarrant index-rules`, �
   брифы `ui`/`ux` изменились, детерминированный слой — нет, и корпус не несёт визуальных меток.
   Прогон 2026-11-15 после правки occlusion-пробы (`agent sha256:e132ad9b57c7f80a`, 326.2 с,
   `evals/runs/2026-11-15-baseline-occluder.json`) — тот же счёт в шестой раз: проба меняет то, какой
-  элемент чинит правка, а не что находит аудит. Прогон после §19.7 (`agent sha256:eff87a8cd035afc0`,
-  318.0 с, `evals/runs/2026-11-15-baseline-sitemap-robots.json`) — тот же счёт в седьмой раз: правка в
+  элемент чинит правка, а не что находит аудит. Прогон после §19.7 (`agent sha256:2ce27c006a5f5bdd`,
+  318.7 с, `evals/runs/2026-11-15-baseline-sitemap-robots.json`) — тот же счёт в седьмой раз: правка в
   `app/crawl/sitemap.py` меняет дискавери, а корпусный eval sitemap не читает.
   **Это пол — а не точность на реальном вебе:** генератор сажает ровно те дефекты, которые каталог
   обещает ловить, поэтому идеальный счёт означает «ни одна посаженная метка не потеряна и лишнего
@@ -952,9 +952,9 @@ uv run sitewarrant labels --host example.com --out ../benchmark/live/example.jso
 
 | Артефакт | Что доказывает | Числа |
 | --- | --- | --- |
-| `evals/runs/2026-11-15-baseline-sitemap-robots.json` | корпус 8 сайтов / 104 страницы, `agent sha256:eff87a8cd035afc0`, 318.0 с | precision 1.0 (80/80), recall 1.0 (80/80), fp-rate 0.0 (0/80), медиана 3.05 с на страницу — как в шести прогонах до него |
-| `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json` | 48 находок, 48 правок, `agent sha256:eff87a8cd035afc0`, 472.6 с | applied 48/48, closed 48/48, regression-free 48/48 |
-| `evals/audits/2026-11-15-fixture-sitemap-robots.json` | фикстура, `agent sha256:eff87a8cd035afc0` | те же 14 находок (`blocker=2 major=11 minor=1`), 3.4 с |
+| `evals/runs/2026-11-15-baseline-sitemap-robots.json` | корпус 8 сайтов / 104 страницы, `agent sha256:2ce27c006a5f5bdd`, 318.7 с | precision 1.0 (80/80), recall 1.0 (80/80), fp-rate 0.0 (0/80), медиана 3.05 с на страницу — как в шести прогонах до него |
+| `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json` | 48 находок, 48 правок, `agent sha256:2ce27c006a5f5bdd`, 474.7 с | applied 48/48, closed 48/48, regression-free 48/48 |
+| `evals/audits/2026-11-15-fixture-sitemap-robots.json` | фикстура, `agent sha256:2ce27c006a5f5bdd` | те же 14 находок (`blocker=2 major=11 minor=1`), 4.2 с |
 
 Одинаковые числа — ожидаемый результат: корпусный eval и `fixes` sitemap не читают, поэтому правка
 дискавери до них не доходит. Если бы они разошлись, это значило бы, что изменение не behaviour-preserving.

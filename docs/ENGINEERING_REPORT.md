@@ -8,7 +8,7 @@ instead of rounding it into existence.
 ## 1. What the deterministic layer does on the benchmark
 
 Run `evals/runs/2026-11-15-baseline-sitemap-robots.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:eff87a8cd035afc0`, 2026-11-15, 318.0 s, whole corpus (8 synthetic sites, 104 pages, 80
+`sha256:2ce27c006a5f5bdd`, 2026-11-15, 318.7 s, whole corpus (8 synthetic sites, 104 pages, 80
 planted defects, 24 clean pages). Every earlier run recorded the same score under its own agent version;
 this one followed robots.txt being applied to the sitemap fetch (§19.7 in `docs/PLAN.md`), which moved
 the version and not the measured layer:
@@ -20,7 +20,7 @@ the version and not the measured layer:
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 326.2 s | 104 pages (3.07 s/page) |
+| duration | 318.7 s | 104 pages (3.05 s/page, median of the run's page durations) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -39,7 +39,7 @@ rather than in the agent:
 ### Fixes over the same corpus
 
 Run `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:eff87a8cd035afc0`, 2026-11-15, 472.6 s: every page audited, then every finding of a
+`sha256:2ce27c006a5f5bdd`, 2026-11-15, 474.7 s: every page audited, then every finding of a
 mechanically fixable rule repaired on its own and the patched page re-audited.
 
 | metric | value | denominator |

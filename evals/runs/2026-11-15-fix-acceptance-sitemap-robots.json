@@ -2,7 +2,7 @@
   "context": {
     "dataset_digest": "sha256:df240161c8d3e5ea",
     "dataset_version": 1,
-    "agent_version": "sha256:eff87a8cd035afc0",
+    "agent_version": "sha256:2ce27c006a5f5bdd",
     "viewports": [
       "390x844",
       "768x1024",
@@ -11,9 +11,9 @@
     "agents": [],
     "model": null,
     "store_artifacts": false,
-    "started_at": "2026-11-15T13:12:39.961593Z",
-    "finished_at": "2026-11-15T13:20:32.543905Z",
-    "duration_s": 472.6
+    "started_at": "2026-11-15T13:42:30.259749Z",
+    "finished_at": "2026-11-15T13:50:25.005962Z",
+    "duration_s": 474.7
   },
   "totals": {
     "findings": 48,
