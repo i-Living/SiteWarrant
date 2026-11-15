@@ -214,7 +214,24 @@ async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -
             )
             await session.commit()
 
-    await asyncio.gather(record(10), record(5))
+    async with session_scope() as stale:
+        # The attempt that will lose the row records first, and its transaction stays open while
+        # the row is reclaimed: the next attempt's increment is already waiting on this row lock.
+        await repo.add_audit_usage(
+            stale,
+            audit_id=audit_id,
+            tokens_in=10,
+            tokens_out=10,
+            llm_calls=1,
+            cost_estimate_usd=0.5,
+        )
+        next_attempt = asyncio.create_task(record(5))
+        await asyncio.sleep(0.2)
+        row = await stale.get(Audit, audit_id)
+        assert row is not None
+        row.worker_id = "worker-b"
+        await stale.commit()
+    await asyncio.wait_for(next_attempt, timeout=10)
     async with session_scope() as session:
         row = await session.get(Audit, audit_id)
     assert row is not None

@@ -190,6 +190,26 @@ async def execute(
         await asyncio.gather(heartbeat, return_exceptions=True)
 
 
+async def _renew_once(audit_id: uuid.UUID, context: WorkerContext) -> bool:
+    """One renewal in its own task and its own session: it closes what it opened."""
+    async with session_scope() as session:
+        return await repo.renew_lease(
+            session,
+            audit_id=audit_id,
+            worker_id=context.worker_id,
+            lease_s=context.lease_s,
+        )
+
+
+def _renewal_finished(task: asyncio.Task[bool]) -> None:
+    """A renewal nobody waits for any more must not leave an unretrieved exception."""
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.warning("abandoned lease renewal failed", exc_info=error)
+
+
 async def _heartbeat(
     audit_id: uuid.UUID, *, lease_lost: asyncio.Event, context: WorkerContext
 ) -> None:
@@ -213,21 +233,19 @@ async def _heartbeat(
         if remaining <= 0:
             lease_lost.set()
             return
-        try:
-            async with session_scope() as session:
-                renewed = await asyncio.wait_for(
-                    repo.renew_lease(
-                        session,
-                        audit_id=audit_id,
-                        worker_id=context.worker_id,
-                        lease_s=context.lease_s,
-                    ),
-                    timeout=remaining,
-                )
-        except TimeoutError:
+        # The renewal runs as its own task so the deadline does not depend on it finishing its
+        # cancellation: `wait_for` would await the cancelled call, and closing a stalled session
+        # can take as long as the statement that stalled it.
+        renewal = asyncio.create_task(_renew_once(audit_id, context))
+        renewal.add_done_callback(_renewal_finished)
+        done, _pending = await asyncio.wait({renewal}, timeout=remaining)
+        if not done:
+            renewal.cancel()
             logger.warning("lease renewal for %s outlived the lease", audit_id)
             lease_lost.set()
             return
+        try:
+            renewed = renewal.result()
         except Exception:
             logger.warning("lease renewal for %s failed", audit_id, exc_info=True)
             if time.monotonic() >= deadline:

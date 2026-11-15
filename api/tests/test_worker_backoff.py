@@ -36,7 +36,12 @@ def renewal(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     async def fake_renew(*_args: object, **_kwargs: object) -> bool:
         seen["calls"] += 1
-        await asyncio.sleep(seen.get("delay", 0.0))
+        try:
+            await asyncio.sleep(seen.get("delay", 0.0))
+        except asyncio.CancelledError:
+            # A close that refuses to be interrupted is what a stalled connection does.
+            await asyncio.sleep(seen.get("resists", 0.0))
+            raise
         return seen.get("answer", True)
 
     monkeypatch.setattr(worker, "session_scope", session)
@@ -60,6 +65,26 @@ async def test_a_success_that_lands_after_the_lease_ran_out_is_not_a_lease(renew
     assert lease_lost.is_set()
     # Bounded by the budget, not by the stalled call.
     assert time.monotonic() - started < 6
+
+
+async def test_a_renewal_that_resists_cancellation_does_not_hold_the_deadline(
+    renewal: dict,
+) -> None:
+    """The deadline is the lease's, not the stalled call's: cancelling must not be awaited."""
+    renewal["delay"] = 30.0
+    renewal["resists"] = 2.0
+    lease_lost = asyncio.Event()
+    started = time.monotonic()
+    await asyncio.wait_for(
+        worker._heartbeat(uuid.uuid4(), lease_lost=lease_lost, context=context(lease_s=3)),
+        timeout=10,
+    )
+    elapsed = time.monotonic() - started
+    assert lease_lost.is_set()
+    # The lease ran out at three seconds; awaiting the cancellation would show five.
+    assert elapsed < 4.5
+    # Let the abandoned task finish so the test loop closes clean.
+    await asyncio.sleep(2.5)
 
 
 async def test_a_sleep_that_overruns_the_budget_does_not_renew_afterwards(renewal: dict) -> None:
@@ -88,4 +113,5 @@ async def test_a_healthy_heartbeat_renews_and_keeps_going(renewal: dict) -> None
     heartbeat.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await heartbeat
+    assert renewal["calls"] >= 2
     assert not lease_lost.is_set()
