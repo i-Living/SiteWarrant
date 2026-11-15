@@ -112,6 +112,9 @@ class Report(BaseModel):
     summary: SummaryOut
     findings: list[FindingOut]
     root_causes: list[RootCauseOut] = []
+    # The page paths the audit covered, not the ones that produced a finding: a clean page is
+    # still audited, and a comparison that cannot see it would call two runs disjoint.
+    pages: list[str] = []
 
 
 def direction_score(penalty: float, pages_audited: int) -> float:
@@ -139,6 +142,7 @@ def build_report(
     pricing: dict[str, Any] | None = None,
     trace_id: str | None = None,
     spans: dict[str, int] | None = None,
+    pages: Sequence[str] = (),
 ) -> Report:
     counts = Counter(finding.severity for finding in findings)
     by_severity = {severity: counts.get(severity, 0) for severity in SEVERITIES}
@@ -179,6 +183,7 @@ def build_report(
         ),
         findings=list(findings),
         root_causes=list(root_causes),
+        pages=list(pages),
     )
 
 

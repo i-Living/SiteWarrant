@@ -12,17 +12,20 @@ is allowed and labelled.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+
+from pydantic import BaseModel, Field
 
 from app.core.report import FindingOut, Report
 from app.fixes.reaudit import Delta, diff_findings, key_of, path_of
 
 FindingKey = tuple[str, str, str]
-CauseKey = tuple[str, str, str]
+# A root cause is a place: the anchor inside a page. Its display label is not part of the identity,
+# because two reports may spell the same place's tag differently (or not at all).
+CauseKey = tuple[str, str]
 
 
-@dataclass(frozen=True)
-class CauseDelta:
+class CauseDelta(BaseModel):
     """One root cause's count in the diff. The anchor and page are the cause's identity."""
 
     anchor: str
@@ -33,8 +36,7 @@ class CauseDelta:
     remaining: int
 
 
-@dataclass
-class Comparison:
+class Comparison(BaseModel):
     before: str
     after: str
     before_version: str
@@ -42,15 +44,24 @@ class Comparison:
     comparable: bool
     # A reason is why the two runs are not one measurement; a note is what a reader must know
     # to read the difference correctly.
-    reasons: list[str] = field(default_factory=list)
-    notes: list[str] = field(default_factory=list)
-    closed: list[Delta] = field(default_factory=list)
-    remaining: list[Delta] = field(default_factory=list)
-    new: list[Delta] = field(default_factory=list)
-    causes: list[CauseDelta] = field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    closed: list[Delta] = Field(default_factory=list)
+    remaining: list[Delta] = Field(default_factory=list)
+    new: list[Delta] = Field(default_factory=list)
+    causes: list[CauseDelta] = Field(default_factory=list)
 
 
 def pages_of(report: Report) -> set[str]:
+    """The pages the audit covered, not the pages that happened to have a finding.
+
+    A page that was audited and came back clean is still part of the comparison: reading coverage
+    off the findings would call a repaired page "not audited" and refuse a valid comparison.
+    Older reports have no `pages` list, so their findings are the only evidence of coverage.
+    """
+    pages = {path_of(page) if "://" in page else page for page in report.pages}
+    if pages:
+        return pages
     return {path_of(finding.page_url) for finding in report.findings} or {path_of(report.site)}
 
 
@@ -71,15 +82,22 @@ def comparability(before: Report, after: Report) -> tuple[list[str], list[str]]:
     return reasons, notes
 
 
-def _cause_counter(findings: list[FindingOut], report: Report) -> Counter[CauseKey]:
+def _cause_counter(
+    findings: Sequence[FindingOut], report: Report
+) -> tuple[Counter[CauseKey], dict[CauseKey, str]]:
+    """Count findings by place, and keep a readable label for each place separately."""
     anchors = {cause.id: cause for cause in report.root_causes}
     counts: Counter[CauseKey] = Counter()
+    labels: dict[CauseKey, str] = {}
     for finding in findings:
         cause = anchors.get(finding.root_cause_id or "")
         if cause is None:
             continue
-        counts[(cause.anchor, path_of(finding.page_url), cause.label)] += 1
-    return counts
+        key: CauseKey = (cause.anchor, path_of(finding.page_url))
+        counts[key] += 1
+        if cause.label and key not in labels:
+            labels[key] = cause.label
+    return counts, labels
 
 
 def compare_reports(before: Report, after: Report) -> Comparison:
@@ -92,18 +110,23 @@ def compare_reports(before: Report, after: Report) -> Comparison:
     new = [current[key] for key in current.keys() - previous.keys()]
     remaining = [current[key] for key in previous.keys() & current.keys()]
 
-    closed_counts = _cause_counter(closed, before)
-    new_counts = _cause_counter(new, after)
-    remaining_counts = _cause_counter(remaining, after)
+    closed_counts, closed_labels = _cause_counter(closed, before)
+    new_counts, new_labels = _cause_counter(new, after)
+    remaining_counts, remaining_labels = _cause_counter(remaining, after)
 
     causes: list[CauseDelta] = []
     for key in sorted(set(closed_counts) | set(new_counts) | set(remaining_counts)):
-        anchor, page, label = key
+        anchor, page = key
         causes.append(
             CauseDelta(
                 anchor=anchor,
                 page=page,
-                label=label,
+                label=(
+                    new_labels.get(key)
+                    or remaining_labels.get(key)
+                    or closed_labels.get(key)
+                    or anchor
+                ),
                 closed=closed_counts[key],
                 new=new_counts[key],
                 remaining=remaining_counts[key],
@@ -118,9 +141,9 @@ def compare_reports(before: Report, after: Report) -> Comparison:
         comparable=not reasons,
         reasons=reasons,
         notes=notes,
-        closed=result.closed,
-        remaining=result.remaining,
-        new=result.new,
+        closed=list(result.closed),
+        remaining=list(result.remaining),
+        new=list(result.new),
         causes=causes,
     )
 

@@ -27,7 +27,7 @@ Still open, and the plan says so in each case:
 - element crops for the vision pass — deferred by §17 decision 5а until their cost is measured, so no
   report claims anything it could only have seen in a crop. The full-viewport capture is in and
   measured: `evals/audits/2026-11-14-fixture-vision.json` against `…-novision.json`;
-- UX scenarios, the GitHub PR integration, the dashboard, schedules and the multi-user product —
+- UX scenarios, the GitHub PR integration, the dashboard and the multi-user product —
   §19.3 lists each with what it needs before it can start.
 
 The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
@@ -104,10 +104,18 @@ phase that makes them meaningful. Do not add a command to this file that has not
   `status="queued"` and nothing executes in the API process; `sitewarrant-worker` claims the row with
   `FOR UPDATE SKIP LOCKED` and renews a lease while it works. A process that dies stops renewing, and
   `repo.requeue_expired` puts the row back; after `SITEWARRANT_WORKER_MAX_ATTEMPTS` the row is `failed`
-  with the reason. Two workers cannot run one audit, because the second skips the locked row.
+  with the reason. Two workers cannot run one audit while the lease is current; after it expires the
+  row can be reclaimed, and the writes of the old run are fenced on the worker id — `set_stage` and
+  `finish_audit` update nothing for a worker that no longer holds the row, so the stale run stops at
+  its next stage boundary and writes to its own attempt directory, never over the new owner's report.
+- **`stage` names the work in progress, not the work that finished.** `capture`, `facts`, `agents`,
+  `chief` and `report` are written when their stage starts, because a stage written after the fact
+  tells a polling reader nothing about the run it is watching; the row's terminal `status` is what
+  says the work ended. A stage left on a terminal row would be the lie — `finish_audit` clears it.
 - **A cancelled run leaves no report.** `POST /audits/{id}/cancel` cancels a queued row at once and
   sets `cancel_requested` on a running one; the worker checks only at stage boundaries, so the row
-  describes a stage that finished. The findings that were committed stay in the database, the artifact
+  names the last stage it entered rather than a stage it stopped halfway through. The findings that
+  were committed stay in the database, the artifact
   is not written, and `status` is `cancelled` — not a shorter `completed`.
 - **A verdict is a new row, never an edit.** `finding_feedback` is append-only and the finding is
   untouched: the labels a live corpus exports are derived from these rows, so rewriting one would
@@ -331,7 +339,9 @@ the repository does not grow by a copy of somebody's site.
 - **`claim_audit` rewrites `started_at` to the claim time.** The queue orders by it and the run page
   shows elapsed from it; a submission that waited ten minutes for a worker did not start ten minutes ago.
 - **A dedupe test needs no worker running.** `find_recent_duplicate` matches the URL and the agents list
-  inside the window; if the first row is already claimed, the second submission gets a new one.
+  inside the window; a claimed row still matches, so a second submission gets that same audit with
+  `deduplicated: true`. Only `failed` and `cancelled` are skipped — a retry after a failure is the
+  caller's point.
 - **A label export includes only fully reviewed pages.** Every finding on the page needs a verdict;
   an unreviewed finding would otherwise be counted as a false positive, and a page with no findings
   is not a clean control until a human says so.

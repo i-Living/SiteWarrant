@@ -16,9 +16,11 @@ CANCELLED = "cancelled"
 
 # `partial` is a report status that also lands on the row: some agents failed, the findings
 # that were measured are still true. `cancelled` is the operator's decision, not a failure.
+# `running -> queued` exists for one caller only: lease recovery, when the worker that held the
+# row stopped renewing it. Nothing in a run may move a row back to the queue on its own.
 ALLOWED: dict[str, frozenset[str]] = {
     QUEUED: frozenset({RUNNING, CANCELLED}),
-    RUNNING: frozenset({COMPLETED, PARTIAL, FAILED, CANCELLED}),
+    RUNNING: frozenset({QUEUED, COMPLETED, PARTIAL, FAILED, CANCELLED}),
     COMPLETED: frozenset(),
     PARTIAL: frozenset(),
     FAILED: frozenset(),

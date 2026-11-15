@@ -41,12 +41,14 @@ def finding(
     )
 
 
-def cause(cause_id: str, *, anchor: str, findings: list[FindingOut]) -> RootCauseOut:
+def cause(
+    cause_id: str, *, anchor: str, findings: list[FindingOut], label: str | None = None
+) -> RootCauseOut:
     return RootCauseOut(
         id=cause_id,
         kind="place",
         anchor=anchor,
-        label=anchor.split(":")[0],
+        label=anchor.split(":")[0] if label is None else label,
         categories=["seo", "a11y"],
         summary="s",
         rationale="r",
@@ -62,6 +64,7 @@ def report(
     version: str = "sha256:one",
     findings: list[FindingOut] | None = None,
     causes: list[RootCauseOut] | None = None,
+    pages: list[str] | None = None,
 ) -> Report:
     items = findings or []
     return Report(
@@ -81,6 +84,7 @@ def report(
         ),
         findings=items,
         root_causes=causes or [],
+        pages=pages or [],
     )
 
 
@@ -130,6 +134,37 @@ def test_a_shared_path_is_what_makes_two_reports_comparable() -> None:
     result = compare_reports(before, after)
     assert not result.comparable
     assert any("share no page path" in reason for reason in result.reasons)
+
+
+def test_a_clean_page_is_still_audited_and_keeps_the_pair_comparable() -> None:
+    """Coverage is the audited page list. Reading it off the findings would call this disjoint:
+    the repaired page has nothing left to show for itself."""
+    before = report(findings=[finding(page="/a")], pages=["/", "/a"])
+    after = report(findings=[], pages=["/", "/a"])
+    result = compare_reports(before, after)
+    assert result.comparable
+    assert [item.rule_id for item in result.closed] == ["SEO-TITLE"]
+
+
+def test_one_place_stays_one_row_when_a_label_appears() -> None:
+    """`label` is display, not identity: an old report without a tag name must not split a cause."""
+    header = "header:nth-of-type(1)"
+    old = finding(rule_id="SEO-TITLE", cause="cause-old")
+    new = finding(rule_id="A11Y-LANG", cause="cause-new")
+    before = report(
+        findings=[old],
+        causes=[cause("cause-old", anchor=header, findings=[old], label="")],
+    )
+    after = report(
+        findings=[new],
+        causes=[cause("cause-new", anchor=header, findings=[new], label="header")],
+    )
+    result = compare_reports(before, after)
+    assert len(result.causes) == 1
+    counts = result.causes[0]
+    assert (counts.anchor, counts.page) == (header, "/")
+    assert (counts.closed, counts.new) == (1, 1)
+    assert counts.label == "header"
 
 
 def test_a_version_change_is_a_note_not_a_refusal() -> None:

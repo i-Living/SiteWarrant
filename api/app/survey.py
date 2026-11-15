@@ -101,6 +101,7 @@ def merge_reports(
     measured = {category for report in reports for category in report.summary.scores}
     duplicates = sum(report.summary.duplicates_removed for report in reports)
     page_is_partial = any(report.status != "completed" for report in reports)
+    pages = list(dict.fromkeys(page for report in reports for page in report.pages))
     return build_report(
         audit_id=audit_id or str(uuid.uuid4()),
         site=site,
@@ -115,6 +116,7 @@ def merge_reports(
         root_causes=causes,
         duplicates_removed=duplicates,
         pricing=first.summary.pricing,
+        pages=pages,
     )
 
 

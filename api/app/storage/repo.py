@@ -1,10 +1,11 @@
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.dialects.postgresql import distinct_on, insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import lifecycle
@@ -174,27 +175,48 @@ async def finish_audit(
     pages_count: int,
     report_key: str | None,
     error: str | None = None,
+    worker_id: str | None = None,
 ) -> bool:
     """Move the row to a terminal state, or refuse a move the life cycle does not have.
 
     Returns False when the row is already terminal in another state — a cancellation that
     arrived while the last stage was running wins, and the caller must not treat that as a
     failure of its own work.
+
+    With a `worker_id` the write is fenced on the lease holder as well: a worker whose lease
+    expired and whose row another worker has since claimed updates nothing and returns False.
+    The condition has to name the worker, not just `running` — a reclaimed row is `running`
+    again, under a new owner.
     """
-    audit = await session.get(Audit, audit_id)
-    if audit is None:
+    values = {
+        "status": status,
+        "stage": None,
+        "worker_id": None,
+        "lease_expires_at": None,
+        "pages_count": pages_count,
+        "report_key": report_key,
+        "error": error,
+        "finished_at": datetime.now(UTC),
+    }
+    if worker_id is None:
+        audit = await session.get(Audit, audit_id)
+        if audit is None or not lifecycle.can_transition(audit.status, status):
+            return False
+        for column, value in values.items():
+            setattr(audit, column, value)
+        return True
+    if not lifecycle.can_transition(lifecycle.RUNNING, status):
         return False
-    if not lifecycle.can_transition(audit.status, status):
-        return False
-    audit.status = status
-    audit.stage = None
-    audit.worker_id = None
-    audit.lease_expires_at = None
-    audit.pages_count = pages_count
-    audit.report_key = report_key
-    audit.error = error
-    audit.finished_at = datetime.now(UTC)
-    return True
+    result = await session.execute(
+        update(Audit)
+        .where(
+            Audit.id == audit_id,
+            Audit.worker_id == worker_id,
+            Audit.status == lifecycle.RUNNING,
+        )
+        .values(**values)
+    )
+    return bool(cast(CursorResult[Any], result).rowcount)
 
 
 async def claim_audit(
@@ -239,13 +261,33 @@ async def renew_lease(
     return True
 
 
-async def set_stage(session: AsyncSession, *, audit_id: uuid.UUID, stage: str) -> None:
-    """Record the stage the worker has actually reached, not the one it hopes for."""
+async def set_stage(
+    session: AsyncSession, *, audit_id: uuid.UUID, stage: str, worker_id: str | None = None
+) -> bool:
+    """Record the stage the worker has actually reached, not the one it hopes for.
+
+    Returns False when the row is no longer this worker's: a stage write is the first thing a
+    stale lease notices, so the caller stops there instead of finishing an audit somebody else
+    owns.
+    """
+    if worker_id is not None:
+        result = await session.execute(
+            update(Audit)
+            .where(
+                Audit.id == audit_id,
+                Audit.worker_id == worker_id,
+                Audit.status == lifecycle.RUNNING,
+            )
+            .values(stage=stage)
+        )
+        await session.commit()
+        return bool(cast(CursorResult[Any], result).rowcount)
     audit = await session.get(Audit, audit_id)
     if audit is None or audit.status != lifecycle.RUNNING:
-        return
+        return False
     audit.stage = stage
     await session.commit()
+    return True
 
 
 async def requeue_expired(session: AsyncSession, *, max_attempts: int) -> tuple[int, int]:
@@ -253,21 +295,28 @@ async def requeue_expired(session: AsyncSession, *, max_attempts: int) -> tuple[
 
     This is the recovery a restart needs: a process that dies mid-audit stops renewing the
     lease, and the row is picked up again instead of sitting `running` forever.
+
+    The rows stay locked (`FOR UPDATE SKIP LOCKED`) until the commit, so a heartbeat that lands
+    between the select and the write cannot be discarded by a stale read: it waits for the lock
+    and then finds the row already requeued, and answers False.
     """
     now = datetime.now(UTC)
     expired = (
         await session.execute(
-            select(Audit).where(
+            select(Audit)
+            .where(
                 Audit.status == lifecycle.RUNNING,
                 Audit.lease_expires_at.is_not(None),
                 Audit.lease_expires_at < now,
             )
+            .with_for_update(skip_locked=True)
         )
     ).scalars()
     requeued = 0
     abandoned = 0
     for audit in expired:
         if audit.attempts < max_attempts:
+            lifecycle.ensure_transition(audit.status, lifecycle.QUEUED)
             audit.status = lifecycle.QUEUED
             audit.stage = None
             audit.worker_id = None
@@ -293,8 +342,14 @@ async def request_cancel(session: AsyncSession, audit_id: uuid.UUID) -> Audit | 
 
     A running audit is mid-browser; killing it would leave the row describing a stage nobody
     finished. The flag is checked between stages, and the worker writes `cancelled` itself.
+
+    The row is locked for the branch: a claim that commits between this read and this write would
+    otherwise turn a `queued` row into a `running` one while the cancel still wrote `cancelled`,
+    and the worker running it would never learn it was asked to stop.
     """
-    audit = await session.get(Audit, audit_id)
+    audit = (
+        await session.execute(select(Audit).where(Audit.id == audit_id).with_for_update())
+    ).scalar_one_or_none()
     if audit is None or lifecycle.is_terminal(audit.status):
         return audit
     if audit.status == lifecycle.QUEUED:
@@ -514,21 +569,43 @@ async def upsert_schedule(
     existing = (
         await session.execute(select(AuditSchedule).where(AuditSchedule.site_url == site_url))
     ).scalar_one_or_none()
-    created = existing is None
-    schedule = existing or AuditSchedule(site_url=site_url, next_run_at=datetime.now(UTC))
-    schedule.every_minutes = every_minutes
-    schedule.agents = list(agents)
-    schedule.owner_id = owner_id
-    if created:
-        # First run is one interval out: a schedule created now should not compete with the
-        # audit the operator is presumably starting by hand. Editing keeps the switch where the
-        # operator left it; `enabled` is PATCH's job.
-        schedule.enabled = True
-        schedule.next_run_at = (now or datetime.now(UTC)) + timedelta(minutes=every_minutes)
+    if existing is None:
+        schedule = AuditSchedule(
+            site_url=site_url,
+            every_minutes=every_minutes,
+            agents=list(agents),
+            owner_id=owner_id,
+            enabled=True,
+            # First run is one interval out: a schedule created now should not compete with the
+            # audit the operator is presumably starting by hand.
+            next_run_at=(now or datetime.now(UTC)) + timedelta(minutes=every_minutes),
+        )
         session.add(schedule)
+        try:
+            await session.commit()
+        except IntegrityError:
+            # Two requests for one new URL: the unique constraint decides, and the loser edits
+            # the row the winner just inserted instead of answering 500.
+            await session.rollback()
+            existing = (
+                await session.execute(
+                    select(AuditSchedule).where(AuditSchedule.site_url == site_url)
+                )
+            ).scalar_one()
+            existing.every_minutes = every_minutes
+            existing.agents = list(agents)
+            existing.owner_id = owner_id
+            await session.commit()
+            await session.refresh(existing)
+            return existing, False
+        await session.refresh(schedule)
+        return schedule, True
+    existing.every_minutes = every_minutes
+    existing.agents = list(agents)
+    existing.owner_id = owner_id
     await session.commit()
-    await session.refresh(schedule)
-    return schedule, created
+    await session.refresh(existing)
+    return existing, False
 
 
 async def list_schedules(session: AsyncSession) -> Sequence[AuditSchedule]:

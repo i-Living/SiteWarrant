@@ -17,11 +17,18 @@ import asyncio
 import logging
 import signal
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from pydantic import BaseModel, ConfigDict
+
 from app import lifecycle
-from app.audit import AuditCancelled, audit_config, current_agent_version, run_audit
+from app.audit import (
+    AuditCancelled,
+    LeaseLost,
+    audit_config,
+    current_agent_version,
+    run_audit,
+)
 from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.storage import repo
@@ -34,9 +41,10 @@ logger = logging.getLogger(__name__)
 SCHEDULE_RETRY_S = 60
 
 
-@dataclass(frozen=True)
-class WorkerContext:
+class WorkerContext(BaseModel):
     """Who is working, for how long the lease lasts, and how often to look for work."""
+
+    model_config = ConfigDict(frozen=True)
 
     worker_id: str
     lease_s: int
@@ -99,30 +107,70 @@ async def run_once(context: WorkerContext) -> bool:
     if claimed is None:
         return False
     audit_id, url = claimed
-    await execute(audit_id, url, context=context)
+    # The row was written by whoever queued it: its agent list is the audit's, not the worker's
+    # default, and the attempt decides which artifact directory this run may write.
+    async with session_scope() as session:
+        audit = await repo.get_audit(session, audit_id)
+        agents = tuple(str(name) for name in (audit.config.get("agents") or [])) if audit else ()
+        attempt = audit.attempts if audit else None
+    await execute(audit_id, url, agents=agents, attempt=attempt, context=context)
     return True
 
 
-async def execute(audit_id: uuid.UUID, url: str, *, context: WorkerContext) -> None:
+async def execute(
+    audit_id: uuid.UUID,
+    url: str,
+    *,
+    context: WorkerContext,
+    agents: tuple[str, ...] = (),
+    attempt: int | None = None,
+) -> None:
     """Run one claimed audit, renewing the lease while it works.
 
     A failure is the audit's, never the worker's: `audit_page` has already written the reason on
     the row, and the loop has to keep going or one broken URL would stop the queue.
+
+    Losing the lease is different from failing: the row belongs to another worker now, so this
+    run stops at the next stage boundary and writes nothing else. The fence lives in storage —
+    `set_stage` and `finish_audit` are conditional on the worker id — and this loop only has to
+    stop early instead of racing.
     """
+    lease_lost = asyncio.Event()
+
+    async def lost() -> LeaseLost:
+        return LeaseLost(f"{audit_id} is no longer leased to {context.worker_id}")
 
     async def progress(stage: str) -> None:
         async with session_scope() as session:
-            await repo.set_stage(session, audit_id=audit_id, stage=stage)
+            mine = await repo.set_stage(
+                session, audit_id=audit_id, stage=stage, worker_id=context.worker_id
+            )
+        if not mine:
+            raise await lost()
 
     async def cancelled() -> bool:
+        if lease_lost.is_set():
+            raise await lost()
         async with session_scope() as session:
             return await repo.cancel_requested(session, audit_id)
 
-    heartbeat = asyncio.create_task(_heartbeat(audit_id, context=context), name=f"lease-{audit_id}")
+    heartbeat = asyncio.create_task(
+        _heartbeat(audit_id, lease_lost=lease_lost, context=context), name=f"lease-{audit_id}"
+    )
     try:
-        await run_audit(url, audit_id=audit_id, progress=progress, cancelled=cancelled)
+        await run_audit(
+            url,
+            agents=agents,
+            audit_id=audit_id,
+            progress=progress,
+            cancelled=cancelled,
+            worker_id=context.worker_id,
+            attempt=attempt,
+        )
     except AuditCancelled:
         logger.info("audit %s was cancelled", audit_id)
+    except LeaseLost:
+        logger.warning("audit %s was reclaimed by another worker; this run stopped", audit_id)
     except Exception:
         logger.exception("audit %s failed", audit_id)
     finally:
@@ -130,7 +178,9 @@ async def execute(audit_id: uuid.UUID, url: str, *, context: WorkerContext) -> N
         await asyncio.gather(heartbeat, return_exceptions=True)
 
 
-async def _heartbeat(audit_id: uuid.UUID, *, context: WorkerContext) -> None:
+async def _heartbeat(
+    audit_id: uuid.UUID, *, lease_lost: asyncio.Event, context: WorkerContext
+) -> None:
     """Keep the lease alive while the audit runs; stop when another worker owns the row."""
     interval = max(1.0, context.lease_s / 3)
     while True:
@@ -143,7 +193,10 @@ async def _heartbeat(audit_id: uuid.UUID, *, context: WorkerContext) -> None:
                 lease_s=context.lease_s,
             )
         if not renewed:
+            # The run cannot be cancelled in the middle of a stage, but it can be told to stop
+            # at the next boundary: the event is what `cancelled` consults.
             logger.warning("audit %s is no longer leased to this worker", audit_id)
+            lease_lost.set()
             return
 
 

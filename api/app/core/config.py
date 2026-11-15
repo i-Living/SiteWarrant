@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     )
     artifacts_dir: Path = Field(
         default=Path("artifacts"),
-        validation_alias=AliasChoices("ARTIFACTS_DIR", "artifacts_dir"),
+        validation_alias=AliasChoices(
+            "SITEWARRANT_ARTIFACTS_DIR", "ARTIFACTS_DIR", "artifacts_dir"
+        ),
     )
     viewports: str = Field(
         default="390x844,768x1024,1440x900",

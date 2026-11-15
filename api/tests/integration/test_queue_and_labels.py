@@ -131,6 +131,37 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
         assert await repo.cancel_requested(session, running_id) is True
 
 
+async def test_a_reclaimed_audit_fences_the_stale_worker() -> None:
+    """The fence is in storage: a worker that lost the row writes nothing, not even a stage."""
+    await drain()
+    audit_id = await enqueue("queue-fence.invalid")
+    async with session_scope() as session:
+        claimed = await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+    assert claimed is not None and claimed[0] == audit_id
+    async with session_scope() as session:
+        # The row is still worker-a's: the fence is on identity, not on a timer.
+        assert await repo.set_stage(session, audit_id=audit_id, stage="facts", worker_id="worker-a")
+        assert not await repo.set_stage(
+            session, audit_id=audit_id, stage="chief", worker_id="worker-b"
+        )
+        assert not await repo.finish_audit(
+            session,
+            audit_id=audit_id,
+            status=lifecycle.COMPLETED,
+            pages_count=1,
+            report_key="audits/x/report.json",
+            worker_id="worker-b",
+        )
+        await session.commit()
+    async with session_scope() as session:
+        row = await repo.get_audit(session, audit_id)
+    assert row is not None
+    assert row.status == lifecycle.RUNNING
+    assert row.worker_id == "worker-a"
+    assert row.stage == "facts"
+    assert row.report_key is None
+
+
 async def test_a_finished_audit_refuses_a_second_terminal_state() -> None:
     await drain()
     audit_id = await enqueue("queue-finish.invalid")
