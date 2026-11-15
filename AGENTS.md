@@ -117,8 +117,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   the next worker's claim, and still reports success. The condition (`id`, `worker_id`, `running`)
   is re-checked under the lock, so a lost row updates nothing and the worker stops. The whole
   budget is bounded: the sleep is `min(interval, remaining)` and the renewal runs under
-  `wait_for(timeout=remaining)`, because a renewal that returns after the deadline would reset it
-  while another worker may already hold the row.
+  `asyncio.wait(timeout=remaining)` on a task with its own session, because a renewal that returns
+  after the deadline would reset it while another worker may already hold the row. The task is
+  cancelled and not awaited: a stalled connection can stall the session close just as long, and the
+  deadline must not depend on that. A done-callback drains the abandoned task's exception.
 - **The facts commit is fenced too.** Before the commit the agents need, `audit_page` asks
   `repo.audit_owner` whether the row is still this worker's and raises `LeaseLost` otherwise; the
   final `finish_audit` returning `False` rolls the pending findings back instead of committing them
