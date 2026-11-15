@@ -183,6 +183,16 @@ def test_a_live_corpus_needs_no_page_bytes(tmp_path: Path) -> None:
     assert dataset.pages == 2
 
 
+def test_a_relative_page_keeps_its_origin_even_when_its_query_holds_a_url(tmp_path: Path) -> None:
+    """`://` inside a relative reference is data, not a scheme: parse the start, do not search."""
+    dataset = load_dataset(live_manifest(tmp_path))
+    site = dataset.sites[0]
+    relative = dataset.page_url(site, "product?next=https://other.example/")
+    absolute = dataset.page_url(site, "https://cdn.example.com/x")
+    assert relative == "https://example.com/product?next=https://other.example/"
+    assert absolute == "https://cdn.example.com/x"
+
+
 def test_a_live_corpus_without_its_date_is_refused(tmp_path: Path) -> None:
     with pytest.raises(DatasetError, match="captured_at"):
         load_dataset(live_manifest(tmp_path, captured_at=None))

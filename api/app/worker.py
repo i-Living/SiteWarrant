@@ -42,8 +42,15 @@ logger = logging.getLogger(__name__)
 SCHEDULE_RETRY_S = 60
 
 # The loop backs off on a database error and never exits on one: nothing restarts this process,
-# and a queue nobody is polling looks exactly like a queue with no work.
+# and a queue nobody is polling looks exactly like a queue with no work. The floor is separate from
+# `poll_s`: an operator who sets a zero poll interval still must not turn an outage into a hot loop.
+BACKOFF_MIN_S = 1.0
 BACKOFF_MAX_S = 30.0
+
+
+def error_pause(pause: float) -> float:
+    """The wait after a failed loop pass: always positive, never longer than the ceiling."""
+    return min(max(pause * 2, BACKOFF_MIN_S), BACKOFF_MAX_S)
 
 
 class WorkerContext(BaseModel):
@@ -240,9 +247,9 @@ async def run_forever(
             # `execute` already keeps one audit's failure inside itself; this catches the parts
             # around it (recovery, schedules, the claim) so a database blip does not end the
             # process. Cancellation and shutdown are `BaseException` and still propagate.
-            logger.exception("worker loop failed; retrying in %.1f s", pause)
             worked = False
-            pause = min(pause * 2, BACKOFF_MAX_S)
+            pause = error_pause(pause)
+            logger.exception("worker loop failed; retrying in %.1f s", pause)
         if worked:
             continue
         try:

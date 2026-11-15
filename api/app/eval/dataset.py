@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 MIN_SITES = 8
 MIN_PAGES = 100
@@ -82,8 +83,16 @@ class Dataset:
         raise DatasetError(f"unknown site {slug!r}")
 
     def page_url(self, site: SiteLabels, page: str) -> str:
-        """A page may be a path inside `base_url` (a snapshot) or a full audited URL (live)."""
-        return page if "://" in page else site.base_url + page
+        """A page may be a path inside `base_url` (a snapshot) or a full audited URL (live).
+
+        The prefix is parsed, not searched: `product?next=https://other.example/` is a relative
+        reference that happens to contain a URL in its query, and matching `://` anywhere would
+        leave it relative and fetch it from the wrong origin.
+        """
+        parsed = urlsplit(page)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return page
+        return site.base_url + page
 
     def rules(self) -> set[str]:
         return {label.rule_id for site in self.sites for label in site.labels}
