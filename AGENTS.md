@@ -42,6 +42,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   `tokens_out` and `llm_calls` come from the provider's reply; `cost_estimate_usd` comes from
   `pricing/pricing.yaml`. An unpriced model yields `None`, never `0.0`, and one unpriced agent makes
   the audit total `None` rather than quietly smaller.
+- **Usage totals are a SQL increment, never `+=` on a loaded row.** One audit can be attempted
+  twice, and the two attempts can record their calls at the same time; reading the totals and writing
+  the sum back loses one of them while both look recorded. `add_audit_usage` adds in the `UPDATE`
+  (`tokens_in = tokens_in + …`), so the database evaluates the increment against the row it writes.
 - **A price version is recorded with the audit.** `audits.config.pricing_version` and
   `llm_calls.cost_estimate_usd` mean an old run keeps its old prices; re-pricing is a migration, not
   a side effect of editing a YAML file.

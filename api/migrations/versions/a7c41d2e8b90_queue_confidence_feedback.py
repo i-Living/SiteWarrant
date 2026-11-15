@@ -25,15 +25,29 @@ worker then requeues, and the two would write the same files.
 Rollback: `downgrade` drops the new columns and the feedback table. The queue's clock
 (`stage`, lease, attempts) is recomputable by re-running audits, but **the feedback is not**:
 it is a human verdict nothing else records, and `findings.basis` is the audit trail behind every
-published confidence. Dump both first —
+published confidence. Dump both first, in one shell with the same URL alembic uses:
 
+    export SITEWARRANT_DATABASE_URL=postgresql://user:pass@host:5432/sitewarrant
     pg_dump --data-only --table=finding_feedback "$SITEWARRANT_DATABASE_URL" > feedback.sql
-    docker exec ... psql ... -c "\\copy (select id, basis from findings where basis is not null) to 'basis.csv' csv header"
+    psql "$SITEWARRANT_DATABASE_URL" \
+      -c "\copy (select id, basis from findings where basis is not null) to 'basis.csv' csv header"
 
-— and the downgrade refuses without `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1`, the same guard
-the P0 and P3 revisions use. To restore after a re-upgrade: `psql < feedback.sql` for the rows,
-and `update findings set basis = ... from` the dumped CSV for the columns; the feedback rows carry
-their own ids, so a restore is an insert, not a merge.
+`\copy` is the client's own command, so `basis.csv` lands in the working directory of the shell
+that runs `psql`, not on the database host — run this from where you keep the backup, and keep both
+files. Restoring after a re-upgrade is one `psql` session, because the temp table has to live while
+the `\copy` reads into it:
+
+    psql "$SITEWARRANT_DATABASE_URL" <<'SQL'
+    CREATE TEMP TABLE basis_restore (id uuid PRIMARY KEY, basis jsonb NOT NULL);
+    \copy basis_restore (id, basis) from 'basis.csv' csv header
+    UPDATE findings AS f SET basis = b.basis FROM basis_restore AS b WHERE f.id = b.id;
+    SQL
+    psql "$SITEWARRANT_DATABASE_URL" < feedback.sql
+
+The feedback rows carry their own ids, so that restore is an insert of the copy, not a merge; rows
+whose finding was re-created by the re-run will not match and are reported by the foreign key.
+The downgrade refuses without `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1`, the same guard the P0
+and P3 revisions use.
 """
 
 from __future__ import annotations

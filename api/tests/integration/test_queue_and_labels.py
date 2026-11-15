@@ -133,6 +133,31 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
         assert await repo.cancel_requested(session, running_id) is True
 
 
+async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -> None:
+    """Totals are a SQL increment: two attempts recording at once must both count."""
+    await drain()
+    audit_id = await enqueue("usage.invalid")
+
+    async def record(tokens: int) -> None:
+        async with session_scope() as session:
+            await repo.add_audit_usage(
+                session,
+                audit_id=audit_id,
+                tokens_in=tokens,
+                tokens_out=tokens,
+                llm_calls=1,
+                cost_estimate_usd=0.5,
+            )
+            await session.commit()
+
+    await asyncio.gather(record(10), record(5))
+    async with session_scope() as session:
+        row = await session.get(Audit, audit_id)
+    assert row is not None
+    assert (row.tokens_in, row.tokens_out, row.llm_calls) == (15, 15, 2)
+    assert row.cost_estimate_usd == pytest.approx(1.0)
+
+
 async def test_a_heartbeat_cannot_renew_a_lease_recovery_is_holding() -> None:
     """The renewal is one conditional UPDATE: a row recovery took cannot be stamped back."""
     await drain()

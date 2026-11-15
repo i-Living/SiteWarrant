@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, func, select, update
+from sqlalchemy import CursorResult, Numeric, delete, func, select, update
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -463,14 +463,24 @@ async def add_audit_usage(
     llm_calls: int,
     cost_estimate_usd: float | None = None,
 ) -> None:
-    audit = await session.get(Audit, audit_id)
-    if audit is None:
-        return
-    audit.tokens_in += tokens_in
-    audit.tokens_out += tokens_out
-    audit.llm_calls += llm_calls
+    """Add one attempt's usage to the audit's totals, atomically.
+
+    `+=` on an ORM attribute reads the row and writes the sum back, so an attempt that records its
+    calls while the next attempt records its own can overwrite the other total. The increment is a
+    SQL expression, evaluated by the database against the row it updates.
+    """
+    values: dict[str, Any] = {
+        "tokens_in": Audit.tokens_in + tokens_in,
+        "tokens_out": Audit.tokens_out + tokens_out,
+        "llm_calls": Audit.llm_calls + llm_calls,
+    }
     if cost_estimate_usd is not None:
-        audit.cost_estimate_usd = round((audit.cost_estimate_usd or 0.0) + cost_estimate_usd, 6)
+        # `round(float, int)` does not exist in Postgres; the sum is cast to numeric for it.
+        values["cost_estimate_usd"] = func.round(
+            (func.coalesce(Audit.cost_estimate_usd, 0.0) + cost_estimate_usd).cast(Numeric(14, 6)),
+            6,
+        )
+    await session.execute(update(Audit).where(Audit.id == audit_id).values(**values))
 
 
 async def save_root_causes(
