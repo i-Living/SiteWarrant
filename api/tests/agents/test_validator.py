@@ -12,6 +12,7 @@ from app.agents.validator import (
 from app.rules.catalog import Impact
 
 DOM_ID = str(uuid.uuid4())
+DOM_WIDE_ID = str(uuid.uuid4())
 RESPONSIVE_ID = str(uuid.uuid4())
 CONTRAST_ID = str(uuid.uuid4())
 HTTP_ID = str(uuid.uuid4())
@@ -32,6 +33,12 @@ def observations() -> dict[str, ObservationFacts]:
                 "images_missing_alt": 3,
                 "headings": [{"level": 1, "text": "Home"}, {"level": 3, "text": "Prices"}],
             },
+        ),
+        DOM_WIDE_ID: ObservationFacts(
+            tool="dom",
+            kind="dom_snapshot",
+            viewport="1440x900",
+            payload={"title": "SiteWarrant fixture", "meta_description": "short", "h1_count": 1},
         ),
         CONTRAST_ID: ObservationFacts(
             tool="contrast",
@@ -96,6 +103,49 @@ def test_a_valid_candidate_becomes_a_draft() -> None:
     assert draft.rule_id == "SEO-CANONICAL"
     assert draft.agent == "seo"
     assert draft.evidence[0].observation_id == DOM_ID
+
+
+def test_confidence_is_computed_from_measured_channels_not_from_self_report() -> None:
+    """An agent that rates itself 0.99 does not get 0.99: one measurement is the weaker evidence."""
+    confident, _ = validate(candidate(confidence=0.99), observations=observations(), agent="seo")
+    assert confident is not None
+    assert confident.confidence == 0.6
+    assert confident.basis == {
+        "kind": "agent",
+        "channels": ["dom"],
+        "viewports": ["390x844"],
+        "evidence": 1,
+        "self_reported": 0.99,
+    }
+
+    wider, _ = validate(
+        candidate(
+            evidence=[
+                EvidenceRef(observation_id=DOM_ID, kind="dom"),
+                EvidenceRef(observation_id=DOM_WIDE_ID, kind="dom"),
+            ],
+            confidence=0.1,
+        ),
+        observations=observations(),
+        agent="seo",
+    )
+    assert wider is not None
+    assert wider.confidence > confident.confidence
+    assert wider.basis is not None
+    assert wider.basis["viewports"] == ["1440x900", "390x844"]
+    assert wider.basis["self_reported"] == 0.1
+
+
+def test_independence_is_what_buys_confidence() -> None:
+    """A second instrument outranks a second citation; a third width outranks a second."""
+    from app.agents.validator import measured_confidence
+
+    assert measured_confidence(1, 1, 1) == 0.6
+    assert measured_confidence(1, 1, 2) == 0.65
+    assert measured_confidence(1, 2, 1) == 0.7
+    assert measured_confidence(1, 3, 1) == 0.8
+    assert measured_confidence(2, 3, 2) == 0.9
+    assert measured_confidence(5, 9, 9) == 0.9
 
 
 def test_a_fabricated_observation_is_rejected() -> None:

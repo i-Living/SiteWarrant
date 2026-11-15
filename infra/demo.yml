@@ -36,6 +36,9 @@ services:
       SITEWARRANT_LLM_BASE_URL: ${SITEWARRANT_LLM_BASE_URL:-https://opencode.ai/zen/go/v1}
       SITEWARRANT_LLM_MODEL: ${SITEWARRANT_LLM_MODEL:-deepseek-v4.1-flash}
       SITEWARRANT_LLM_API_KEY: ${SITEWARRANT_LLM_API_KEY:-}
+    volumes:
+      # The worker writes the report; the API serves it. One volume, two processes.
+      - artifacts:/app/.artifacts
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,5 +46,29 @@ services:
       - "127.0.0.1:8000:8000"   # the proxy in front of this is the only public face
     restart: unless-stopped
 
+  worker:
+    # The process that actually audits. The API only writes a queued row, so a restart of
+    # either container loses the run, not the task: an expired lease puts it back in the queue.
+    image: sitewarrant-api:demo
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    command: ["uv", "run", "sitewarrant-worker"]
+    environment:
+      SITEWARRANT_DATABASE_URL: postgresql+asyncpg://sitewarrant:${POSTGRES_PASSWORD}@postgres:5432/sitewarrant
+      SITEWARRANT_ARTIFACTS_DIR: /app/.artifacts
+      SITEWARRANT_VIEWPORTS: 390x844,768x1024,1440x900
+      SITEWARRANT_AUDIT_COST_LIMIT_USD: ${SITEWARRANT_AUDIT_COST_LIMIT_USD:-0.25}
+      SITEWARRANT_LLM_BASE_URL: ${SITEWARRANT_LLM_BASE_URL:-https://opencode.ai/zen/go/v1}
+      SITEWARRANT_LLM_MODEL: ${SITEWARRANT_LLM_MODEL:-deepseek-v4.1-flash}
+      SITEWARRANT_LLM_API_KEY: ${SITEWARRANT_LLM_API_KEY:-}
+    volumes:
+      - artifacts:/app/.artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  artifacts:

@@ -1,12 +1,15 @@
 import asyncio
 import json
+import uuid
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import typer
 
 from app.agents.specs import parse_agent_names
-from app.audit import run_audit
+from app.audit import read_artifact, run_audit
+from app.compare import Comparison, compare_reports
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.report import Report, exit_code_for
@@ -16,6 +19,7 @@ from app.crawl.models import CrawlLimits
 from app.eval.compare import compare_runs
 from app.eval.dataset import DatasetError
 from app.eval.gate import decide
+from app.eval.labels import export_labels
 from app.eval.models import EvalRun
 from app.eval.runner import run_eval
 from app.fixes.measure import FixRun, measure_fixes
@@ -23,6 +27,7 @@ from app.fixes.reaudit import ReauditError, reaudit
 from app.fixes.recommend import FixBuildError, build_fixes, write_fix_files
 from app.rules import store
 from app.rules.catalog import RULES
+from app.storage import repo
 from app.survey import run_survey
 from app.tools.axe import AXE_VERSION
 
@@ -318,11 +323,11 @@ def evaluate(
     if not comparison.compatible:
         raise typer.Exit(code=2)
     for metric, delta in comparison.deltas.items():
-        typer.echo(f"  {metric:<24} {delta:+.4f}")
+        typer.echo(f"  {metric:<24} {_signed(delta)}")
     for rule_id, rule_delta in comparison.per_rule.items():
         typer.echo(
-            f"  {rule_id:<22} precision {rule_delta['precision']:+.4f}  "
-            f"recall {rule_delta['recall']:+.4f}"
+            f"  {rule_id:<22} precision {_signed(rule_delta['precision'])}  "
+            f"recall {_signed(rule_delta['recall'])}"
         )
     typer.echo(f"  regressions: {', '.join(comparison.regressions) or 'none'}")
     if comparison.regressions:
@@ -340,20 +345,21 @@ def _print_eval(run: EvalRun) -> None:
         f"fp {metrics['false_positives']}, fn {metrics['false_negatives']}"
     )
     typer.echo(
-        f"precision {metrics['precision']} ({metrics['true_positives']}/{metrics['predicted']}), "
-        f"recall {metrics['recall']} ({metrics['true_positives']}/{metrics['labels']}), "
-        f"fp-rate {metrics['false_positive_rate']} "
+        f"precision {_rate(metrics['precision'])} "
+        f"({metrics['true_positives']}/{metrics['predicted']}), "
+        f"recall {_rate(metrics['recall'])} ({metrics['true_positives']}/{metrics['labels']}), "
+        f"fp-rate {_rate(metrics['false_positive_rate'])} "
         f"({metrics['false_positives']}/{metrics['predicted']})"
     )
     typer.echo(
         f"pages with false positives {metrics['pages_with_false_positives']}/{metrics['pages']}, "
-        f"duplicate rate {metrics['duplicate_rate']} "
+        f"duplicate rate {_rate(metrics['duplicate_rate'])} "
         f"({metrics['duplicates_removed']}/{metrics['findings_raw']})"
     )
     typer.echo(f"runtime {run.context.duration_s} s")
     for rule_id, rule in metrics["per_rule"].items():
         typer.echo(
-            f"  {rule_id:<20} p={rule['precision']:<7} r={rule['recall']:<7} "
+            f"  {rule_id:<20} p={_rate(rule['precision']):<7} r={_rate(rule['recall']):<7} "
             f"labels {rule['labels']} predicted {rule['predicted']}"
         )
 
@@ -453,6 +459,136 @@ def reaudit_command(
         raise typer.Exit(code=1)
 
 
+@cli.command("compare")
+def compare_command(
+    before: str = typer.Argument(..., help="Earlier audit id or report.json."),
+    after: str = typer.Argument(..., help="Later audit id or report.json."),
+    out: Path | None = typer.Option(None, "--out", help="Where to write the comparison JSON."),
+) -> None:
+    """Compare two stored audits of one site: closed, remaining, new, by cause."""
+    try:
+        earlier, later = asyncio.run(load_pair(before, after))
+    except CompareLoadError as error:
+        typer.echo(f"compare: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    result = compare_reports(earlier, later)
+    typer.echo(
+        f"{'comparable' if result.comparable else 'NOT comparable'}: "
+        f"closed {len(result.closed)}, remaining {len(result.remaining)}, new {len(result.new)}, "
+        f"causes {len(result.causes)}"
+    )
+    for reason in result.reasons:
+        typer.echo(f"  reason: {reason}")
+    for note in result.notes:
+        typer.echo(f"  note: {note}")
+    for item in result.closed:
+        typer.echo(f"  closed    {item.rule_id:<20} {item.severity:<8} {item.page_url}")
+    for item in result.new:
+        typer.echo(f"  new       {item.rule_id:<20} {item.severity:<8} {item.page_url}")
+    for cause in result.causes:
+        typer.echo(
+            f"  cause {cause.anchor} {cause.page}: closed {cause.closed}, "
+            f"new {cause.new}, remaining {cause.remaining}"
+        )
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(comparison_payload(result), indent=2) + "\n", encoding="utf-8")
+        typer.echo(f"comparison written to {out}")
+    if not result.comparable:
+        raise typer.Exit(code=1)
+
+
+@cli.command("labels")
+def labels_command(
+    host: str = typer.Option(..., "--host", help="Host whose feedback becomes labels."),
+    out: Path = typer.Option(..., "--out", help="Where to write the corpus manifest."),
+) -> None:
+    """Export a live-URL benchmark manifest from the feedback on one host's findings."""
+    try:
+        manifest = asyncio.run(export_labels(host, out=out))
+    except DatasetError as error:
+        typer.echo(f"labels: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    totals = manifest["totals"]
+    typer.echo(
+        f"pages {totals['pages']}, labels {totals['labels']}, "
+        f"captured {manifest['captured_at']}, digest {manifest['digest']}"
+    )
+    typer.echo(f"manifest written to {out}")
+
+
+def comparison_payload(result: Comparison) -> dict[str, Any]:
+    """The comparison as data, in the same shape the API answers with."""
+    return {
+        "before": result.before,
+        "after": result.after,
+        "before_version": result.before_version,
+        "after_version": result.after_version,
+        "comparable": result.comparable,
+        "reasons": result.reasons,
+        "notes": result.notes,
+        "closed": [delta_payload(item) for item in result.closed],
+        "remaining": [delta_payload(item) for item in result.remaining],
+        "new": [delta_payload(item) for item in result.new],
+        "uncompared": [delta_payload(item) for item in result.uncompared],
+        "causes": [
+            {
+                "anchor": cause.anchor,
+                "page": cause.page,
+                "label": cause.label,
+                "closed": cause.closed,
+                "new": cause.new,
+                "remaining": cause.remaining,
+            }
+            for cause in result.causes
+        ],
+    }
+
+
+def delta_payload(item: Any) -> dict[str, str]:
+    return {
+        "rule_id": item.rule_id,
+        "page_url": item.page_url,
+        "severity": item.severity,
+        "subject": item.subject,
+    }
+
+
+class CompareLoadError(ValueError):
+    """A comparison argument names neither a report file nor a stored audit."""
+
+
+async def load_pair(*refs: str) -> list[Report]:
+    """Load a pair inside one event loop: the engine's pool belongs to the loop that made it."""
+    return [await _load_one(ref) for ref in refs]
+
+
+async def _load_one(ref: str) -> Report:
+    path = Path(ref)
+    exists = await asyncio.to_thread(path.exists)
+    if exists:
+        text = await asyncio.to_thread(path.read_text, encoding="utf-8")
+        try:
+            return Report.model_validate_json(text)
+        except ValueError as error:
+            raise CompareLoadError(f"{ref} is not a report: {error}") from error
+    return await _stored_report(ref)
+
+
+async def _stored_report(ref: str) -> Report:
+    try:
+        parsed = uuid.UUID(ref)
+    except ValueError as error:
+        raise CompareLoadError(f"{ref} is neither a report file nor an audit id") from error
+    async with session_scope() as session:
+        audit = await repo.get_audit(session, parsed)
+        report_key = audit.report_key if audit is not None else None
+    if report_key is None:
+        raise CompareLoadError(f"audit {ref} has no stored report")
+    text = read_artifact(report_key)
+    return Report.model_validate_json(text)
+
+
 @cli.command("fixes")
 def fixes_command(
     dataset: Path = typer.Option(
@@ -510,6 +646,11 @@ def _print_fixes(run: FixRun) -> None:
 
 def _rate(value: float | None) -> str:
     return "null" if value is None else f"{value:.4f}"
+
+
+def _signed(value: float | None) -> str:
+    """A delta needs two measured sides; without them it is null, not a change."""
+    return "null" if value is None else f"{value:+.4f}"
 
 
 @cli.command("index-rules")

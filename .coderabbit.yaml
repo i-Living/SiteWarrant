@@ -91,7 +91,11 @@ reviews:
           reason and the before/after run, do not approve silently.
         - Cost is an estimate from the versioned price table; tokens, call counts and wall time are
           measured. Flag any code that presents the dollar figure as measured.
-        - Eval fixtures must not reach the public network.
+        - Eval fixtures must not reach the public network. A live corpus (`source: "live"`) is the
+          exception by construction: it names URLs, labels and `captured_at`, stores no page bytes,
+          and must never become a CI job. Flag a live manifest without a date, and any label export
+          that includes a page whose findings were not all reviewed, reads any verdict instead of
+          the newest one, or names a path instead of the audited URL.
 
     - path: "api/app/fixes/**"
       instructions: |
@@ -105,6 +109,38 @@ reviews:
         - Every new finding after a repair is a regression; nothing may grade which ones are fine.
         - The occlusion repair must move the element that carries the position (the probe records
           the nearest positioned ancestor), never a bare tag that would restyle the page.
+
+    - path: "api/app/worker.py"
+      instructions: |
+        The queue is the `audits` table; this process is the only one that runs an audit.
+        - Claiming must stay `FOR UPDATE SKIP LOCKED` under a lease, and the lease must be renewed
+          while the audit runs: flag any change that lets a queued row run twice or leaves a dead
+          worker's row `running` forever.
+        - A failure belongs to the audit, never to the loop: flag a raise that would stop the worker.
+        - A schedule advances `next_run_at` in the same transaction that queues its audit; flag a
+          commit in between.
+        - `stage` names the work in progress and is written when that work starts; the terminal
+          `status` says it ended. Flag a stage written after its work (a reader learns nothing) and a
+          stage left on a finished row.
+        - Every write of a run is fenced on the worker id: `set_stage` and `finish_audit` must be
+          conditional on `worker_id` and `running`, because a reclaimed row is running again under a
+          new owner. Flag a write that matches on the audit id alone.
+
+    - path: "api/app/lifecycle.py"
+      instructions: |
+        One table of allowed status moves. Flag any status written around it, any transition that
+        would let a terminal row change state, and any new status added without updating the table
+        and the web's status labels.
+
+    - path: "api/app/compare.py"
+      instructions: |
+        A comparison says when it is not one: a different site or a disjoint page set must answer
+        `comparable: false` with the reason, and a different `agent_version` is a note rather than
+        a refusal. Coverage is the audited page list (`report.pages`), never the pages that happened
+        to have a finding — a repaired page is still audited. A finding on a page only one audit
+        covered is `uncompared`, never `closed` or `new`: flag a classification that implies the
+        later run checked a page it never audited. Flag a diff that hides rows to avoid looking
+        empty, and any root-cause grouping that merges two pages or two anchors into one cause.
 
     - path: "api/app/api/**"
       instructions: |

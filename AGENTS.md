@@ -13,11 +13,12 @@ Playwright capture, eight deterministic channels at three viewports, the rule en
 MCP fact server, eight budgeted agents behind the validator, the vision pass (`page_image`: `ui` and
 `ux` read the full screenshot of each viewport as an image), the deterministic chief layer, the eval
 runner over a frozen corpus, fixes with re-audits and a measured fix-acceptance run, and traces
-with a versioned cost estimate. `web/`
+with a versioned cost estimate. Since 2026-11-15 the audit runs in a separate worker process off a
+Postgres queue (§19): `POST /audits` only writes a `queued` row. `web/`
 is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
-recent runs, a run form, the stored report, and a login gate in `web/middleware.ts`. `infra/` brings up
-Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
-loopback.
+recent runs (queued, running with its stage, finished), a run form, the stored report, and a login
+gate in `web/middleware.ts`. `infra/` brings up Postgres and a fixture site with ten planted defects,
+and `infra/demo.yml` runs the API and the worker on loopback.
 
 Still open, and the plan says so in each case:
 
@@ -25,7 +26,9 @@ Still open, and the plan says so in each case:
   waits on the owner's domain and DNS;
 - element crops for the vision pass — deferred by §17 decision 5а until their cost is measured, so no
   report claims anything it could only have seen in a crop. The full-viewport capture is in and
-  measured: `evals/audits/2026-11-14-fixture-vision.json` against `…-novision.json`.
+  measured: `evals/audits/2026-11-14-fixture-vision.json` against `…-novision.json`;
+- UX scenarios, the GitHub PR integration, the dashboard and the multi-user product —
+  §19.3 lists each with what it needs before it can start.
 
 The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
 58 audited pages, two that timed out and stayed in the denominator as failures.
@@ -39,6 +42,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   `tokens_out` and `llm_calls` come from the provider's reply; `cost_estimate_usd` comes from
   `pricing/pricing.yaml`. An unpriced model yields `None`, never `0.0`, and one unpriced agent makes
   the audit total `None` rather than quietly smaller.
+- **Usage totals are a SQL increment, never `+=` on a loaded row.** One audit can be attempted
+  twice, and the two attempts can record their calls at the same time; reading the totals and writing
+  the sum back loses one of them while both look recorded. `add_audit_usage` adds in the `UPDATE`
+  (`tokens_in = tokens_in + …`), so the database evaluates the increment against the row it writes.
 - **A price version is recorded with the audit.** `audits.config.pricing_version` and
   `llm_calls.cost_estimate_usd` mean an old run keeps its old prices; re-pricing is a migration, not
   a side effect of editing a YAML file.
@@ -97,6 +104,57 @@ phase that makes them meaningful. Do not add a command to this file that has not
   so a size or a ratio judged from the picture is rejected. The tool refuses — artifacts off, a
   viewport the audit never captured, a PNG over 4 MB — with a reason it puts in the transcript, never by
   shrinking the image or describing one it did not send.
+- **A queued audit is a row, and a lease is what makes it recoverable.** `POST /audits` writes
+  `status="queued"` and nothing executes in the API process; `sitewarrant-worker` claims the row with
+  `FOR UPDATE SKIP LOCKED` and renews a lease while it works. A process that dies stops renewing, and
+  `repo.requeue_expired` puts the row back; after `SITEWARRANT_WORKER_MAX_ATTEMPTS` the row is `failed`
+  with the reason. Two workers cannot run one audit while the lease is current; after it expires the
+  row can be reclaimed, and the writes of the old run are fenced on the worker id — `set_stage` and
+  `finish_audit` update nothing for a worker that no longer holds the row, so the stale run stops at
+  its next stage boundary and writes to its own attempt directory, never over the new owner's report.
+- **The heartbeat is one conditional `UPDATE`.** `renew_lease` does not read the row first: a
+  read-then-write blocks on recovery's lock and then stamps a lease onto a requeued row, or onto
+  the next worker's claim, and still reports success. The condition (`id`, `worker_id`, `running`)
+  is re-checked under the lock, so a lost row updates nothing and the worker stops. The whole
+  budget is bounded: the sleep is `min(interval, remaining)` and the renewal runs under
+  `asyncio.wait(timeout=remaining)` on a task with its own session, because a renewal that returns
+  after the deadline would reset it while another worker may already hold the row. The task is
+  cancelled and not awaited: a stalled connection can stall the session close just as long, and the
+  deadline must not depend on that. A done-callback drains the abandoned task's exception.
+- **The facts commit is fenced too.** Before the commit the agents need, `audit_page` asks
+  `repo.audit_owner` whether the row is still this worker's and raises `LeaseLost` otherwise; the
+  final `finish_audit` returning `False` rolls the pending findings back instead of committing them
+  onto somebody else's audit. Stage and finish writes alone would leave that window open — the
+  ownership check has to sit at the transaction boundary, not only at the stage. While that
+  transaction is open the page insert holds a key-share lock on the audit row, so
+  `requeue_expired`'s `FOR UPDATE ... SKIP LOCKED` skips it: recovery cannot requeue a run that is
+  still writing, and the check covers the windows before and after the transaction.
+- **`stage` names the work in progress, not the work that finished.** `capture`, `facts`, `agents`,
+  `chief` and `report` are written when their stage starts, because a stage written after the fact
+  tells a polling reader nothing about the run it is watching; the row's terminal `status` is what
+  says the work ended. A stage left on a terminal row would be the lie — `finish_audit` clears it.
+- **A cancelled run leaves no report.** `POST /audits/{id}/cancel` cancels a queued row at once and
+  sets `cancel_requested` on a running one; the worker checks only at stage boundaries, so the row
+  names the last stage it entered rather than a stage it stopped halfway through. The findings that
+  were committed stay in the database, the artifact
+  is not written, and `status` is `cancelled` — not a shorter `completed`.
+- **A verdict is a new row, never an edit.** `finding_feedback` is append-only and the finding is
+  untouched: the labels a live corpus exports are derived from these rows, so rewriting one would
+  rewrite a measurement's ground truth.
+- **Confidence has a basis, and self-report is not it.** `findings.confidence` is computed from
+  measured independence — viewports, channels, evidence count — and `findings.basis` records the
+  factors, including `self_reported`, which the score ignores. An agent that rates itself 0.99 with one
+  citation gets 0.6.
+- **A live corpus is a date, not a snapshot.** `source: "live"` manifests carry URL sets, labels and
+  `captured_at`, never page bytes, and `run_eval` fetches them over the network (`allow_private=False`).
+  They are not the CI corpus, and a live manifest without a date is refused.
+- **A comparison says when it is not one.** `app/compare.py` refuses a different site or a disjoint
+  page set (`comparable: false` with the reason) and labels a different `agent_version` as a comparison
+  between instruments. `closed` / `remaining` / `new` stay disjoint, as in `reaudit`.
+- **A schedule is one row per URL, advanced in the transaction that queues its audit.** The worker
+  locks due rows with `SKIP LOCKED`, inserts the audit and moves `next_run_at` together, so two workers
+  cannot queue the same schedule twice. A page already in flight pushes the schedule by 60 s instead of
+  starting a second browser, and a re-enabled schedule waits a whole interval rather than catching up.
 
 These are not style preferences. Breaking one silently invalidates the published metrics.
 
@@ -143,6 +201,11 @@ uv run sitewarrant audit https://example.com --ignore-robots --out report.json
 uv run sitewarrant version
 uv run sitewarrant index-rules                        # corpus into Postgres (pgvector)
 uv run sitewarrant audit http://localhost:8081/ --allow-private --agents a11y --out report.json
+
+# Queue and comparison [§19, verified 2026-11-15]: the API only queues; this process audits
+uv run sitewarrant-worker                             # claims queued rows under a lease
+uv run sitewarrant compare <id|report.json> <id|report.json> --out /tmp/comparison.json
+uv run sitewarrant labels --host localhost:8081 --out /tmp/live-corpus.json
 
 # Crawl [P1, verified]
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
@@ -206,18 +269,23 @@ api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes,
                    narrate (one model call explaining the clusters) with prompts/chief.md
 api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new),
                    measure (fix acceptance and fix safety over the corpus)
-api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare
+api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare,
+                   labels (feedback → live-corpus manifest)
 api/app/mcp/       fact server (stdio, one audit per process, seven tools including `page_image`, the
                    full-page capture as an image) and the agent loop's MCP client
-api/app/storage/   repository functions over the ORM
+api/app/storage/   repository functions over the ORM, including the queue (claim, lease, cancel)
 api/app/tools/     eight channels: http_probe, dom_probe, axe, contrast, responsive, occlusion,
                    performance, screenshot; fetch (Playwright), http_get (httpx), guard (SSRF), robots
+api/app/lifecycle.py  the audit's status table: which moves exist, and which are refused
+api/app/worker.py  `sitewarrant-worker`: claims queued rows, renews the lease, recovers lost work
+api/app/compare.py two stored audits: comparability, closed/remaining/new, grouped by cause
 api/app/cli.py     the `sitewarrant` commands; telemetry.py and pricing.py sit beside it
-api/Dockerfile     the API image `infra/demo.yml` and CI build
+api/Dockerfile     the API image `infra/demo.yml` and CI build; the worker runs the same image
 api/migrations/    Alembic environment and revisions
 api/tests/         unit tests (math, thresholds, merge, validator, runner on cassettes),
                    tests/agents/cassettes (recorded exchanges), tests/crawl (in-memory sites)
-                   and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals)
+                   and tests/integration (fixture site, database, browser, MCP, agents, fixes, evals,
+                   queue and label export)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
 web/app/           Next.js interface: sites, site pages, audit form, current audits, report, login
 web/middleware.ts  session gate: every route but /login and /auth/login needs a signed cookie
@@ -226,16 +294,17 @@ benchmark/sites/     eight generated sites + their labels (never hand-edited)
 benchmark/generate.py  the only writer of benchmark/sites and dataset.json; `--check` re-digests
 evals/runs/          recorded eval runs; a number in the docs must name one of these files
 pricing/pricing.yaml  versioned price table; the audit stores the version it was priced with
-infra/             docker-compose (Postgres with pgvector, Redis, fixture site) and demo.yml
+infra/             docker-compose (Postgres with pgvector, fixture site) and demo.yml (api + worker)
 scripts/           report_screenshot.py — the CI job that captures the report page
 .github/workflows/ ci.yml (gate, image build, report screenshot), eval.yml (weekly corpus run)
 docs/              PLAN.md (authoritative) and ENGINEERING_REPORT.md
 ```
 
-There is no `api/app/worker/`: `POST /audits` answers `202` with an id and runs the audit in a task
-inside the API process, so the row is written a moment after the answer — a client polling that id
-can see one `404` first — and a restart loses the task and leaves the row `running`. That is the
-documented residual: fine for a demo, wrong for a crawl of 50 pages.
+The API never audits: `POST /audits` writes a `queued` row with the id the caller gets, and
+`sitewarrant-worker` claims it with `FOR UPDATE SKIP LOCKED` under a lease. A restart loses the run,
+not the task — an expired lease returns the row to the queue — and two workers cannot run one audit.
+A live corpus (`source: "live"`) names URLs and labels with a date instead of storing page bytes, so
+the repository does not grow by a copy of somebody's site.
 
 ## Code conventions
 
@@ -279,6 +348,39 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 
 ## Pitfalls
 
+- **The API no longer executes an audit, and a test that expects it to has to start a worker.** The
+  row is `queued` until `sitewarrant-worker` (or, in a test, `app.worker.run_forever` in a fixture)
+  claims it; a `202` with `status: "queued"` is the contract, not a race to poll through.
+- **The stage callback opens its own session on purpose.** `audits.stage` is written from outside the
+  audit's transaction; writing it inside would make the progress invisible until the audit commits,
+  which is exactly when nobody needs it.
+- **`finish_audit` returns `False` instead of raising when the row is already terminal.** A
+  cancellation can win the race with the last stage, and an error handler that raises while handling
+  an error hides the original one.
+- **Recovery discards the dead attempt's facts.** `requeue_expired` deletes the audit's pages, and
+  the cascade takes its snapshots, observations, root causes and findings: the next attempt writes
+  its own pages under the same id, and the agents read the audit by id, so a leftover observation
+  would be citable evidence from a run that never finished. `llm_calls` stays — those tokens were
+  really spent — and feedback on a discarded finding goes with it.
+- **`claim_audit` rewrites `started_at` to the claim time.** The queue orders by it and the run page
+  shows elapsed from it; a submission that waited ten minutes for a worker did not start ten minutes ago.
+- **A dedupe test needs no worker running.** `find_recent_duplicate` matches the URL and the agents list
+  inside the window; a claimed row still matches, so a second submission gets that same audit with
+  `deduplicated: true`. Only `failed` and `cancelled` are skipped — a retry after a failure is the
+  caller's point.
+- **A label export includes only fully reviewed pages, and reads the last verdict.** Every finding
+  on the page needs a verdict; an unreviewed finding would otherwise be counted as a false positive,
+  and a page with no findings is not a clean control until a human says so. Feedback is append-only,
+  so a `confirmed` corrected to `false_positive` is withdrawn: the export reads the newest row, never
+  any row.
+- **A live page is a whole URL.** The export names the audited URL (scheme, host, path and query), not
+  a path under one base: `?id=1` is a different page, and one base URL cannot serve two origins.
+  `Dataset.page_url` passes an absolute page through and only prefixes a relative one.
+- **A page only one audit covered is not a closed finding.** `compare` buckets findings on unshared
+  pages into `uncompared` and says so in its notes: the later run did not look, so nothing closed.
+  Coverage is `report.pages`, not the pages that happened to have a finding.
+- **`run_eval` takes `allow_private` from the manifest.** A snapshot is served from loopback, a live
+  corpus is fetched from the internet; a live manifest without `captured_at` is refused.
 - **Network tests flake.** Third-party sites change hourly. CI uses the fixture site; the real benchmark
   runs weekly — `.github/workflows/eval.yml`, Monday 04:00 UTC, plus `workflow_dispatch` — and is
   not a merge gate.
@@ -340,6 +442,10 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
+- **A revision that has run anywhere is not edited to carry a backfill.** `a7c41d2e8b90` had already
+  been applied on the branch database, so an `UPDATE` added to its `upgrade` would never run there;
+  `c9e53f4a0d12` carries it instead and its downgrade is a documented no-op. Adding SQL to an applied
+  revision looks like a fix and is a no-op on every database that matters.
 - **Both destructive downgrades ask for the flag.** The P3 one also documents how to keep the call
   log: `pg_dump --data-only --table=llm_calls` before the downgrade, restore after re-upgrade. The P3 downgrade drops `llm_calls`, which
   cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.

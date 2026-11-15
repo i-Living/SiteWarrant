@@ -23,7 +23,7 @@ GATED = ("precision", "false_positive_rate")
 class GateDecision:
     accepted: bool
     reasons: list[str] = field(default_factory=list)
-    deltas: dict[str, float] = field(default_factory=dict)
+    deltas: dict[str, float | None] = field(default_factory=dict)
     corpus: str | None = None
 
     @property
@@ -47,9 +47,20 @@ def decide(baseline: EvalRun, candidate: EvalRun, *, tolerance: float = 0.0) -> 
 
     decision = GateDecision(accepted=True, corpus=baseline.context.dataset_digest)
     for name in GATED:
-        before = float(baseline.metrics.get(name, 0.0))
-        after = float(candidate.metrics.get(name, 0.0))
-        delta = round(after - before, 4)
+        before = baseline.metrics.get(name)
+        after = candidate.metrics.get(name)
+        if before is None or after is None:
+            # No denominator means no rate: a gate that inherited 0.0 would pass a candidate that
+            # predicted nothing, or fail a baseline nobody measured. Neither is evidence.
+            decision.accepted = False
+            decision.deltas[name] = None
+            decision.reasons.append(
+                f"{name} is undefined in one of the runs: "
+                f"{comparison.baseline}={_ratio_text(before)}, "
+                f"{comparison.candidate}={_ratio_text(after)}"
+            )
+            continue
+        delta = round(float(after) - float(before), 4)
         decision.deltas[name] = delta
         worse = delta < -tolerance if name == "precision" else delta > tolerance
         if worse:
@@ -60,6 +71,14 @@ def decide(baseline: EvalRun, candidate: EvalRun, *, tolerance: float = 0.0) -> 
     if not decision.reasons:
         decision.reasons.append(
             "precision and false-positive rate held: "
-            + ", ".join(f"{name} {delta:+.4f}" for name, delta in decision.deltas.items())
+            + ", ".join(
+                f"{name} {delta:+.4f}"
+                for name, delta in decision.deltas.items()
+                if delta is not None
+            )
         )
     return decision
+
+
+def _ratio_text(value: float | None) -> str:
+    return "null" if value is None else f"{value:.4f}"

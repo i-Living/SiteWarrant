@@ -17,6 +17,14 @@ def test_the_bare_name_still_works(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().database_url.endswith("@db:5432/sitewarrant")
 
 
+def test_the_prefixed_artifacts_dir_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`infra/demo.yml` sets SITEWARRANT_ARTIFACTS_DIR; without the alias the setting was ignored
+    and the worker wrote reports the API could not find on the shared volume."""
+    monkeypatch.setenv("SITEWARRANT_ARTIFACTS_DIR", "/app/.artifacts")
+    monkeypatch.delenv("ARTIFACTS_DIR", raising=False)
+    assert str(Settings().artifacts_dir) == "/app/.artifacts"
+
+
 def test_the_default_is_loopback_not_a_wildcard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Nothing in the shipped defaults should point at a host other than this machine."""
     monkeypatch.delenv("SITEWARRANT_DATABASE_URL", raising=False)

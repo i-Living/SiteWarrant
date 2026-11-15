@@ -1,12 +1,13 @@
 import asyncio
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from app import lifecycle
 from app.agents.llm import OpenAiCompatibleClient
 from app.agents.models import OrchestrationResult
 from app.agents.orchestrator import observation_index, run_agents
@@ -40,6 +41,17 @@ from app.tools.http_probe import SECURITY_HEADERS, HttpFacts
 from app.tools.robots import ensure_allowed, robots_hop_check
 
 MEASURED_TOOLS = {"axe", "dom"}
+
+ProgressFn = Callable[[str], Awaitable[None]]
+CancelFn = Callable[[], Awaitable[bool]]
+
+
+class AuditCancelled(RuntimeError):
+    """The operator asked to stop, and the audit stopped at a stage boundary."""
+
+
+class LeaseLost(RuntimeError):
+    """Another worker owns this audit now: the run must stop writing, not finish the row."""
 
 
 def narration_summary(narration: NarrationCall, model: str, price: Price | None) -> AgentSummaryOut:
@@ -284,6 +296,7 @@ def to_finding_out(
             ux=draft.impact_ux,
         ),
         confidence=draft.confidence,
+        basis=draft.basis,
         agent=draft.agent,
         subject=draft.subject,
         page_url=page_url,
@@ -305,16 +318,28 @@ def artifact_path(key: str) -> Path:
     return candidate
 
 
-def write_artifact(audit_id: uuid.UUID, name: str, text: str) -> str:
-    key = f"audits/{audit_id}/{name}"
+def artifact_dir(audit_id: uuid.UUID, attempt: int | None) -> str:
+    """Where one run writes: an attempt gets its own directory.
+
+    A lease can be lost and the audit requeued while the old run is still writing; two runs
+    sharing `audits/<id>/report.json` would leave whichever finished last claiming the other's
+    bytes. The row's `report_key` names the winner, so the loser's files are litter, not a lie.
+    """
+    return f"audits/{audit_id}" if attempt is None else f"audits/{audit_id}/a{attempt}"
+
+
+def write_artifact(audit_id: uuid.UUID, name: str, text: str, *, attempt: int | None = None) -> str:
+    key = f"{artifact_dir(audit_id, attempt)}/{name}"
     target = artifact_path(key)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     return key
 
 
-def write_binary_artifact(audit_id: uuid.UUID, name: str, data: bytes) -> str:
-    key = f"audits/{audit_id}/{name}"
+def write_binary_artifact(
+    audit_id: uuid.UUID, name: str, data: bytes, *, attempt: int | None = None
+) -> str:
+    key = f"{artifact_dir(audit_id, attempt)}/{name}"
     target = artifact_path(key)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
@@ -326,7 +351,11 @@ def read_artifact(key: str) -> str:
 
 
 def store_artifact_files(
-    capture: PageCapture, audit_id: uuid.UUID, *, write_files: bool = True
+    capture: PageCapture,
+    audit_id: uuid.UUID,
+    *,
+    write_files: bool = True,
+    attempt: int | None = None,
 ) -> tuple[str, list[tuple[str, str, str, ViewportCapture]]]:
     """Write the page's artifacts and return its key plus per-viewport keys.
 
@@ -339,17 +368,46 @@ def store_artifact_files(
     stored: list[tuple[str, str, str, ViewportCapture]] = []
     for viewport_capture in capture.viewports:
         prefix = f"{key}/{viewport_capture.viewport}"
-        html_key = write_artifact(audit_id, f"{prefix}.html", viewport_capture.html)
+        html_key = write_artifact(
+            audit_id, f"{prefix}.html", viewport_capture.html, attempt=attempt
+        )
         dom_key = write_artifact(
             audit_id,
             f"{prefix}.dom.json",
             viewport_capture.dom.model_dump_json(indent=2),
+            attempt=attempt,
         )
         screenshot_key = write_binary_artifact(
-            audit_id, f"{prefix}.png", viewport_capture.screenshot.png
+            audit_id, f"{prefix}.png", viewport_capture.screenshot.png, attempt=attempt
         )
         stored.append((html_key, dom_key, screenshot_key, viewport_capture))
     return key, stored
+
+
+def current_agent_version(settings: Settings) -> str:
+    """The version string an audit records, computed once so a queue row and its run agree."""
+    return compute_agent_version(
+        viewports=settings.viewport_list,
+        page_timeout_ms=settings.page_timeout_ms,
+        capture_timeout_ms=settings.capture_timeout_ms,
+        user_agent=settings.user_agent,
+        llm_model=settings.llm_model,
+    )
+
+
+def audit_config(
+    settings: Settings, *, agents: Sequence[str], ignore_robots: bool
+) -> dict[str, object]:
+    """What an audit was asked to do, stored with the row before it runs."""
+    return {
+        "viewports": list(settings.viewport_list),
+        "tools": list(AUDIT_TOOLS),
+        "pages_limit": 1,
+        "robots": "ignored" if ignore_robots else "enforced",
+        "agents": list(agents),
+        # The price file in force: an old audit must not be re-priced by new rates.
+        "pricing_version": pricing_version(),
+    }
 
 
 async def run_audit(
@@ -360,6 +418,10 @@ async def run_audit(
     agents: Sequence[str] = (),
     store_artifacts: bool | None = None,
     audit_id: uuid.UUID | None = None,
+    progress: ProgressFn | None = None,
+    cancelled: CancelFn | None = None,
+    worker_id: str | None = None,
+    attempt: int | None = None,
 ) -> Report:
     """Audit one page and hand back a report whose spans cover the whole run."""
     settings = get_settings()
@@ -373,6 +435,10 @@ async def run_audit(
             store_artifacts=store_artifacts,
             tracer=trace,
             audit_id=audit_id,
+            progress=progress,
+            cancelled=cancelled,
+            worker_id=worker_id,
+            attempt=attempt,
         )
     # The span tree is only complete once the audit span has closed, so the file and the summary
     # are written here rather than inside the page.
@@ -384,8 +450,13 @@ async def run_audit(
         }
     )
     if settings.store_artifacts if store_artifacts is None else store_artifacts:
-        write_artifact(uuid.UUID(report.audit_id), "trace.jsonl", trace.to_jsonl())
-        write_artifact(uuid.UUID(report.audit_id), "report.json", report.model_dump_json(indent=2))
+        write_artifact(uuid.UUID(report.audit_id), "trace.jsonl", trace.to_jsonl(), attempt=attempt)
+        write_artifact(
+            uuid.UUID(report.audit_id),
+            "report.json",
+            report.model_dump_json(indent=2),
+            attempt=attempt,
+        )
     return report
 
 
@@ -398,6 +469,10 @@ async def audit_page(
     store_artifacts: bool | None = None,
     tracer: Tracer | None = None,
     audit_id: uuid.UUID | None = None,
+    progress: ProgressFn | None = None,
+    cancelled: CancelFn | None = None,
+    worker_id: str | None = None,
+    attempt: int | None = None,
 ) -> Report:
     """Audit one page at every configured viewport: facts first, findings from facts."""
     settings = get_settings()
@@ -411,31 +486,47 @@ async def audit_page(
         audited_host = urlsplit(url).hostname
         if audited_host:
             allowed_private_hosts = allowed_private_hosts | {audited_host.lower()}
-    viewports = settings.viewport_list
-    agent_version = compute_agent_version(
-        viewports=viewports,
-        page_timeout_ms=settings.page_timeout_ms,
-        capture_timeout_ms=settings.capture_timeout_ms,
-        user_agent=settings.user_agent,
-        llm_model=settings.llm_model,
-    )
+    agent_version = current_agent_version(settings)
+
+    async def stage(name: str) -> None:
+        """Publish the work in progress, and stop the run if the row is no longer ours."""
+        if progress is None:
+            return
+        await progress(name)
+
+    async def stop_if_cancelled() -> None:
+        """Honour a cancellation between stages, never in the middle of one."""
+        if cancelled is not None and await cancelled():
+            raise AuditCancelled("cancelled by the operator")
+
+    async def stop_if_reclaimed() -> None:
+        """Refuse to commit facts for a row another worker has taken over.
+
+        The stage and finish writes are fenced in storage, but the page and finding rows of this
+        transaction are not: without this check a run that lost its lease during the agents could
+        still commit them under the new owner's audit.
+        """
+        if worker_id is None:
+            return
+        assert audit_id is not None  # created above, before any stage runs
+        async with session_scope() as check:
+            owner = await repo.audit_owner(check, audit_id)
+        if owner != worker_id:
+            raise LeaseLost(f"{audit_id} is no longer leased to {worker_id}")
+
+    pages_committed = 0
     async with session_scope() as session:
         audit_id = await repo.create_audit(
             session,
             audit_id=audit_id,
             site_url=url,
             agent_version=agent_version,
-            config={
-                "viewports": list(viewports),
-                "tools": list(AUDIT_TOOLS),
-                "pages_limit": 1,
-                "robots": "ignored" if ignore_robots else "enforced",
-                "agents": agent_names,
-                # The price file in force: an old audit must not be re-priced by new rates.
-                "pricing_version": pricing_version(),
-            },
+            config=audit_config(settings, agents=agent_names, ignore_robots=ignore_robots),
+            status=lifecycle.RUNNING,
         )
         try:
+            await stage("capture")
+            await stop_if_cancelled()
             if not ignore_robots:
                 await ensure_allowed(
                     url,
@@ -470,7 +561,9 @@ async def audit_page(
             if capture.status_code >= 400:
                 raise CaptureFailed(f"{capture.url} answered with HTTP {capture.status_code}")
             write_files = settings.store_artifacts if store_artifacts is None else store_artifacts
-            key, stored = store_artifact_files(capture, audit_id, write_files=write_files)
+            key, stored = store_artifact_files(
+                capture, audit_id, write_files=write_files, attempt=attempt
+            )
             page_id = await repo.save_page(
                 session,
                 audit_id=audit_id,
@@ -515,12 +608,16 @@ async def audit_page(
             measured = measured_categories(MEASURED_TOOLS)
             agent_summaries: list[AgentSummaryOut] = []
             status = "completed"
-            pages_committed = 0
+            await stage("facts")
             if agent_names:
                 # The agents read the facts through a separate process, so the facts have to
-                # be committed before the MCP server can serve them.
+                # be committed before the MCP server can serve them. The row has to still be
+                # ours at that moment: this is the commit a reclaim would otherwise capture.
+                await stop_if_reclaimed()
                 await session.commit()
                 pages_committed = 1
+                await stage("agents")
+                await stop_if_cancelled()
                 orchestration = await run_agents(
                     audit_id, names=agent_names, settings=settings, tracer=trace
                 )
@@ -560,6 +657,8 @@ async def audit_page(
                 status = orchestration.status
             # The chief layer runs last: every finding exists, so a duplicate of another
             # agent's claim is visible, and a cluster can cross categories.
+            await stage("chief")
+            await stop_if_cancelled()
             payload_by_id = {str(item.id): item.payload for item in observations}
             chief = run_chief(findings, payload_by_id)
             # The chief explains the clusters it was given; it never regroups them. A failed or
@@ -599,6 +698,10 @@ async def audit_page(
                     if finding.root_cause_id in stored_causes
                 },
             )
+            # The operator can ask to stop while the chief is narrating; this is the last boundary
+            # before the report exists, and a cancelled audit writes none.
+            await stop_if_cancelled()
+            await stage("report")
             report = build_report(
                 audit_id=str(audit_id),
                 site=url,
@@ -606,6 +709,7 @@ async def audit_page(
                 status=status,
                 findings=findings,
                 pages_audited=1,
+                pages=[urlsplit(capture.url).path or "/"],
                 duration_ms=int((time.monotonic() - started) * 1000),
                 measured_categories=measured,
                 observations_by_tool=observations_by_tool,
@@ -622,16 +726,45 @@ async def audit_page(
                 },
                 trace_id=trace.trace_id,
             )
-            report_key = write_artifact(audit_id, "report.json", report.model_dump_json(indent=2))
-            await repo.finish_audit(
+            report_key = write_artifact(
+                audit_id, "report.json", report.model_dump_json(indent=2), attempt=attempt
+            )
+            finished = await repo.finish_audit(
                 session,
                 audit_id=audit_id,
                 status=report.status,
                 pages_count=1,
                 report_key=report_key,
+                worker_id=worker_id,
             )
+            if not finished:
+                # The row is no longer this worker's (or already terminal): committing the pending
+                # findings would attach them to somebody else's audit.
+                await session.rollback()
+                raise LeaseLost(f"{audit_id} was finished by another owner")
             await session.commit()
             return report
+        except AuditCancelled as cancelled_error:
+            # A cancelled audit stops at a stage boundary and leaves no report: the facts that
+            # were committed stay, and the row says what happened instead of pretending to be
+            # a shorter run of the same thing.
+            await session.rollback()
+            await repo.finish_audit(
+                session,
+                audit_id=audit_id,
+                status=lifecycle.CANCELLED,
+                pages_count=pages_committed,
+                report_key=None,
+                error=str(cancelled_error),
+                worker_id=worker_id,
+            )
+            await session.commit()
+            raise
+        except LeaseLost:
+            # Another worker holds the row now: finishing it would overwrite that worker's run
+            # with this one's, so the stale run stops writing and says nothing.
+            await session.rollback()
+            raise
         except Exception as error:
             await session.rollback()
             await repo.finish_audit(
@@ -643,6 +776,7 @@ async def audit_page(
                 pages_count=pages_committed if "pages_committed" in locals() else 0,
                 report_key=None,
                 error=str(error)[:2000],
+                worker_id=worker_id,
             )
             await session.commit()
             raise

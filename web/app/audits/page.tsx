@@ -109,7 +109,7 @@ export default function AuditsPage() {
               return;
             }
             setPinned(row);
-            if (row.status !== "running") {
+            if (row.status !== "running" && row.status !== "queued") {
               return;
             }
           }
@@ -156,8 +156,14 @@ export default function AuditsPage() {
     }
   }, [highlight, rows]);
 
-  const running = rows?.filter((audit) => audit.status === "running") ?? [];
-  const finished = rows?.filter((audit) => audit.status !== "running") ?? [];
+  const inFlight =
+    rows?.filter(
+      (audit) => audit.status === "running" || audit.status === "queued",
+    ) ?? [];
+  const finished =
+    rows?.filter(
+      (audit) => audit.status !== "running" && audit.status !== "queued",
+    ) ?? [];
   const publicFinished = finished.filter((audit) => !isLocalSite(audit.site));
   const recent = publicFinished.slice(0, 25);
   const fixtureFinished = finished.filter(
@@ -174,9 +180,9 @@ export default function AuditsPage() {
         <p className="lede">
           {audits === null
             ? "Reading the queue…"
-            : running.length === 0
-              ? "Nothing is running."
-              : `${running.length} ${running.length === 1 ? "audit" : "audits"} running.`}{" "}
+            : inFlight.length === 0
+              ? "Nothing is queued or running."
+              : `${inFlight.length} ${inFlight.length === 1 ? "audit" : "audits"} queued or running.`}{" "}
           {audits !== null && updated !== null && (
             <>
               Updated {formatClock(updated)}; auto-refresh every{" "}
@@ -200,17 +206,17 @@ export default function AuditsPage() {
         <>
           <section>
             <h2 className="section-label">
-              <span>Running</span>
-              <span className="section-count">{running.length}</span>
+              <span>In flight</span>
+              <span className="section-count">{inFlight.length}</span>
             </h2>
-            {running.length === 0 ? (
+            {inFlight.length === 0 ? (
               <p className="empty">
-                Nothing is running now.{" "}
+                Nothing is queued or running now.{" "}
                 <Link href="/audits/new">Start one</Link>.
               </p>
             ) : (
               <ol className="ledger">
-                {running.map((audit) => (
+                {inFlight.map((audit) => (
                   <RunRow
                     key={audit.audit_id}
                     audit={audit}

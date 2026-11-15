@@ -1,3 +1,5 @@
+import os
+import socket
 from functools import lru_cache
 from pathlib import Path
 
@@ -34,7 +36,9 @@ class Settings(BaseSettings):
     )
     artifacts_dir: Path = Field(
         default=Path("artifacts"),
-        validation_alias=AliasChoices("ARTIFACTS_DIR", "artifacts_dir"),
+        validation_alias=AliasChoices(
+            "SITEWARRANT_ARTIFACTS_DIR", "ARTIFACTS_DIR", "artifacts_dir"
+        ),
     )
     viewports: str = Field(
         default="390x844,768x1024,1440x900",
@@ -91,6 +95,36 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("SITEWARRANT_CHIEF_NARRATION", "chief_narration"),
     )
+    # The queue's lease. A worker that dies stops renewing it, and the audit goes back to
+    # `queued` after this long — that is the recovery a restart would otherwise lose.
+    worker_lease_s: int = Field(
+        default=300,
+        validation_alias=AliasChoices("SITEWARRANT_WORKER_LEASE_S", "worker_lease_s"),
+    )
+    worker_poll_s: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices("SITEWARRANT_WORKER_POLL_S", "worker_poll_s"),
+    )
+    # A task that outlives its lease this many times is marked failed instead of looped forever.
+    worker_max_attempts: int = Field(
+        default=2,
+        validation_alias=AliasChoices("SITEWARRANT_WORKER_MAX_ATTEMPTS", "worker_max_attempts"),
+    )
+    # How many due schedules one loop may queue; a bound, not a target.
+    worker_schedule_batch: int = Field(
+        default=20,
+        validation_alias=AliasChoices("SITEWARRANT_WORKER_SCHEDULE_BATCH", "worker_schedule_batch"),
+    )
+    # A repeated submission of the same URL with the same agents inside this window answers with
+    # the audit already in flight; `force` in the request body asks for a new one anyway.
+    audit_dedupe_window_s: int = Field(
+        default=300,
+        validation_alias=AliasChoices("SITEWARRANT_AUDIT_DEDUPE_WINDOW_S", "audit_dedupe_window_s"),
+    )
+    owner_id: str = Field(
+        default="local",
+        validation_alias=AliasChoices("SITEWARRANT_OWNER_ID", "owner_id"),
+    )
 
     @property
     def viewport_list(self) -> tuple[str, ...]:
@@ -117,6 +151,11 @@ class Settings(BaseSettings):
         return frozenset(
             host.strip().lower() for host in self.allow_private_hosts.split(",") if host.strip()
         )
+
+    @property
+    def worker_name(self) -> str:
+        """Whoever claims a row: host and pid, so two workers are distinguishable in the table."""
+        return f"{socket.gethostname()}:{os.getpid()}"
 
 
 @lru_cache(maxsize=1)
