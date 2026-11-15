@@ -123,7 +123,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
   `repo.audit_owner` whether the row is still this worker's and raises `LeaseLost` otherwise; the
   final `finish_audit` returning `False` rolls the pending findings back instead of committing them
   onto somebody else's audit. Stage and finish writes alone would leave that window open — the
-  ownership check has to sit at the transaction boundary, not only at the stage.
+  ownership check has to sit at the transaction boundary, not only at the stage. While that
+  transaction is open the page insert holds a key-share lock on the audit row, so
+  `requeue_expired`'s `FOR UPDATE ... SKIP LOCKED` skips it: recovery cannot requeue a run that is
+  still writing, and the check covers the windows before and after the transaction.
 - **`stage` names the work in progress, not the work that finished.** `capture`, `facts`, `agents`,
   `chief` and `report` are written when their stage starts, because a stage written after the fact
   tells a polling reader nothing about the run it is watching; the row's terminal `status` is what
