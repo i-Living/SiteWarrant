@@ -426,15 +426,15 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
               </ResponsiveContainer>
               {costIsZero && (
                 <p className="chart-note">
-                  Every run with a cost figure in this window made no priced
-                  model calls.
+                  Every recorded cost estimate in this window is zero.
                 </p>
               )}
             </>
           ) : (
             <p className="empty">
-              No run in this window carries a cost estimate: either no model was
-              called, or the model has no price in the table.
+              No run in this window carries a cost estimate: no model was
+              called, the model has no price in the table, or the provider
+              reported no usage to price.
             </p>
           )}
         </ChartCard>
