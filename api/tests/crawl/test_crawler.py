@@ -284,11 +284,16 @@ async def test_robots_refusing_the_sitemap_still_crawls_the_site(site) -> None: 
 
 @pytest.mark.parametrize("site", [sitemap_redirecting_off_host], indirect=True)
 async def test_a_sitemap_redirect_off_host_is_not_followed(site) -> None:  # type: ignore[no-untyped-def]
-    """A redirect is a fetch: the hop is refused before the request leaves for another host."""
+    """A redirect is a fetch: the hop is refused before the request leaves for another host.
+
+    `localhost` is allowed for this test on purpose: `is_blocked` runs before `hop_check`, so a
+    hop the SSRF guard already refuses would prove nothing about the host rule — the test would
+    pass with `stay_on_host` deleted.
+    """
     entries = await sitemap_urls(
         site.url("/"),
         user_agent=get_settings().user_agent,
-        allowed_private_hosts=ALLOW,
+        allowed_private_hosts=ALLOW | {"localhost"},
         timeout_s=5.0,
     )
     assert entries == [], "the redirected sitemap would have seeded /orphan.html"
