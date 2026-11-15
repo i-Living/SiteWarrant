@@ -36,7 +36,10 @@ PROBE_SCRIPT = f"""() => {{
   const shifted = (style) =>
     ['top', 'right', 'bottom', 'left'].some((side) => {{
       const value = style[side];
-      return value && value !== 'auto';
+      // `0px` is a real inset value and moves nothing: a relative wrapper with `inset: 0` must not
+      // outrank the absolute banner above it. A value `parseFloat` cannot read (`calc(...)`, `50%`)
+      // counts, because it is an offset the probe cannot evaluate here.
+      return Boolean(value) && value !== 'auto' && parseFloat(value) !== 0;
     }});
   const positioned = (el) => {{
     let node = el;
