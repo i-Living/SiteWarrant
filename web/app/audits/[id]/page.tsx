@@ -207,6 +207,12 @@ export default async function AuditPage({
     },
     {},
   );
+  // Unfiltered, the verdict is the report's own summary — the same numbers the artifact
+  // recorded, not a recount of them. A filtered view counts the subset on screen.
+  const verdictSeverity =
+    selected === null ? report.summary.by_severity : shownBySeverity;
+  const verdictTotal =
+    selected === null ? report.summary.findings_total : shown.length;
 
   return (
     <main>
@@ -258,18 +264,18 @@ export default async function AuditPage({
 
       <div className="verdict">
         <div className="verdict-total">
-          <strong>{shown.length}</strong>
+          <strong>{verdictTotal}</strong>
           <span>
             {selected === null
-              ? shown.length === 1
+              ? verdictTotal === 1
                 ? "finding"
                 : "findings"
               : `of ${report.summary.findings_total} · ${selected}`}
           </span>
         </div>
         <SeverityLine
-          counts={shownBySeverity}
-          total={shown.length}
+          counts={verdictSeverity}
+          total={verdictTotal}
           status={report.status}
         />
         <div className="verdict-fact">

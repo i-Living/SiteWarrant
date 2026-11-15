@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from app import dashboard
 from app.core.models import Audit
 from app.core.report import EvidenceOut, FindingOut, ImpactOut, Report, build_report
-from app.dashboard import build_history
+from app.dashboard import build_history, history_window
 
 START = datetime(2026, 11, 15, 10, 0, tzinfo=UTC)
 SITE = "http://example.test/"
@@ -190,3 +191,43 @@ def test_a_comparable_pair_counts_closed_and_new_findings() -> None:
     assert point.closed == 1
     assert point.new == 1
     assert point.remaining == 0
+
+
+def test_the_run_before_the_window_is_what_its_first_point_compares_with(
+    monkeypatch,
+) -> None:
+    first = audit(0, report_key="audits/a/report.json")
+    failed = audit(1, report_key=None, status="failed", cost=None)
+    third = audit(2, report_key="audits/c/report.json")
+    stored = {
+        "audits/a/report.json": report([finding("SEO-TITLE", "seo")], pages=["/"]),
+        "audits/c/report.json": report([finding("A11Y-LANG", "a11y")], pages=["/"]),
+    }
+    monkeypatch.setattr(dashboard, "load_report", stored.get)
+
+    history = history_window("example.test", [first, failed, third], limit=2)
+
+    # The window is the two runs asked for, not the context that made the delta possible.
+    assert [run.audit_id for run in history.runs] == [str(failed.id), str(third.id)]
+    assert history.runs[1].compared_to == str(first.id)
+    assert history.runs[1].comparable is True
+    assert history.runs[1].new == 1
+    assert history.runs[1].closed == 1
+
+
+def test_an_unreadable_predecessor_adds_no_note_about_a_run_outside_the_window(
+    monkeypatch,
+) -> None:
+    lost = audit(0, report_key="audits/lost/report.json")
+    finished = audit(1, report_key="audits/b/report.json")
+    monkeypatch.setattr(
+        dashboard,
+        "load_report",
+        {"audits/b/report.json": report([], pages=["/"])}.get,
+    )
+
+    history = history_window("example.test", [lost, finished], limit=1)
+
+    assert [run.audit_id for run in history.runs] == [str(finished.id)]
+    assert history.runs[0].compared_to is None
+    assert history.notes == []

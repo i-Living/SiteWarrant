@@ -408,16 +408,23 @@ async def list_audits(session: AsyncSession, *, limit: int) -> Sequence[Audit]:
     return result.scalars().all()
 
 
-async def page_audits(session: AsyncSession) -> Sequence[Audit]:
-    """Every page audit, oldest first — the raw material for a host's history.
+async def host_page_audits(session: AsyncSession, host: str) -> Sequence[Audit]:
+    """Page audits whose stored URL names this host, oldest first.
 
-    A dispatch row (`scope: "sitemap"`) is not a page run and has no report, so it is left
-    out here rather than filtered again by every caller. The host is derived from
-    `site_url` by the API, because the row stores the URL the caller named and not the host
-    the ledger groups it under; the dashboard's window is applied after that filter.
+    The SQL predicate is deliberately wider than the site it answers for: it matches the
+    host text inside the URL, and the API still decides membership with `site_host`, so a
+    site keeps one definition. The prefilter is what keeps the read following one host's
+    runs instead of every run in the database; a URL that merely contains the text is
+    dropped by the caller and never counted. Dispatch rows (`scope: "sitemap"`) are not
+    page runs and have no report, so they are left out here.
     """
     result = await session.execute(
-        select(Audit).where(page_scope_only()).order_by(Audit.started_at.asc(), Audit.id.asc())
+        select(Audit)
+        .where(
+            page_scope_only(),
+            func.lower(Audit.site_url).contains(host.lower(), autoescape=True),
+        )
+        .order_by(Audit.started_at.asc(), Audit.id.asc())
     )
     return result.scalars().all()
 

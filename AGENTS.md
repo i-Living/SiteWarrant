@@ -71,8 +71,10 @@ phase that makes them meaningful. Do not add a command to this file that has not
 - **A dashboard point is a report, not a findings count.** `GET /sites/{host}/history`
   (`app/dashboard.py`) reads each run's stored report for the numbers and the audit row for what the
   run spent; the `findings` table keeps the duplicates the chief layer merged, so a SQL count per
-  category would be larger than the report the chart shows. A run without a report keeps its place
-  with `null`, and a pair of runs with no shared page carries the reason instead of a delta.
+  category would be larger than the report the chart shows. A run without a report keeps its
+  place with `null`, and a pair of runs with no shared page carries the reason instead of a
+  delta. The run before the window is read as comparison context and then dropped, so the
+  first point of a short window is still measured against the last report before it.
 - **The eval corpus is generated, never hand-edited.** `benchmark/generate.py --check` compares every
   byte; a hand-fixed page would make its label a lie. Its 1.0/1.0 is a floor (the generator plants
   exactly what the catalogue promises) and the README says so.

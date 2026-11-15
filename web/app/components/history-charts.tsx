@@ -119,7 +119,10 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
       point[severity] = run.by_severity?.[severity] ?? null;
     }
     for (const name of categories) {
-      point[`cat_${name}`] = run.by_category?.[name] ?? null;
+      // A report that can be read but has no finding of this category measured zero of it;
+      // only a run without a readable report leaves the point empty.
+      point[`cat_${name}`] =
+        run.by_category === null ? null : (run.by_category[name] ?? 0);
     }
     return point;
   });
@@ -128,19 +131,11 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
     (run) => run.compared_to !== null && run.comparable === false,
   );
 
-  if (runs.every((run) => run.findings_total === null)) {
-    return (
-      <p className="empty">
-        No run of this host has a stored report yet. The timeline draws itself
-        when one finishes.
-      </p>
-    );
-  }
-
   const selected = category === "all" ? categories : [category];
   const hasComparison = runs.some(
     (run) => run.new !== null || run.closed !== null,
   );
+  const hasReports = runs.some((run) => run.findings_total !== null);
   const hasCost = runs.some((run) => run.cost_estimate_usd !== null);
   // A zero is a measurement: when every plotted value is zero the plot is empty on purpose,
   // and saying so keeps it from reading as missing data.
@@ -162,42 +157,54 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
           note="Stacked by severity, from the stored report. A run without one leaves a gap instead of a zero."
           wide
         >
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart
-              data={points}
-              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
-            >
-              <CartesianGrid stroke="#dcd6c9" vertical={false} />
-              <XAxis
-                dataKey="i"
-                tick={AXIS_TICK}
-                tickLine={false}
-                interval="preserveStartEnd"
-                tickFormatter={(value) =>
-                  String(points[Number(value)]?.label ?? "")
-                }
-              />
-              <YAxis allowDecimals={false} tick={AXIS_TICK} tickLine={false} />
-              <Tooltip
-                labelFormatter={(value) =>
-                  String(points[Number(value)]?.label ?? "")
-                }
-                contentStyle={TOOLTIP_STYLE}
-                cursor={{ fill: "#e9e3d4" }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              {SEVERITIES.map((severity) => (
-                <Bar
-                  key={severity}
-                  dataKey={severity}
-                  stackId="severity"
-                  fill={SEVERITY_COLORS[severity]}
-                  name={severity}
-                  isAnimationActive={false}
+          {hasReports ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart
+                data={points}
+                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+              >
+                <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                <XAxis
+                  dataKey="i"
+                  tick={AXIS_TICK}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  tickFormatter={(value) =>
+                    String(points[Number(value)]?.label ?? "")
+                  }
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+                <YAxis
+                  allowDecimals={false}
+                  tick={AXIS_TICK}
+                  tickLine={false}
+                />
+                <Tooltip
+                  labelFormatter={(value) =>
+                    String(points[Number(value)]?.label ?? "")
+                  }
+                  contentStyle={TOOLTIP_STYLE}
+                  cursor={{ fill: "#e9e3d4" }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {SEVERITIES.map((severity) => (
+                  <Bar
+                    key={severity}
+                    dataKey={severity}
+                    stackId="severity"
+                    fill={SEVERITY_COLORS[severity]}
+                    name={severity}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="empty">
+              No run of this host has a stored report yet. The timeline draws
+              itself when one finishes; a run's cost still appears below,
+              because the audit row records it.
+            </p>
+          )}
         </ChartCard>
 
         <ChartCard
@@ -338,23 +345,35 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
               </ResponsiveContainer>
               {latest !== undefined && (
                 <ul className="category-list">
-                  {selected.map((name) => (
-                    <li key={name}>
-                      <Link
-                        href={`/audits/${latest.audit_id}?category=${encodeURIComponent(name)}`}
-                      >
-                        {name}: {latest.by_category?.[name] ?? "—"} in the
-                        latest run
-                      </Link>
-                    </li>
-                  ))}
+                  {selected.map((name) => {
+                    // A category that exists only in an older run is a real zero in the
+                    // latest one; linking it to the latest report would open the report
+                    // unfiltered, because that report has no such category to filter by.
+                    const count = latest.by_category?.[name] ?? 0;
+                    return (
+                      <li key={name}>
+                        {count > 0 ? (
+                          <Link
+                            href={`/audits/${latest.audit_id}?category=${encodeURIComponent(name)}`}
+                          >
+                            {name}: {count} in the latest run
+                          </Link>
+                        ) : (
+                          <span className="muted">
+                            {name}: 0 in the latest run
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </>
           ) : (
             <p className="empty">
-              The runs in this window wrote reports but found nothing, so there
-              is no category to break down.
+              {hasReports
+                ? "The runs in this window wrote reports but found nothing, so there is no category to break down."
+                : "No stored report in this window, so there is no category to break down."}
             </p>
           )}
         </ChartCard>

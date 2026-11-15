@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.models import Audit, AuditSchedule, FindingFeedback
 from app.core.report import SEVERITIES, Report
-from app.dashboard import SiteHistory, build_history, read_reports
+from app.dashboard import SiteHistory, history_window
 from app.storage import repo
 from app.survey import SITEMAP_DEFAULT_PAGES, SITEMAP_MAX_PAGES
 
@@ -642,15 +642,16 @@ def create_app() -> FastAPI:
         The window is the newest `limit` runs of that host. The report artifact is read
         here because it is the source of the counts: the `findings` table keeps the
         duplicates the chief layer merged, so a SQL count would not match the report. A
-        run without a report keeps its place on the timeline with `null` numbers.
+        run without a report keeps its place on the timeline with `null` numbers, and the
+        run before the window is read as context so the first point still has a delta.
         """
         requested = host.lower()
         async with session_scope() as session:
-            audits = await repo.page_audits(session)
+            audits = await repo.host_page_audits(session, requested)
         rows = [audit for audit in audits if site_host(audit.site_url) == requested]
         if not rows:
             raise HTTPException(status_code=404, detail="site not found")
-        return build_history(requested, read_reports(rows[-limit:]))
+        return history_window(requested, rows, limit)
 
     @api.get("/audits/{audit_id}/report", response_model=Report)
     async def get_report(audit_id: str) -> Report:

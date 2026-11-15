@@ -97,7 +97,9 @@ export default async function SiteDashboardPage({
   const runs = history.runs;
   const latestMeasured = lastWhere(runs, (run) => run.findings_total !== null);
   const lastCompared = lastWhere(runs, (run) => run.comparable === true);
-  const latestCost = lastWhere(runs, (run) => run.cost_estimate_usd !== null);
+  // The price belongs to the run that measured: an unpriced model leaves it unknown, and an
+  // older run's estimate must not stand in for the newest one's absence.
+  const latestCost = latestMeasured?.cost_estimate_usd ?? null;
   const latestDuration = lastWhere(runs, (run) => run.duration_ms !== null);
 
   return (
@@ -142,9 +144,7 @@ export default async function SiteDashboardPage({
           <span>opened / closed, last comparison</span>
         </div>
         <div className="dash-stat">
-          <strong>
-            {formatCostEstimate(latestCost?.cost_estimate_usd ?? null)}
-          </strong>
+          <strong>{formatCostEstimate(latestCost)}</strong>
           <span>latest cost, estimate</span>
         </div>
         <div className="dash-stat">

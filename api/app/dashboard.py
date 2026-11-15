@@ -92,6 +92,28 @@ def read_reports(audits: Sequence[Audit]) -> list[tuple[Audit, Report | None]]:
     return [(audit, load_report(audit.report_key)) for audit in audits]
 
 
+def history_window(host: str, audits: Sequence[Audit], limit: int) -> SiteHistory:
+    """The newest `limit` runs of a host, with the predecessor the first point compares with.
+
+    A run is compared with the previous run of the host that wrote a readable report, and
+    that run can sit just outside the requested window. It is read as context, used for the
+    comparison and dropped again: the window stays the size the caller asked for, and its
+    first point is still measured against the last report before it rather than against
+    nothing. Only readable reports are taken as context, so a note about an unreadable
+    artifact never names a run the window does not show.
+    """
+    window = list(audits[-limit:])
+    context: list[tuple[Audit, Report | None]] = []
+    for audit in reversed(audits[: max(len(audits) - limit, 0)]):
+        report = load_report(audit.report_key)
+        if report is not None:
+            context = [(audit, report)]
+            break
+    history = build_history(host, [*context, *read_reports(window)])
+    history.runs = history.runs[len(context) :]
+    return history
+
+
 def category_counts(report: Report) -> dict[str, int]:
     """Findings per category, as the report counts them (post-dedupe, one rule one finding)."""
     counts = Counter(finding.category for finding in report.findings)
