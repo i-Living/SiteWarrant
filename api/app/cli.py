@@ -18,6 +18,7 @@ from app.eval.dataset import DatasetError
 from app.eval.gate import decide
 from app.eval.models import EvalRun
 from app.eval.runner import run_eval
+from app.fixes.measure import FixRun, measure_fixes
 from app.fixes.reaudit import ReauditError, reaudit
 from app.fixes.recommend import FixBuildError, build_fixes, write_fix_files
 from app.rules import store
@@ -450,6 +451,65 @@ def reaudit_command(
     if result.regressions:
         typer.echo(f"regressions: {len(result.regressions)}")
         raise typer.Exit(code=1)
+
+
+@cli.command("fixes")
+def fixes_command(
+    dataset: Path = typer.Option(
+        Path("benchmark/dataset.json"),
+        "--dataset",
+        help="Dataset manifest, or a directory holding dataset.json.",
+    ),
+    out: Path = typer.Option(
+        Path("evals/runs/latest-fixes.json"), "--out", help="Where to write the run."
+    ),
+    sites: str = typer.Option("", "--sites", help="Comma separated site slugs; default is all."),
+) -> None:
+    """Measure fix acceptance and fix safety over the frozen corpus."""
+    manifest = dataset / "dataset.json" if dataset.is_dir() else dataset
+    try:
+        run = asyncio.run(
+            measure_fixes(
+                manifest,
+                sites=[item.strip() for item in sites.split(",") if item.strip()] or None,
+            )
+        )
+    except DatasetError as error:
+        typer.echo(f"dataset: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(run.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    _print_fixes(run)
+    typer.echo(f"run written to {out}")
+
+
+def _print_fixes(run: FixRun) -> None:
+    totals = run.totals
+    typer.echo(
+        f"sites {len(run.per_site)}, fixable findings {totals.findings}, "
+        f"proposed {totals.proposed}, applied {totals.applied}, closed {totals.closed}, "
+        f"regression-free {totals.regression_free}"
+    )
+    typer.echo(
+        f"fix acceptance {_rate(totals.fix_acceptance_rate)} "
+        f"({totals.applied}/{totals.proposed}), regression-free fix rate "
+        f"{_rate(totals.regression_free_fix_rate)} "
+        f"({totals.regression_free}/{totals.applied})"
+    )
+    typer.echo(f"runtime {run.context.duration_s} s")
+    for rule_id, counts in run.per_rule.items():
+        typer.echo(
+            f"  {rule_id:<20} findings {counts.findings:<3} proposed {counts.proposed:<3} "
+            f"applied {counts.applied:<3} closed {counts.closed:<3} "
+            f"regression-free {counts.regression_free:<3}"
+        )
+    for item in run.not_applied:
+        typer.echo(f"  not applied {item.rule_id} {item.page_url}: {item.reason}", err=True)
+
+
+def _rate(value: float | None) -> str:
+    return "null" if value is None else f"{value:.4f}"
 
 
 @cli.command("index-rules")

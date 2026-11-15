@@ -25,6 +25,10 @@ class Delta:
     rule_id: str
     page_url: str
     severity: str
+    # The finding's subject within the page: a rule can fire twice in one place, and a banner that
+    # covers two links closes two findings when it moves. Without this a caller counting closures
+    # credits one repair with another's.
+    subject: str = ""
 
 
 @dataclass
@@ -55,12 +59,22 @@ def diff_findings(before: list[FindingOut], after: list[FindingOut]) -> ReauditR
     current = {key_of(finding): finding for finding in after}
     result = ReauditResult()
     for key, finding in previous.items():
-        delta = Delta(rule_id=finding.rule_id, page_url=finding.page_url, severity=finding.severity)
+        delta = Delta(
+            rule_id=finding.rule_id,
+            page_url=finding.page_url,
+            severity=finding.severity,
+            subject=(finding.subject or "").strip(),
+        )
         (result.remaining if key in current else result.closed).append(delta)
     for key, finding in current.items():
         if key in previous:
             continue
-        delta = Delta(rule_id=finding.rule_id, page_url=finding.page_url, severity=finding.severity)
+        delta = Delta(
+            rule_id=finding.rule_id,
+            page_url=finding.page_url,
+            severity=finding.severity,
+            subject=(finding.subject or "").strip(),
+        )
         result.new.append(delta)
         result.regressions.append(delta)
     return result
@@ -77,17 +91,24 @@ def apply_patch(site_dir: Path, patch_file: Path) -> Path:
         raise ReauditError(f"{site_dir} is not a directory")
     if not patch_file.is_file():
         raise ReauditError(f"{patch_file} is not a file")
-    copy = Path(tempfile.mkdtemp(prefix="sitewarrant-reaudit-")) / "site"
-    shutil.copytree(site_dir, copy)
-    result = subprocess.run(
-        ["patch", "-p1", "--forward", "--batch", "-i", str(patch_file.resolve())],
-        cwd=copy,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise ReauditError(f"patch failed: {result.stdout}{result.stderr}".strip())
+    parent = Path(tempfile.mkdtemp(prefix="sitewarrant-reaudit-"))
+    copy = parent / "site"
+    try:
+        shutil.copytree(site_dir, copy)
+        result = subprocess.run(
+            ["patch", "-p1", "--forward", "--batch", "-i", str(patch_file.resolve())],
+            cwd=copy,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ReauditError(f"patch failed: {result.stdout}{result.stderr}".strip())
+    except BaseException:
+        # The caller measures one repair after another and keeps going after a failure, so a leak
+        # here is one directory per rejected repair. Copy, launch and apply all fail the same way.
+        shutil.rmtree(parent, ignore_errors=True)
+        raise
     return copy
 
 

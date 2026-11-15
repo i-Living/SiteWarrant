@@ -92,10 +92,19 @@ def test_occlusion_is_fixed_by_taking_the_occluder_out_of_the_flow() -> None:
     assert "promo" in note
 
 
-def test_a_selector_is_the_last_segment_of_a_path() -> None:
+def test_a_selector_prefers_a_name_and_falls_back_to_the_measured_path() -> None:
     assert selector_of("html > body > header > div.promo") == ".promo"
     assert selector_of("html > body > header > a#cta") == "#cta"
-    assert selector_of("html > body > header > nav") == "nav"
+    # The probe's paths are nth-of-type chains with no classes; the chain is a selector that names
+    # one element, so it is used as it stands.
+    chain = "header:nth-of-type(1) > div:nth-of-type(2)"
+    assert selector_of(chain) == chain
+
+
+def test_a_bare_tag_is_refused() -> None:
+    """`span { position: static }` moves every span on the page: that is a guess, not a repair."""
+    with pytest.raises(FixError, match="no ancestors"):
+        selector_of("span")
 
 
 def test_a_failing_colour_is_darkened_until_it_passes() -> None:
