@@ -83,6 +83,18 @@ export function formatDuration(ms: number): string {
   return `${seconds.toFixed(1).replace(/\.0$/, "")} s`;
 }
 
+export function formatCostEstimate(value: number | null): string {
+  // An unpriced run has no number, and `$0.0000` would read as "it was free".
+  if (value === null) {
+    return "—";
+  }
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
 export function splitSite(site: string): { host: string; path: string } {
   try {
     const url = new URL(site);

@@ -136,6 +136,15 @@ export default async function SitePage({
         </p>
       </header>
 
+      <p className="page-actions">
+        <Link
+          className="button-link"
+          href={`/sites/${encodeURIComponent(summary.host)}/dashboard`}
+        >
+          Quality over time
+        </Link>
+      </p>
+
       <div className="verdict">
         <div className="verdict-total">
           <strong>{summary.findings_total ?? "—"}</strong>

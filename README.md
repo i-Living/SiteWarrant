@@ -338,7 +338,9 @@ boundary; a cancelled run writes no report. A repeated submission of the same UR
 asks for a new one.
 
 The Next.js interface reads the same endpoints through a server-side rewrite: `/` groups the audited
-pages by host, `/sites/<host>` lists that host's pages with their latest results, `/audits` polls the
+pages by host, `/sites/<host>` lists that host's pages with their latest results, `/sites/<host>/dashboard`
+plots the stored runs over time (severity, opened/closed, categories, cost) from
+`GET /sites/<host>/history`, `/audits` polls the
 current and recent runs, `/audits/new` starts one. A run covers one page (`scope: "page"`, the
 default) or walks the site's `sitemap.xml` (`scope: "sitemap"`): the worker queues one ordinary page
 audit per entry, ten pages by default and fifty at most (`max_pages`, 1–50), and that dispatch row
@@ -572,7 +574,7 @@ on a public URL yet (PLAN §17.3).
 
 ```
 api/          FastAPI service, crawler, audit tools, agents, evals, MCP server
-web/          Next.js interface: sites, pages, audit form, progress, report
+web/          Next.js interface: sites, pages, per-host dashboard, audit form, progress, report
 benchmark/    site manifest, gold labels, CI fixtures
 rules/        WCAG 2.2, SEO and HTTP security rule corpus
 infra/        docker-compose, images, egress limits

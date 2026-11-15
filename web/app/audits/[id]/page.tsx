@@ -162,10 +162,13 @@ function Unavailable({
 
 export default async function AuditPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ category?: string }>;
 }) {
   const { id } = await params;
+  const { category } = await searchParams;
   const [report, summary] = await Promise.all([loadReport(id), getAudit(id)]);
 
   if (report === null) {
@@ -173,13 +176,37 @@ export default async function AuditPage({
   }
 
   const { host } = splitSite(report.site);
-  const byId = new Map(report.findings.map((finding) => [finding.id, finding]));
-  const grouped = new Set(
-    report.root_causes.flatMap((cause) => cause.finding_ids),
-  );
-  const ungrouped = report.findings
+  const categories = [
+    ...new Set(report.findings.map((item) => item.category)),
+  ].sort();
+  // An unknown category is the unfiltered report, not an empty one: a stale link should not
+  // read as "this page is clean now".
+  const selected =
+    category !== undefined && categories.includes(category) ? category : null;
+  const shown =
+    selected === null
+      ? report.findings
+      : report.findings.filter((item) => item.category === selected);
+  const byId = new Map(shown.map((finding) => [finding.id, finding]));
+  const causes = report.root_causes
+    .map((cause) => ({
+      ...cause,
+      finding_ids: cause.finding_ids.filter((findingId) => byId.has(findingId)),
+    }))
+    .filter((cause) => cause.finding_ids.length > 0);
+  const grouped = new Set(causes.flatMap((cause) => cause.finding_ids));
+  const ungrouped = shown
     .filter((finding) => !grouped.has(finding.id))
     .sort((left, right) => right.priority - left.priority);
+  // The verdict line counts what is on screen, so a filtered report does not show the
+  // unfiltered severity split above a shorter list.
+  const shownBySeverity = shown.reduce<Record<string, number>>(
+    (counts, item) => {
+      counts[item.severity] = (counts[item.severity] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
 
   return (
     <main>
@@ -210,22 +237,46 @@ export default async function AuditPage({
         </p>
       </header>
 
+      <p className="filter-line">
+        <span>Category</span>
+        <Link
+          href={`/audits/${report.audit_id}`}
+          aria-current={selected === null ? "true" : undefined}
+        >
+          all
+        </Link>
+        {categories.map((name) => (
+          <Link
+            key={name}
+            href={`/audits/${report.audit_id}?category=${encodeURIComponent(name)}`}
+            aria-current={selected === name ? "true" : undefined}
+          >
+            {name}
+          </Link>
+        ))}
+      </p>
+
       <div className="verdict">
         <div className="verdict-total">
-          <strong>{report.summary.findings_total}</strong>
+          <strong>{shown.length}</strong>
           <span>
-            {report.summary.findings_total === 1 ? "finding" : "findings"}
+            {selected === null
+              ? shown.length === 1
+                ? "finding"
+                : "findings"
+              : `of ${report.summary.findings_total} · ${selected}`}
           </span>
         </div>
         <SeverityLine
-          counts={report.summary.by_severity}
-          total={report.summary.findings_total}
+          counts={shownBySeverity}
+          total={shown.length}
           status={report.status}
         />
         <div className="verdict-fact">
-          <strong>{report.summary.root_causes}</strong>
+          <strong>{causes.length}</strong>
           <span>
-            {report.summary.root_causes === 1 ? "root cause" : "root causes"}
+            {causes.length === 1 ? "root cause" : "root causes"}
+            {selected !== null ? " with a finding here" : ""}
           </span>
         </div>
         <div className="verdict-fact">
@@ -249,15 +300,16 @@ export default async function AuditPage({
       <section>
         <h2 className="section-label">
           <span>Root causes</span>
-          <span className="section-count">{report.root_causes.length}</span>
+          <span className="section-count">{causes.length}</span>
         </h2>
-        {report.root_causes.length === 0 ? (
+        {causes.length === 0 ? (
           <p className="empty">
-            No block has symptoms in two categories, so no finding was grouped
-            into a root cause.
+            {selected === null
+              ? "No block has symptoms in two categories, so no finding was grouped into a root cause."
+              : `No root cause has a finding in ${selected} on this page.`}
           </p>
         ) : (
-          report.root_causes.map((cause) => (
+          causes.map((cause) => (
             <article
               key={cause.id}
               className="cause"

@@ -99,6 +99,31 @@ async def test_an_audit_is_queued_then_run_by_the_worker(worker: object) -> None
     assert missing_site.status_code == 404
 
 
+async def test_the_site_history_carries_each_run_and_its_numbers(worker: object) -> None:
+    async with await client() as http:
+        created = await http.post("/audits", json={"url": FIXTURE_URL, "force": True})
+        audit_id = created.json()["audit_id"]
+        await wait_for_audit(http, audit_id)
+        history = await http.get("/sites/localhost:8081/history", params={"limit": 20})
+        missing = await http.get("/sites/unknown.invalid/history")
+    assert history.status_code == 200, history.text
+    body = history.json()
+    assert body["host"] == "localhost:8081"
+    point = next(run for run in body["runs"] if run["audit_id"] == audit_id)
+    # The numbers are the stored report's, so the dashboard and the report agree.
+    assert point["findings_total"] >= 1
+    assert point["by_severity"]["blocker"] >= 1
+    assert point["by_category"]
+    assert point["pages_audited"] == 1
+    assert point["duration_ms"] > 0
+    assert point["agent_version"] != ""
+    # A delta exists only when there is a previous report to compare with; either way the
+    # field says which one, and `comparable` is not guessed.
+    assert "compared_to" in point
+    assert "comparable" in point
+    assert missing.status_code == 404
+
+
 async def test_a_repeated_submission_reuses_the_audit_in_the_window() -> None:
     """No worker runs here, so the row stays queued and the second answer names it."""
     async with await client() as http:

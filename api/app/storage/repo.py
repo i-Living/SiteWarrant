@@ -408,6 +408,20 @@ async def list_audits(session: AsyncSession, *, limit: int) -> Sequence[Audit]:
     return result.scalars().all()
 
 
+async def page_audits(session: AsyncSession) -> Sequence[Audit]:
+    """Every page audit, oldest first — the raw material for a host's history.
+
+    A dispatch row (`scope: "sitemap"`) is not a page run and has no report, so it is left
+    out here rather than filtered again by every caller. The host is derived from
+    `site_url` by the API, because the row stores the URL the caller named and not the host
+    the ledger groups it under; the dashboard's window is applied after that filter.
+    """
+    result = await session.execute(
+        select(Audit).where(page_scope_only()).order_by(Audit.started_at.asc(), Audit.id.asc())
+    )
+    return result.scalars().all()
+
+
 PAGE_SCOPE = "page"
 
 

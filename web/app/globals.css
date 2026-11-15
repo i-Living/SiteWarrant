@@ -1192,6 +1192,191 @@ h1 {
   font-size: 0.75rem;
 }
 
+/* ---------- dashboard ---------- */
+
+.page-actions {
+  margin: 0 0 0.5rem;
+}
+
+.dash-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 2.5rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dash-stat strong {
+  font-family: var(--serif);
+  font-size: 1.8rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-stat span {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0 0;
+}
+
+.dash-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 0.95rem 1rem 0.75rem;
+}
+
+.dash-card-wide {
+  grid-column: 1 / -1;
+}
+
+.dash-card h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.dash-card .note {
+  margin: 0.15rem 0 0.75rem;
+  max-width: none;
+  font-size: 0.75rem;
+}
+
+.chart-wrap {
+  width: 100%;
+}
+
+.chart-note {
+  margin: 0.6rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.dash-footnote {
+  margin: 1rem 0 0;
+}
+
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+}
+
+.filter-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+  margin: 0.9rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.filter-line a {
+  padding-bottom: 0.1rem;
+  border-bottom: 1px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.filter-line a:hover {
+  color: var(--ink);
+}
+
+.filter-line a[aria-current="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.filter-line select {
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.filter-line select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.dash-table th {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-align: left;
+}
+
+.dash-table td {
+  padding: 0.5rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-table .num {
+  text-align: right;
+}
+
+.dash-table .muted {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+}
+
+@media (max-width: 900px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- narrow screens ---------- */
 
 @media (max-width: 760px) {

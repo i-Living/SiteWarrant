@@ -199,6 +199,9 @@ reviews:
         - Numbers rendered in the report must come from the audit artifact; flag a computed or
           formatted value that the API does not return.
         - Empty and null denominators render as "not measured", never as 0.
+        - The dashboard (`web/app/sites/[host]/dashboard`) draws what `GET /sites/{host}/history`
+          returns: a delta exists only where the API says the pair is comparable, and the chart must
+          not derive one from two points itself.
         - Formatting and linting belong to biome; do not suggest eslint or prettier rules.
 
     - path: "rules/**"
