@@ -1,12 +1,13 @@
 import asyncio
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from app import lifecycle
 from app.agents.llm import OpenAiCompatibleClient
 from app.agents.models import OrchestrationResult
 from app.agents.orchestrator import observation_index, run_agents
@@ -40,6 +41,13 @@ from app.tools.http_probe import SECURITY_HEADERS, HttpFacts
 from app.tools.robots import ensure_allowed, robots_hop_check
 
 MEASURED_TOOLS = {"axe", "dom"}
+
+ProgressFn = Callable[[str], Awaitable[None]]
+CancelFn = Callable[[], Awaitable[bool]]
+
+
+class AuditCancelled(RuntimeError):
+    """The operator asked to stop, and the audit stopped at a stage boundary."""
 
 
 def narration_summary(narration: NarrationCall, model: str, price: Price | None) -> AgentSummaryOut:
@@ -284,6 +292,7 @@ def to_finding_out(
             ux=draft.impact_ux,
         ),
         confidence=draft.confidence,
+        basis=draft.basis,
         agent=draft.agent,
         subject=draft.subject,
         page_url=page_url,
@@ -352,6 +361,32 @@ def store_artifact_files(
     return key, stored
 
 
+def current_agent_version(settings: Settings) -> str:
+    """The version string an audit records, computed once so a queue row and its run agree."""
+    return compute_agent_version(
+        viewports=settings.viewport_list,
+        page_timeout_ms=settings.page_timeout_ms,
+        capture_timeout_ms=settings.capture_timeout_ms,
+        user_agent=settings.user_agent,
+        llm_model=settings.llm_model,
+    )
+
+
+def audit_config(
+    settings: Settings, *, agents: Sequence[str], ignore_robots: bool
+) -> dict[str, object]:
+    """What an audit was asked to do, stored with the row before it runs."""
+    return {
+        "viewports": list(settings.viewport_list),
+        "tools": list(AUDIT_TOOLS),
+        "pages_limit": 1,
+        "robots": "ignored" if ignore_robots else "enforced",
+        "agents": list(agents),
+        # The price file in force: an old audit must not be re-priced by new rates.
+        "pricing_version": pricing_version(),
+    }
+
+
 async def run_audit(
     url: str,
     *,
@@ -360,6 +395,8 @@ async def run_audit(
     agents: Sequence[str] = (),
     store_artifacts: bool | None = None,
     audit_id: uuid.UUID | None = None,
+    progress: ProgressFn | None = None,
+    cancelled: CancelFn | None = None,
 ) -> Report:
     """Audit one page and hand back a report whose spans cover the whole run."""
     settings = get_settings()
@@ -373,6 +410,8 @@ async def run_audit(
             store_artifacts=store_artifacts,
             tracer=trace,
             audit_id=audit_id,
+            progress=progress,
+            cancelled=cancelled,
         )
     # The span tree is only complete once the audit span has closed, so the file and the summary
     # are written here rather than inside the page.
@@ -398,6 +437,8 @@ async def audit_page(
     store_artifacts: bool | None = None,
     tracer: Tracer | None = None,
     audit_id: uuid.UUID | None = None,
+    progress: ProgressFn | None = None,
+    cancelled: CancelFn | None = None,
 ) -> Report:
     """Audit one page at every configured viewport: facts first, findings from facts."""
     settings = get_settings()
@@ -411,31 +452,30 @@ async def audit_page(
         audited_host = urlsplit(url).hostname
         if audited_host:
             allowed_private_hosts = allowed_private_hosts | {audited_host.lower()}
-    viewports = settings.viewport_list
-    agent_version = compute_agent_version(
-        viewports=viewports,
-        page_timeout_ms=settings.page_timeout_ms,
-        capture_timeout_ms=settings.capture_timeout_ms,
-        user_agent=settings.user_agent,
-        llm_model=settings.llm_model,
-    )
+    agent_version = current_agent_version(settings)
+
+    async def stage(name: str) -> None:
+        if progress is not None:
+            await progress(name)
+
+    async def stop_if_cancelled() -> None:
+        """Honour a cancellation between stages, never in the middle of one."""
+        if cancelled is not None and await cancelled():
+            raise AuditCancelled("cancelled by the operator")
+
+    pages_committed = 0
     async with session_scope() as session:
         audit_id = await repo.create_audit(
             session,
             audit_id=audit_id,
             site_url=url,
             agent_version=agent_version,
-            config={
-                "viewports": list(viewports),
-                "tools": list(AUDIT_TOOLS),
-                "pages_limit": 1,
-                "robots": "ignored" if ignore_robots else "enforced",
-                "agents": agent_names,
-                # The price file in force: an old audit must not be re-priced by new rates.
-                "pricing_version": pricing_version(),
-            },
+            config=audit_config(settings, agents=agent_names, ignore_robots=ignore_robots),
+            status=lifecycle.RUNNING,
         )
         try:
+            await stage("capture")
+            await stop_if_cancelled()
             if not ignore_robots:
                 await ensure_allowed(
                     url,
@@ -515,12 +555,14 @@ async def audit_page(
             measured = measured_categories(MEASURED_TOOLS)
             agent_summaries: list[AgentSummaryOut] = []
             status = "completed"
-            pages_committed = 0
+            await stage("facts")
             if agent_names:
                 # The agents read the facts through a separate process, so the facts have to
                 # be committed before the MCP server can serve them.
                 await session.commit()
                 pages_committed = 1
+                await stage("agents")
+                await stop_if_cancelled()
                 orchestration = await run_agents(
                     audit_id, names=agent_names, settings=settings, tracer=trace
                 )
@@ -560,6 +602,8 @@ async def audit_page(
                 status = orchestration.status
             # The chief layer runs last: every finding exists, so a duplicate of another
             # agent's claim is visible, and a cluster can cross categories.
+            await stage("chief")
+            await stop_if_cancelled()
             payload_by_id = {str(item.id): item.payload for item in observations}
             chief = run_chief(findings, payload_by_id)
             # The chief explains the clusters it was given; it never regroups them. A failed or
@@ -623,6 +667,7 @@ async def audit_page(
                 trace_id=trace.trace_id,
             )
             report_key = write_artifact(audit_id, "report.json", report.model_dump_json(indent=2))
+            await stage("report")
             await repo.finish_audit(
                 session,
                 audit_id=audit_id,
@@ -632,6 +677,21 @@ async def audit_page(
             )
             await session.commit()
             return report
+        except AuditCancelled as cancelled_error:
+            # A cancelled audit stops at a stage boundary and leaves no report: the facts that
+            # were committed stay, and the row says what happened instead of pretending to be
+            # a shorter run of the same thing.
+            await session.rollback()
+            await repo.finish_audit(
+                session,
+                audit_id=audit_id,
+                status=lifecycle.CANCELLED,
+                pages_count=pages_committed,
+                report_key=None,
+                error=str(cancelled_error),
+            )
+            await session.commit()
+            raise
         except Exception as error:
             await session.rollback()
             await repo.finish_audit(

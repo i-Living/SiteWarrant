@@ -1,16 +1,19 @@
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import distinct_on
+from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import lifecycle
 from app.core.models import (
     Audit,
+    AuditSchedule,
     Finding,
     FindingEvidence,
+    FindingFeedback,
     LlmCall,
     Observation,
     Page,
@@ -28,19 +31,37 @@ async def create_audit(
     agent_version: str,
     config: dict[str, Any],
     audit_id: uuid.UUID | None = None,
+    status: str = lifecycle.RUNNING,
+    owner_id: str | None = None,
+    commit: bool = True,
 ) -> uuid.UUID:
-    audit = Audit(
-        # A caller that already answered with the id (the HTTP API) hands it in, so the
-        # progress page can follow an audit from the first poll instead of guessing.
-        id=audit_id or uuid.uuid4(),
-        site_url=site_url,
-        status="running",
-        agent_version=agent_version,
-        config=config,
+    """Write the row a caller can already name — once.
+
+    The API answers `202` with an id before anything runs, so it writes the row itself; the
+    worker then runs the audit with that id and must not insert a second row. `ON CONFLICT DO
+    NOTHING` makes the insert idempotent in both directions, including a retried delivery.
+
+    `commit=False` is for a caller that writes more than one row and needs them together — the
+    schedule loop advances `next_run_at` in the same transaction as the audit it just queued,
+    or two workers could pick the same schedule and queue it twice.
+    """
+    audit_id = audit_id or uuid.uuid4()
+    await session.execute(
+        insert(Audit)
+        .values(
+            id=audit_id,
+            site_url=site_url,
+            status=status,
+            stage=None,
+            agent_version=agent_version,
+            config=config,
+            owner_id=owner_id,
+        )
+        .on_conflict_do_nothing(index_elements=[Audit.id])
     )
-    session.add(audit)
-    await session.commit()
-    return audit.id
+    if commit:
+        await session.commit()
+    return audit_id
 
 
 async def save_page(
@@ -126,6 +147,7 @@ async def save_findings(
             impact_seo=draft.impact_seo,
             impact_ux=draft.impact_ux,
             confidence=draft.confidence,
+            basis=draft.basis,
             agent=draft.agent,
             subject=draft.subject,
         )
@@ -152,15 +174,143 @@ async def finish_audit(
     pages_count: int,
     report_key: str | None,
     error: str | None = None,
-) -> None:
+) -> bool:
+    """Move the row to a terminal state, or refuse a move the life cycle does not have.
+
+    Returns False when the row is already terminal in another state — a cancellation that
+    arrived while the last stage was running wins, and the caller must not treat that as a
+    failure of its own work.
+    """
     audit = await session.get(Audit, audit_id)
     if audit is None:
-        return
+        return False
+    if not lifecycle.can_transition(audit.status, status):
+        return False
     audit.status = status
+    audit.stage = None
+    audit.worker_id = None
+    audit.lease_expires_at = None
     audit.pages_count = pages_count
     audit.report_key = report_key
     audit.error = error
     audit.finished_at = datetime.now(UTC)
+    return True
+
+
+async def claim_audit(
+    session: AsyncSession, *, worker_id: str, lease_s: int
+) -> tuple[uuid.UUID, str] | None:
+    """Take the oldest queued audit and hold it under a lease.
+
+    `SKIP LOCKED` is what makes two workers safe: the second one walks past the row the first
+    has locked instead of waiting for it and running it again.
+    """
+    candidate = (
+        await session.execute(
+            select(Audit)
+            .where(Audit.status == lifecycle.QUEUED)
+            .order_by(Audit.started_at, Audit.id)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+    ).scalar_one_or_none()
+    if candidate is None:
+        return None
+    now = datetime.now(UTC)
+    candidate.status = lifecycle.RUNNING
+    candidate.stage = "starting"
+    candidate.worker_id = worker_id
+    candidate.lease_expires_at = now + timedelta(seconds=lease_s)
+    candidate.attempts += 1
+    candidate.started_at = now
+    await session.commit()
+    return candidate.id, candidate.site_url
+
+
+async def renew_lease(
+    session: AsyncSession, *, audit_id: uuid.UUID, worker_id: str, lease_s: int
+) -> bool:
+    """Say the worker is still alive. A row another worker took over is not renewed."""
+    audit = await session.get(Audit, audit_id)
+    if audit is None or audit.worker_id != worker_id or audit.status != lifecycle.RUNNING:
+        return False
+    audit.lease_expires_at = datetime.now(UTC) + timedelta(seconds=lease_s)
+    await session.commit()
+    return True
+
+
+async def set_stage(session: AsyncSession, *, audit_id: uuid.UUID, stage: str) -> None:
+    """Record the stage the worker has actually reached, not the one it hopes for."""
+    audit = await session.get(Audit, audit_id)
+    if audit is None or audit.status != lifecycle.RUNNING:
+        return
+    audit.stage = stage
+    await session.commit()
+
+
+async def requeue_expired(session: AsyncSession, *, max_attempts: int) -> tuple[int, int]:
+    """Return audits whose worker vanished to the queue, and fail the ones out of attempts.
+
+    This is the recovery a restart needs: a process that dies mid-audit stops renewing the
+    lease, and the row is picked up again instead of sitting `running` forever.
+    """
+    now = datetime.now(UTC)
+    expired = (
+        await session.execute(
+            select(Audit).where(
+                Audit.status == lifecycle.RUNNING,
+                Audit.lease_expires_at.is_not(None),
+                Audit.lease_expires_at < now,
+            )
+        )
+    ).scalars()
+    requeued = 0
+    abandoned = 0
+    for audit in expired:
+        if audit.attempts < max_attempts:
+            audit.status = lifecycle.QUEUED
+            audit.stage = None
+            audit.worker_id = None
+            audit.lease_expires_at = None
+            requeued += 1
+        else:
+            audit.status = lifecycle.FAILED
+            audit.stage = None
+            audit.worker_id = None
+            audit.lease_expires_at = None
+            audit.finished_at = now
+            audit.error = (
+                f"the worker stopped renewing its lease {audit.attempts} time(s); "
+                "the audit was not completed"
+            )
+            abandoned += 1
+    await session.commit()
+    return requeued, abandoned
+
+
+async def request_cancel(session: AsyncSession, audit_id: uuid.UUID) -> Audit | None:
+    """Stop a queued audit now, ask a running one to stop at its next stage boundary.
+
+    A running audit is mid-browser; killing it would leave the row describing a stage nobody
+    finished. The flag is checked between stages, and the worker writes `cancelled` itself.
+    """
+    audit = await session.get(Audit, audit_id)
+    if audit is None or lifecycle.is_terminal(audit.status):
+        return audit
+    if audit.status == lifecycle.QUEUED:
+        audit.status = lifecycle.CANCELLED
+        audit.finished_at = datetime.now(UTC)
+        audit.error = "cancelled before it started"
+        audit.stage = None
+    else:
+        audit.cancel_requested = True
+    await session.commit()
+    return audit
+
+
+async def cancel_requested(session: AsyncSession, audit_id: uuid.UUID) -> bool:
+    audit = await session.get(Audit, audit_id)
+    return audit is not None and audit.cancel_requested
 
 
 async def get_audit(session: AsyncSession, audit_id: uuid.UUID) -> Audit | None:
@@ -275,3 +425,154 @@ async def assign_root_causes(session: AsyncSession, *, mapping: dict[str, uuid.U
         finding = await session.get(Finding, uuid.UUID(finding_id))
         if finding is not None:
             finding.root_cause_id = cause_id
+
+
+async def find_recent_duplicate(
+    session: AsyncSession,
+    *,
+    site_url: str,
+    agents: Sequence[str],
+    window_s: int,
+) -> Audit | None:
+    """An audit of the same URL with the same agents, started inside the window.
+
+    A double-clicked form and a retried request both describe one intention; a second run of
+    the same page also costs another model call. `force` in the request body is how a caller
+    says it wants a new one anyway.
+    """
+    since = datetime.now(UTC) - timedelta(seconds=window_s)
+    rows = (
+        await session.execute(
+            select(Audit)
+            .where(Audit.site_url == site_url, Audit.started_at >= since)
+            .order_by(Audit.started_at.desc())
+            .limit(20)
+        )
+    ).scalars()
+    wanted = list(agents)
+    for audit in rows:
+        # A failure is the caller's reason to try again, not a duplicate: answering with it would
+        # hide the retry behind a `deduplicated: true`.
+        if audit.status in (lifecycle.FAILED, lifecycle.CANCELLED):
+            continue
+        if list(audit.config.get("agents") or []) == wanted:
+            return audit
+    return None
+
+
+async def finding_exists(session: AsyncSession, finding_id: uuid.UUID) -> bool:
+    return (await session.get(Finding, finding_id)) is not None
+
+
+async def add_feedback(
+    session: AsyncSession,
+    *,
+    finding_id: uuid.UUID,
+    verdict: str,
+    source: str,
+    note: str | None,
+) -> FindingFeedback:
+    row = FindingFeedback(finding_id=finding_id, verdict=verdict, source=source, note=note)
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def list_feedback(session: AsyncSession, finding_id: uuid.UUID) -> Sequence[FindingFeedback]:
+    result = await session.execute(
+        select(FindingFeedback)
+        .where(FindingFeedback.finding_id == finding_id)
+        .order_by(FindingFeedback.created_at, FindingFeedback.id)
+    )
+    return result.scalars().all()
+
+
+async def findings_for_audit(session: AsyncSession, audit_id: uuid.UUID) -> Sequence[Finding]:
+    """The stored finding rows of one audit, duplicates included.
+
+    A label export asks which defects were reported on a page, and the chief layer's in-memory
+    dedupe does not change the answer: a rule reported twice is still one label.
+    """
+    result = await session.execute(select(Finding).where(Finding.audit_id == audit_id))
+    return result.scalars().all()
+
+
+async def upsert_schedule(
+    session: AsyncSession,
+    *,
+    site_url: str,
+    every_minutes: int,
+    agents: Sequence[str],
+    owner_id: str | None,
+    now: datetime | None = None,
+) -> tuple[AuditSchedule, bool]:
+    """One schedule per URL: a second POST edits the first instead of doubling the bill.
+
+    Returns the row and whether it was created, so the API can answer 201 or 200 honestly.
+    """
+    existing = (
+        await session.execute(select(AuditSchedule).where(AuditSchedule.site_url == site_url))
+    ).scalar_one_or_none()
+    created = existing is None
+    schedule = existing or AuditSchedule(site_url=site_url, next_run_at=datetime.now(UTC))
+    schedule.every_minutes = every_minutes
+    schedule.agents = list(agents)
+    schedule.owner_id = owner_id
+    if created:
+        # First run is one interval out: a schedule created now should not compete with the
+        # audit the operator is presumably starting by hand. Editing keeps the switch where the
+        # operator left it; `enabled` is PATCH's job.
+        schedule.enabled = True
+        schedule.next_run_at = (now or datetime.now(UTC)) + timedelta(minutes=every_minutes)
+        session.add(schedule)
+    await session.commit()
+    await session.refresh(schedule)
+    return schedule, created
+
+
+async def list_schedules(session: AsyncSession) -> Sequence[AuditSchedule]:
+    result = await session.execute(select(AuditSchedule).order_by(AuditSchedule.site_url))
+    return result.scalars().all()
+
+
+async def get_schedule(session: AsyncSession, schedule_id: uuid.UUID) -> AuditSchedule | None:
+    return await session.get(AuditSchedule, schedule_id)
+
+
+async def set_schedule_enabled(
+    session: AsyncSession, schedule_id: uuid.UUID, enabled: bool
+) -> AuditSchedule | None:
+    schedule = await session.get(AuditSchedule, schedule_id)
+    if schedule is None:
+        return None
+    schedule.enabled = enabled
+    if enabled:
+        # Re-enabling waits one interval instead of firing the backlog immediately.
+        schedule.next_run_at = datetime.now(UTC) + timedelta(minutes=schedule.every_minutes)
+    await session.commit()
+    return schedule
+
+
+async def due_schedules(
+    session: AsyncSession, *, limit: int, now: datetime | None = None
+) -> Sequence[AuditSchedule]:
+    """Schedules whose time has come, locked so two workers cannot both queue them."""
+    moment = now or datetime.now(UTC)
+    result = await session.execute(
+        select(AuditSchedule)
+        .where(AuditSchedule.enabled, AuditSchedule.next_run_at <= moment)
+        .order_by(AuditSchedule.next_run_at)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    )
+    return result.scalars().all()
+
+
+async def in_flight_for_url(session: AsyncSession, site_url: str) -> bool:
+    result = await session.execute(
+        select(Audit.id)
+        .where(Audit.site_url == site_url, Audit.status.in_(tuple(lifecycle.IN_FLIGHT)))
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None

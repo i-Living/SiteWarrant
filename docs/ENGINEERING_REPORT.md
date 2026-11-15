@@ -236,7 +236,8 @@ effect lands in the measured layer.
   facts — not editorial: nobody has labelled a set of good explanations, so "this sentence explains
   the cause better than that one" is a judgement, not a measurement here. What is measured is that a
   sentence the check rejects never reaches the report.
-- Concurrency and load. `POST /audits` answers `202` with the audit id and runs the audit as a task in
-  the API process, so nothing holds the connection, but there is no queue and no worker: a restart
-  loses a running audit, and a burst of submissions runs several browsers at once. Fine for a demo,
-  wrong for a crawler of 50 pages.
+- Concurrency and load, partly. Since 2026-11-15 `POST /audits` only writes a `queued` row and a
+  separate worker claims it under a lease, so a restart loses the run, not the task, and two workers
+  cannot run one audit. What is still unmeasured is load: one worker runs one audit at a time, and
+  nobody has submitted a burst against a queue of many to see how long the tail waits. The cost ceiling
+  is per audit, not per worker.

@@ -17,15 +17,8 @@ services:
       timeout: 3s
       retries: 20
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
+  # No queue broker here: the queue is the `audits` table, claimed with SKIP LOCKED, so a
+  # Redis nobody reads would only look like infrastructure.
 
   # Static site with deliberately planted defects. Port 8080 is taken on the
   # development host, so this listens on 8081.

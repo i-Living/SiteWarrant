@@ -1,21 +1,22 @@
-import asyncio
-import logging
 import uuid
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 
-from app.audit import read_artifact, run_audit
+from app import lifecycle
+from app.agents.specs import parse_agent_names
+from app.audit import audit_config, current_agent_version, read_artifact
+from app.compare import CauseDelta, Comparison, compare_reports
+from app.core.config import get_settings
 from app.core.db import session_scope
-from app.core.models import Audit
+from app.core.models import Audit, AuditSchedule, FindingFeedback
 from app.core.report import SEVERITIES, Report
 from app.storage import repo
-
-logger = logging.getLogger(__name__)
 
 
 class AuditRequest(BaseModel):
@@ -24,9 +25,13 @@ class AuditRequest(BaseModel):
     Deliberately no "allow private" switch: letting a request body relax the SSRF guard
     would let any caller scan the host's internal network. Private targets are permitted
     by deployment configuration (SITEWARRANT_ALLOW_PRIVATE_HOSTS), never per request.
+
+    `force` asks for a new run even when the same URL was submitted moments ago; without it a
+    repeated submission inside the dedupe window answers with the audit already in flight.
     """
 
     url: str
+    force: bool = False
 
 
 class AuditAccepted(BaseModel):
@@ -34,6 +39,7 @@ class AuditAccepted(BaseModel):
 
     audit_id: str
     status: str
+    deduplicated: bool = False
 
 
 class AuditSummary(BaseModel):
@@ -46,6 +52,9 @@ class AuditSummary(BaseModel):
     audit_id: str
     site: str
     status: str
+    # The stage inside `running`, written by the worker; None for anything else.
+    stage: str | None = None
+    cancel_requested: bool = False
     pages_count: int
     findings_total: int | None
     by_severity: dict[str, int] | None
@@ -80,6 +89,8 @@ def audit_summary(audit: Audit) -> AuditSummary:
         audit_id=str(audit.id),
         site=audit.site_url,
         status=audit.status,
+        stage=audit.stage,
+        cancel_requested=audit.cancel_requested,
         pages_count=audit.pages_count,
         findings_total=None if stored is None else stored[0],
         by_severity=None if stored is None else stored[1],
@@ -126,6 +137,158 @@ class SiteSummary(BaseModel):
 class SiteDetail(BaseModel):
     summary: SiteSummary
     pages: list[PageSummary]
+
+
+class DeltaOut(BaseModel):
+    """One finding in a comparison: a rule, a page and the subject that tells two apart."""
+
+    rule_id: str
+    page_url: str
+    severity: str
+    subject: str = ""
+
+
+class CauseDeltaOut(BaseModel):
+    anchor: str
+    page: str
+    label: str
+    closed: int
+    new: int
+    remaining: int
+
+
+class ComparisonOut(BaseModel):
+    before: str
+    after: str
+    before_version: str
+    after_version: str
+    comparable: bool
+    reasons: list[str] = []
+    notes: list[str] = []
+    closed: list[DeltaOut] = []
+    remaining: list[DeltaOut] = []
+    new: list[DeltaOut] = []
+    causes: list[CauseDeltaOut] = []
+
+    @classmethod
+    def from_comparison(cls, comparison: Comparison) -> "ComparisonOut":
+        def delta(item: Any) -> DeltaOut:
+            return DeltaOut(
+                rule_id=item.rule_id,
+                page_url=item.page_url,
+                severity=item.severity,
+                subject=item.subject,
+            )
+
+        def cause(item: CauseDelta) -> CauseDeltaOut:
+            return CauseDeltaOut(
+                anchor=item.anchor,
+                page=item.page,
+                label=item.label,
+                closed=item.closed,
+                new=item.new,
+                remaining=item.remaining,
+            )
+
+        return cls(
+            before=comparison.before,
+            after=comparison.after,
+            before_version=comparison.before_version,
+            after_version=comparison.after_version,
+            comparable=comparison.comparable,
+            reasons=comparison.reasons,
+            notes=comparison.notes,
+            closed=[delta(item) for item in comparison.closed],
+            remaining=[delta(item) for item in comparison.remaining],
+            new=[delta(item) for item in comparison.new],
+            causes=[cause(item) for item in comparison.causes],
+        )
+
+
+class FeedbackRequest(BaseModel):
+    verdict: Literal["confirmed", "false_positive", "fixed", "irrelevant"]
+    note: str | None = None
+    source: str = "operator"
+
+
+class FeedbackOut(BaseModel):
+    id: str
+    finding_id: str
+    verdict: str
+    source: str
+    note: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: FindingFeedback) -> "FeedbackOut":
+        return cls(
+            id=str(row.id),
+            finding_id=str(row.finding_id),
+            verdict=row.verdict,
+            source=row.source,
+            note=row.note,
+            created_at=row.created_at,
+        )
+
+
+MIN_SCHEDULE_MINUTES = 15
+
+
+class ScheduleRequest(BaseModel):
+    """A page the worker should audit on a rhythm."""
+
+    url: str
+    every_minutes: int = Field(default=1440, ge=MIN_SCHEDULE_MINUTES, le=10_080)
+    agents: list[str] = []
+
+
+class SchedulePatch(BaseModel):
+    enabled: bool
+
+
+class ScheduleOut(BaseModel):
+    id: str
+    site_url: str
+    every_minutes: int
+    agents: list[str]
+    enabled: bool
+    next_run_at: datetime
+    last_audit_id: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: AuditSchedule) -> "ScheduleOut":
+        return cls(
+            id=str(row.id),
+            site_url=row.site_url,
+            every_minutes=row.every_minutes,
+            agents=list(row.agents),
+            enabled=row.enabled,
+            next_run_at=row.next_run_at,
+            last_audit_id=None if row.last_audit_id is None else str(row.last_audit_id),
+            created_at=row.created_at,
+        )
+
+
+def parse_uuid(value: str, what: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(value)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=f"{what} not found") from error
+
+
+async def load_report(audit_id: str) -> Report:
+    """The stored report of one audit, or the HTTP answer that says why there is none."""
+    parsed = parse_uuid(audit_id, "audit")
+    async with session_scope() as session:
+        audit = await repo.get_audit(session, parsed)
+        report_key = audit.report_key if audit is not None else None
+    if report_key is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    try:
+        return Report.model_validate_json(read_artifact(report_key))
+    except (ValueError, OSError) as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 def site_host(url: str) -> str:
@@ -177,7 +340,7 @@ def url_rows(
             (
                 audit,
                 totals.get(audit.site_url, 1),
-                1 if audit.status == "running" else 0,
+                1 if audit.status in lifecycle.IN_FLIGHT else 0,
             )
         )
     return rows
@@ -278,17 +441,6 @@ async def load_site_rows() -> list[tuple[Audit, int, int]]:
 
 def create_app() -> FastAPI:
     api = FastAPI(title="SiteWarrant", version="0.1.0")
-    # A task that nobody holds a reference to may be collected mid-run; the set is the
-    # reference, and the done callback keeps it from growing.
-    tasks: set[asyncio.Task[None]] = set()
-
-    async def audit_in_background(audit_id: uuid.UUID, url: str) -> None:
-        try:
-            await run_audit(url, audit_id=audit_id)
-        except Exception:
-            # finish_audit already stored the message on the row; logging here keeps the
-            # exception from disappearing as "Task exception was never retrieved".
-            logger.exception("audit %s failed", audit_id)
 
     @api.get("/health")
     async def health() -> dict[str, str]:
@@ -296,17 +448,39 @@ def create_app() -> FastAPI:
 
     @api.post("/audits", response_model=AuditAccepted, status_code=status.HTTP_202_ACCEPTED)
     async def create_audit(request: AuditRequest) -> AuditAccepted:
-        """Start one audit and answer before it runs.
+        """Queue one audit and answer before it runs.
 
-        An audit takes tens of seconds; holding the request for it left the browser with
-        nothing to show, so the run happens in this process instead. A restart loses the
-        task and leaves the row `running` — the residual a real worker would close.
+        The row is written here, not by the worker: the caller gets an id it can poll at once,
+        and a restart of either process loses the run, not the task. Nothing executes in this
+        process — `sitewarrant-worker` claims the row under a lease.
+
+        The duplicate check is a courtesy, not a lock: two requests that arrive in the same
+        instant can both find nothing and write two rows. A window is not an index.
         """
-        audit_id = uuid.uuid4()
-        task = asyncio.create_task(audit_in_background(audit_id, request.url))
-        tasks.add(task)
-        task.add_done_callback(tasks.discard)
-        return AuditAccepted(audit_id=str(audit_id), status="running")
+        settings = get_settings()
+        async with session_scope() as session:
+            if not request.force:
+                existing = await repo.find_recent_duplicate(
+                    session,
+                    site_url=request.url,
+                    agents=(),
+                    window_s=settings.audit_dedupe_window_s,
+                )
+                if existing is not None:
+                    return AuditAccepted(
+                        audit_id=str(existing.id),
+                        status=existing.status,
+                        deduplicated=True,
+                    )
+            audit_id = await repo.create_audit(
+                session,
+                site_url=request.url,
+                agent_version=current_agent_version(settings),
+                config=audit_config(settings, agents=(), ignore_robots=False),
+                status=lifecycle.QUEUED,
+                owner_id=settings.owner_id,
+            )
+        return AuditAccepted(audit_id=str(audit_id), status=lifecycle.QUEUED)
 
     @api.get("/audits", response_model=list[AuditSummary])
     async def list_audits(
@@ -329,6 +503,95 @@ def create_app() -> FastAPI:
         if audit is None:
             raise HTTPException(status_code=404, detail="audit not found")
         return audit_summary(audit)
+
+    @api.post("/audits/{audit_id}/cancel", response_model=AuditSummary)
+    async def cancel_audit(audit_id: str) -> AuditSummary:
+        """Stop a queued audit now, or ask a running one to stop at its next stage boundary."""
+        try:
+            parsed = uuid.UUID(audit_id)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail="audit not found") from error
+        async with session_scope() as session:
+            audit = await repo.request_cancel(session, parsed)
+        if audit is None:
+            raise HTTPException(status_code=404, detail="audit not found")
+        return audit_summary(audit)
+
+    @api.get("/audits/{audit_id}/compare", response_model=ComparisonOut)
+    async def compare_audit(audit_id: str, against: str = Query(...)) -> ComparisonOut:
+        """Two stored reports of one site: closed, remaining, new, and the causes behind them.
+
+        A pair that is not a comparison (another site, no shared page) still answers, with
+        `comparable: false` and the reason — hiding the rows would look like an empty diff.
+        """
+        before = await load_report(against)
+        after = await load_report(audit_id)
+        return ComparisonOut.from_comparison(compare_reports(before, after))
+
+    @api.get("/findings/{finding_id}/feedback", response_model=list[FeedbackOut])
+    async def list_finding_feedback(finding_id: str) -> list[FeedbackOut]:
+        parsed = parse_uuid(finding_id, "finding")
+        async with session_scope() as session:
+            if not await repo.finding_exists(session, parsed):
+                raise HTTPException(status_code=404, detail="finding not found")
+            rows = await repo.list_feedback(session, parsed)
+        return [FeedbackOut.from_row(row) for row in rows]
+
+    @api.post(
+        "/findings/{finding_id}/feedback",
+        response_model=FeedbackOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def add_finding_feedback(finding_id: str, request: FeedbackRequest) -> FeedbackOut:
+        """Record a reader's verdict. The finding itself is never edited."""
+        parsed = parse_uuid(finding_id, "finding")
+        async with session_scope() as session:
+            if not await repo.finding_exists(session, parsed):
+                raise HTTPException(status_code=404, detail="finding not found")
+            row = await repo.add_feedback(
+                session,
+                finding_id=parsed,
+                verdict=request.verdict,
+                source=request.source,
+                note=request.note,
+            )
+        return FeedbackOut.from_row(row)
+
+    @api.get("/schedules", response_model=list[ScheduleOut])
+    async def list_schedules() -> list[ScheduleOut]:
+        """Every schedule, enabled or not: a disabled one is history, not a deletion."""
+        async with session_scope() as session:
+            rows = await repo.list_schedules(session)
+        return [ScheduleOut.from_row(row) for row in rows]
+
+    @api.post("/schedules", response_model=ScheduleOut)
+    async def create_schedule(request: ScheduleRequest, response: Response) -> ScheduleOut:
+        """Create or edit the one schedule for a URL; the first run is one interval out."""
+        settings = get_settings()
+        try:
+            agents = parse_agent_names(",".join(request.agents)) if request.agents else []
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        async with session_scope() as session:
+            row, created = await repo.upsert_schedule(
+                session,
+                site_url=request.url,
+                every_minutes=request.every_minutes,
+                agents=agents,
+                owner_id=settings.owner_id,
+            )
+        response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return ScheduleOut.from_row(row)
+
+    @api.patch("/schedules/{schedule_id}", response_model=ScheduleOut)
+    async def patch_schedule(schedule_id: str, request: SchedulePatch) -> ScheduleOut:
+        """Turn a schedule off or back on. Re-enabling waits one interval, never a backlog."""
+        parsed = parse_uuid(schedule_id, "schedule")
+        async with session_scope() as session:
+            row = await repo.set_schedule_enabled(session, parsed, request.enabled)
+        if row is None:
+            raise HTTPException(status_code=404, detail="schedule not found")
+        return ScheduleOut.from_row(row)
 
     @api.get("/sites", response_model=list[SiteSummary])
     async def list_sites() -> list[SiteSummary]:

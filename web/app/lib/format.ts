@@ -1,8 +1,10 @@
 const STATUS_LABELS: Record<string, string> = {
+  queued: "queued",
   running: "running",
   completed: "completed",
   partial: "partial",
   failed: "failed",
+  cancelled: "cancelled",
 };
 
 export function statusLabel(status: string): string {
@@ -15,6 +17,12 @@ export function statusNote(status: string): string | undefined {
   }
   if (status === "running") {
     return "The page is being captured and measured.";
+  }
+  if (status === "queued") {
+    return "Waiting for the worker to pick the audit up.";
+  }
+  if (status === "cancelled") {
+    return "Stopped by the operator; no report was written.";
   }
   return undefined;
 }

@@ -109,7 +109,7 @@ cause, and verifying that a fix actually fixed something.
 ## Quick start
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, Redis, fixture site
+docker compose -f infra/docker-compose.yml up -d --wait   # Postgres, fixture site
 cd api && uv sync && uv run alembic upgrade head
 uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json
 uv run sitewarrant audit http://localhost:8081/ --allow-private --out report.json
@@ -245,6 +245,43 @@ repaired without inventing text (`SEO-TITLE`, `SEO-META-DESC`, `SEO-H1`, `A11Y-L
 audits it again and reports closed / remaining / new — every new finding counts as a regression and
 the command exits `1`.
 
+## History and feedback
+
+Two stored audits of one site can be compared without re-running either: `closed`, `remaining` and
+`new` findings, grouped by the cause they belong to. A pair that is not a comparison — another site, a
+disjoint page set — says so instead of showing an empty diff, and a changed `agent_version` is
+labelled as a comparison between two instruments.
+
+```bash
+uv run sitewarrant compare <audit_id> <audit_id> --out comparison.json
+```
+
+A finding can carry a verdict — `confirmed`, `false_positive`, `fixed` or `irrelevant` — through
+`POST /findings/{id}/feedback`. The finding itself is never edited: the verdict is a new row, and
+`sitewarrant labels` turns the verdicts on one host into a live-URL benchmark manifest (URLs, labels
+and a capture date; no page bytes). A page enters that manifest only when every finding on it has a
+verdict, so an unreviewed finding can never be counted as a false positive.
+
+```bash
+uv run sitewarrant labels --host example.com --out live/example.json
+uv run sitewarrant eval --dataset live/example.json --out runs/live.json
+```
+
+Confidence carries its basis: `findings.basis` records the viewports, channels and evidence count the
+score was computed from, plus the model's own estimate, which the score ignores. Deterministic findings
+are `1.0`; an agent finding with one citation at one viewport is `0.6`.
+
+A page can be audited on a rhythm: the worker queues it when `next_run_at` comes due, waits one full
+interval after a re-enable instead of catching up, and skips the run when the page is already in
+flight. One schedule per URL; a second `POST` edits it.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/schedules -H 'content-type: application/json' \
+  -d '{"url": "https://example.com", "every_minutes": 1440}'
+curl -s -X PATCH http://127.0.0.1:8000/schedules/<id> -H 'content-type: application/json' \
+  -d '{"enabled": false}'
+```
+
 ## Traces and cost
 
 Every audit records one trace: `audit → page → agent → tool call → model call`, with
@@ -278,8 +315,8 @@ uv run sitewarrant prompt-check --baseline ../evals/runs/base.json --candidate .
 
 ## Demo
 
-`infra/demo.yml` runs Postgres and the API as one command, with the API bound to loopback; the
-public face is nginx in front of the Next app, which reaches the API over loopback (see
+`infra/demo.yml` runs Postgres, the API and the worker as one command, with the API bound to
+loopback; the public face is nginx in front of the Next app, which reaches the API over loopback (see
 [Deployment](#deployment)). An unauthenticated crawler should not answer on `0.0.0.0`.
 
 ```bash
@@ -287,10 +324,18 @@ POSTGRES_PASSWORD=change-me SITEWARRANT_LLM_API_KEY=... \
   docker compose -f infra/demo.yml up -d --build
 curl -s -X POST http://127.0.0.1:8000/audits -H 'content-type: application/json' \
   -d '{"url": "https://example.com"}'
-# {"audit_id": "...", "status": "running"} — the audit continues as a task in the API process
-curl -s http://127.0.0.1:8000/audits/<audit_id>                 # poll until "status": "completed"
+# {"audit_id": "...", "status": "queued", "deduplicated": false} — the worker picks it up
+curl -s http://127.0.0.1:8000/audits/<audit_id>                 # poll: queued → running (stage) → completed
 curl -s http://127.0.0.1:8000/audits/<audit_id>/report | head -c 400
 ```
+
+The API only writes the `queued` row; `sitewarrant-worker` (the same image, another process) claims it
+with `FOR UPDATE SKIP LOCKED` under a lease and runs the audit. A restart loses the run, not the task:
+an expired lease puts the row back in the queue, and after two attempts it is marked `failed` with the
+reason. `POST /audits/{id}/cancel` stops a queued audit at once and a running one at its next stage
+boundary; a cancelled run writes no report. A repeated submission of the same URL inside
+`SITEWARRANT_AUDIT_DEDUPE_WINDOW_S` (300 s) answers with the audit already in flight — `force: true`
+asks for a new one.
 
 The Next.js interface reads the same endpoints through a server-side rewrite: `/` groups the audited
 pages by host, `/sites/<host>` lists that host's pages with their latest results, `/audits` polls the
@@ -535,7 +580,7 @@ docs/         PLAN.md, ENGINEERING_REPORT.md
 
 - Python 3.12 with [`uv`](https://docs.astral.sh/uv/)
 - [Bun](https://bun.sh/) for the web app
-- Docker with Compose, for Postgres, Redis and the fixture site
+- Docker with Compose, for Postgres and the fixture site
 - Chromium for Playwright: `cd api && uv run playwright install chromium`
 
 Full commands, including the single `make check` gate, are in [AGENTS.md](AGENTS.md).

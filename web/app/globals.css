@@ -519,6 +519,17 @@ h1 {
   color: var(--ink);
 }
 
+/* Queued is waiting, not idle: the dashed border says the row exists and nothing ran yet. */
+.status-stamp[data-status="queued"] {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.status-stamp[data-status="cancelled"] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .status-stamp[data-status="running"] .status-dot,
 .pulse {
   animation: pulse 1.6s ease-in-out infinite;

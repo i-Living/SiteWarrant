@@ -58,6 +58,8 @@ class FindingDraft(BaseModel):
     impact_seo: int
     impact_ux: int
     confidence: float
+    # What the confidence rests on. A float alone cannot be argued with; this can.
+    basis: dict[str, Any] | None = None
     agent: str
     subject: str | None = None
     evidence: list[EvidenceDraft]
@@ -212,6 +214,11 @@ def _draft(
         impact_seo=rule.impact.seo,
         impact_ux=rule.impact.ux,
         confidence=DETERMINISTIC_CONFIDENCE,
+        basis={
+            "kind": "measured",
+            "source": rule.source,
+            "evidence": len(evidence),
+        },
         agent=RULES_AGENT,
         subject=subject,
         evidence=evidence,

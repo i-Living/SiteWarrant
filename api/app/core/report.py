@@ -51,6 +51,9 @@ class FindingOut(BaseModel):
     suggested_fix: str
     impact: ImpactOut
     confidence: float
+    # What decided the confidence (channels, viewports, the model's self-report). Optional so a
+    # report written before this field existed still validates.
+    basis: dict[str, Any] | None = None
     agent: str
     page_url: str
     page_key: str

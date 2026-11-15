@@ -98,6 +98,23 @@ def severity_is_allowed(claimed: Severity, floor: Severity) -> bool:
     return SEVERITY_WEIGHTS[claimed] >= SEVERITY_WEIGHTS[floor]
 
 
+def measured_confidence(channels: int, viewports: int, evidence_items: int) -> float:
+    """How sure the finding is, from what was measured rather than from what the model says.
+
+    Independence is what buys confidence: the same defect at three viewport widths is three
+    measurements, two different instruments agreeing on one element is stronger still. A second
+    citation through one instrument at one width is corroboration, not independence. The model's
+    own number is recorded in the basis and does not decide the score — an agent asked to rate
+    itself is the last thing that should be believed about itself.
+    """
+    score = 0.6
+    score += 0.1 if viewports >= 2 else 0.0
+    score += 0.1 if viewports >= 3 else 0.0
+    score += 0.05 if channels >= 2 else 0.0
+    score += 0.05 if evidence_items >= 2 else 0.0
+    return round(min(0.95, score), 2)
+
+
 def validate(
     candidate: CandidateFinding, *, observations: ObservationIndex, agent: str
 ) -> tuple[FindingDraft | None, Rejection | None]:
@@ -195,6 +212,8 @@ def validate(
     if reasons:
         return None, Rejection(rule_id=candidate.rule_id, reasons=reasons)
 
+    channels = sorted({facts.tool for _, facts in cited})
+    viewports = sorted({facts.viewport for _, facts in cited if facts.viewport})
     draft = FindingDraft(
         rule_id=claim.id,
         category=claim.category,
@@ -205,7 +224,16 @@ def validate(
         impact_conversion=candidate.impact.conversion,
         impact_seo=candidate.impact.seo,
         impact_ux=candidate.impact.ux,
-        confidence=candidate.confidence,
+        confidence=measured_confidence(len(channels), len(viewports), len(cited)),
+        basis={
+            "kind": "agent",
+            "channels": channels,
+            "viewports": viewports,
+            "evidence": len(cited),
+            # Kept, and kept out of the score: a reader can see what the model thought of its
+            # own claim without that claim raising its own confidence.
+            "self_reported": candidate.confidence,
+        },
         agent=agent,
         subject=candidate.subject,
         evidence=[

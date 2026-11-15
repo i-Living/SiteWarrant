@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -18,6 +18,19 @@ class Audit(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     site_url: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The stage inside `running`: capture, facts, agents, chief, report. Written by the worker
+    # as it goes, so a progress view reports work that happened instead of an animation.
+    stage: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    # The queue's lease: which worker holds the row, until when, and how many times it tried.
+    # A lease that expires is how a restarted process's audit gets picked up again.
+    worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The operator asked to stop; the worker checks between stages and finishes the row.
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Reserved for the multi-user product (docs/PLAN.md §19): one column now, instead of a
+    # migration that has to guess who owned every old row.
+    owner_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_version: Mapped[str] = mapped_column(String(64), nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     pages_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -123,7 +136,11 @@ class Finding(Base):
     impact_seo: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     impact_ux: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    # What decided the confidence: measured channels, viewports, the model's own guess. Stored
+    # so a reader can redo the arithmetic instead of trusting a float.
+    basis: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     agent: Mapped[str] = mapped_column(String(32), nullable=False)
+
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     root_cause_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("root_causes.id", ondelete="SET NULL"), nullable=True, index=True
@@ -187,6 +204,54 @@ class LlmCall(Base):
     trace_id: Mapped[str | None] = mapped_column(String(64))
     # An estimate from the versioned price file; NULL when the model has no price, never 0.
     cost_estimate_usd: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class FindingFeedback(Base):
+    """A reader's verdict on one finding, append-only.
+
+    The finding itself is never edited: a confirmed defect and a false positive are two records
+    about one row, and the labels a benchmark exports come from these rows
+    (`app/eval/labels.py`), so overwriting them would rewrite a measurement's ground truth.
+    """
+
+    __tablename__ = "finding_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Who said it: "operator" today, an organisation id when there are several.
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="operator")
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AuditSchedule(Base):
+    """One page audited on a rhythm, by the worker.
+
+    The row is the schedule: `next_run_at` is when the worker is next allowed to enqueue it, and a
+    disabled row is history rather than a deleted record. One schedule per URL keeps a typo from
+    doubling the model bill.
+    """
+
+    __tablename__ = "audit_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site_url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    every_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    agents: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_audit_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("audits.id", ondelete="SET NULL"), nullable=True
+    )
+    owner_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

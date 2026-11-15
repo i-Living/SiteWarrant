@@ -31,6 +31,7 @@ dev = [
 [project.scripts]
 sitewarrant = "app.cli:main"
 sitewarrant-api = "app.api.main:run"
+sitewarrant-worker = "app.worker:run"
 
 [build-system]
 requires = ["hatchling"]

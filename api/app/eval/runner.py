@@ -52,7 +52,7 @@ async def run_eval(
             url = dataset.page_url(site, page)
             report = await run_audit(
                 str(url),
-                allow_private=True,
+                allow_private=dataset.allow_private,
                 agents=agents or (),
                 store_artifacts=store_artifacts,
             )

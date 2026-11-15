@@ -144,3 +144,58 @@ def test_runs_on_different_corpora_refuse_to_compare() -> None:
     assert not comparison.compatible
     assert comparison.deltas == {}
     assert "different corpora" in comparison.note
+
+
+def live_manifest(tmp_path: Path, **overrides: object) -> Path:
+    """A corpus of live URLs: labels and a date, no page bytes."""
+    site = SiteLabels(
+        slug="example-com",
+        base_url="https://example.com/",
+        pages=("pricing", "about"),
+        labels=(Label(page="pricing", rule_id="SEO-TITLE"),),
+    )
+    payload: dict[str, object] = {
+        "version": 1,
+        "source": "live",
+        "captured_at": "2026-11-15",
+        "minimums": {"sites": 1, "pages": 1},
+        "sites": [
+            {
+                "slug": site.slug,
+                "base_url": site.base_url,
+                "pages": list(site.pages),
+                "labels": [{"page": label.page, "rule_id": label.rule_id} for label in site.labels],
+            }
+        ],
+        "digest": dataset_digest((site,), source="live", captured_at="2026-11-15"),
+    }
+    payload.update(overrides)
+    path = tmp_path / "live.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_a_live_corpus_needs_no_page_bytes(tmp_path: Path) -> None:
+    dataset = load_dataset(live_manifest(tmp_path))
+    assert dataset.source == "live"
+    assert dataset.captured_at == "2026-11-15"
+    assert not dataset.allow_private, "a live corpus is fetched over the network"
+    assert dataset.pages == 2
+
+
+def test_a_live_corpus_without_its_date_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(DatasetError, match="captured_at"):
+        load_dataset(live_manifest(tmp_path, captured_at=None))
+
+
+def test_a_snapshot_corpus_keeps_its_own_minimums(tmp_path: Path) -> None:
+    """The frozen corpus still needs 8 sites and 100 pages; a live one states its own floor."""
+    payload = json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    payload["sites"] = payload["sites"][:2]
+    payload.pop("digest", None)
+    payload["minimums"] = {"sites": 2, "pages": 1}
+    small = tmp_path / "dataset.json"
+    small.write_text(json.dumps(payload), encoding="utf-8")
+    dataset = load_dataset(small)
+    assert len(dataset.sites) == 2
+    assert dataset.allow_private, "a snapshot is served from loopback"

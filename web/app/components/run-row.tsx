@@ -15,6 +15,7 @@ export function RunRow({
   highlighted: boolean;
 }) {
   const running = audit.status === "running";
+  const queued = audit.status === "queued";
 
   return (
     <li
@@ -27,10 +28,17 @@ export function RunRow({
         <div className="row-main">
           <SiteName site={audit.site} />
           <p className="row-meta">
-            {running ? (
+            {queued ? (
+              <>
+                queued {formatRelative(audit.started_at, now)} · waiting for a
+                worker
+              </>
+            ) : running ? (
               <>
                 started {formatRelative(audit.started_at, now)} ·{" "}
                 {formatElapsed(audit.started_at, now)} elapsed
+                {audit.stage != null && <> · stage {audit.stage}</>}
+                {audit.cancel_requested && <> · stopping after this stage</>}
               </>
             ) : (
               <>

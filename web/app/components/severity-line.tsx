@@ -14,7 +14,7 @@ export function SeverityLine({
   if (total === null) {
     return (
       <span className="severity-line muted">
-        {status === "running" ? "pending" : "—"}
+        {status === "running" || status === "queued" ? "pending" : "—"}
       </span>
     );
   }
