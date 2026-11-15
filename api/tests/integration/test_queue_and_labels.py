@@ -1,12 +1,14 @@
 """The queue's contract against a real database, and the label export built on feedback."""
 
 import asyncio
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import lifecycle
 from app.audit import LeaseLost, run_audit
@@ -22,6 +24,35 @@ from app.worker import run_due_schedules
 pytestmark = pytest.mark.integration
 
 HOST = f"labels-{uuid.uuid4().hex[:8]}.invalid"
+
+
+async def wait_for_lock_waiter(session: AsyncSession, *, budget_s: float = 5.0) -> None:
+    """Wait until Postgres reports a statement blocked on a lock, or fail the test.
+
+    A fixed sleep would let the test pass whenever connection acquisition was slower than the sleep:
+    recovery would commit first and the heartbeat would never contend. `pg_stat_activity` says when
+    the contention actually exists.
+    """
+    # Give the other task a clean slot before the first poll: polling straight after the lock is
+    # taken can run the whole budget without the renewal ever opening its connection.
+    await asyncio.sleep(0.05)
+    deadline = time.monotonic() + budget_s
+    while time.monotonic() < deadline:
+        waiting = await session.scalar(
+            text(
+                "select count(*) from pg_stat_activity "
+                "where wait_event_type = 'Lock' and query ilike '%UPDATE audits%'"
+            )
+        )
+        if waiting:
+            return
+        await asyncio.sleep(0.02)
+    rows = (
+        await session.execute(
+            text("select pid, state, wait_event_type, left(query, 60) from pg_stat_activity")
+        )
+    ).all()
+    pytest.fail(f"the renewal never reached the database: {rows}")
 
 
 async def drain() -> None:
@@ -244,7 +275,8 @@ async def test_a_heartbeat_cannot_renew_a_lease_recovery_is_holding() -> None:
     await drain()
     audit_id = await enqueue("heartbeat.invalid")
     async with session_scope() as session:
-        await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+        claimed = await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+    assert claimed is not None and claimed[0] == audit_id, "the queue handed over a different row"
 
     async def beat() -> bool:
         async with session_scope() as session:
@@ -254,9 +286,10 @@ async def test_a_heartbeat_cannot_renew_a_lease_recovery_is_holding() -> None:
 
     async with session_scope() as recovery:
         await recovery.execute(select(Audit).where(Audit.id == audit_id).with_for_update())
-        # The row is locked first, so the heartbeat's UPDATE has to wait for this transaction.
+        # The row is locked first, so the heartbeat's UPDATE has to wait for this transaction;
+        # wait for the database to say it is waiting instead of guessing with a sleep.
         heartbeat = asyncio.create_task(beat())
-        await asyncio.sleep(0.2)
+        await wait_for_lock_waiter(recovery)
         row = await recovery.get(Audit, audit_id)
         assert row is not None
         row.status = lifecycle.QUEUED
