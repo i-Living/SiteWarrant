@@ -73,7 +73,9 @@ def capture(
                 login, password = credentials
                 page.fill("#login", login)
                 page.fill("#password", password)
-                page.click(".login-submit")
+                # The submit belongs to the login form by role, not by a styling class: the
+                # interface is Tailwind now and a `className` is not a contract.
+                page.click("form[action='/auth/login'] button[type='submit']")
                 page.wait_for_load_state("networkidle", timeout=timeout_ms)
                 if urlsplit(page.url).path == LOGIN_PATH:
                     return f"sign-in was refused: the page stayed on {page.url}"

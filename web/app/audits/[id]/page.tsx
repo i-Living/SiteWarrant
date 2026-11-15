@@ -619,6 +619,10 @@ export default async function AuditPage({
                 {report.summary.pages_audited === 1 ? "page" : "pages"}
               </span>
               <span aria-hidden="true">·</span>
+              <span>
+                {verdictTotal} {verdictTotal === 1 ? "finding" : "findings"}
+              </span>
+              <span aria-hidden="true">·</span>
               <span>run {report.audit_id.slice(0, 8)}</span>
             </div>
           </div>
