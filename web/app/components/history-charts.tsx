@@ -142,6 +142,17 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
     (run) => run.new !== null || run.closed !== null,
   );
   const hasCost = runs.some((run) => run.cost_estimate_usd !== null);
+  // A zero is a measurement: when every plotted value is zero the plot is empty on purpose,
+  // and saying so keeps it from reading as missing data.
+  const comparisonIsZero =
+    hasComparison &&
+    runs.every(
+      (run) => run.new === null || (run.new === 0 && (run.closed ?? 0) === 0),
+    );
+  const costs = runs
+    .map((run) => run.cost_estimate_usd)
+    .filter((cost): cost is number => cost !== null);
+  const costIsZero = costs.length > 0 && costs.every((cost) => cost === 0);
 
   return (
     <>
@@ -240,6 +251,11 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
             <p className="empty">
               No two runs in this window are comparable yet: a delta needs a
               previous report of the same page.
+            </p>
+          )}
+          {comparisonIsZero && (
+            <p className="chart-note">
+              Every comparable pair in this window opened and closed nothing.
             </p>
           )}
           {incomparable.length > 0 && (
@@ -349,45 +365,53 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
           wide
         >
           {hasCost ? (
-            <ResponsiveContainer width="100%" height={210}>
-              <BarChart
-                data={points}
-                margin={{ top: 8, right: 8, bottom: 0, left: -8 }}
-              >
-                <CartesianGrid stroke="#dcd6c9" vertical={false} />
-                <XAxis
-                  dataKey="i"
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  tickFormatter={(value) =>
-                    String(points[Number(value)]?.label ?? "")
-                  }
-                />
-                <YAxis
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <Tooltip
-                  labelFormatter={(value) =>
-                    String(points[Number(value)]?.label ?? "")
-                  }
-                  contentStyle={TOOLTIP_STYLE}
-                  cursor={{ fill: "#e9e3d4" }}
-                  formatter={(value) => [
-                    `$${Number(value).toFixed(4)}`,
-                    "estimate",
-                  ]}
-                />
-                <Bar
-                  dataKey="cost"
-                  fill="#1d4d3b"
-                  name="cost (estimate)"
-                  isAnimationActive={false}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart
+                  data={points}
+                  margin={{ top: 8, right: 8, bottom: 0, left: -8 }}
+                >
+                  <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                  <XAxis
+                    dataKey="i"
+                    tick={AXIS_TICK}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    tickFormatter={(value) =>
+                      String(points[Number(value)]?.label ?? "")
+                    }
+                  />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    tickLine={false}
+                    tickFormatter={(value) => `$${value}`}
+                  />
+                  <Tooltip
+                    labelFormatter={(value) =>
+                      String(points[Number(value)]?.label ?? "")
+                    }
+                    contentStyle={TOOLTIP_STYLE}
+                    cursor={{ fill: "#e9e3d4" }}
+                    formatter={(value) => [
+                      `$${Number(value).toFixed(4)}`,
+                      "estimate",
+                    ]}
+                  />
+                  <Bar
+                    dataKey="cost"
+                    fill="#1d4d3b"
+                    name="cost (estimate)"
+                    isAnimationActive={false}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+              {costIsZero && (
+                <p className="chart-note">
+                  Every run with a cost figure in this window made no priced
+                  model calls.
+                </p>
+              )}
+            </>
           ) : (
             <p className="empty">
               No run in this window carries a cost estimate: either no model was
