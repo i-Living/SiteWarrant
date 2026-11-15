@@ -56,10 +56,16 @@ async def wait_for_lock_waiter(session: AsyncSession, *, budget_s: float = 5.0) 
 
 
 async def drain() -> None:
-    """Take leftover queued rows out of the way: no worker is coming for them in a test run."""
+    """Clear leftovers: no worker is coming for a queued row, and no attempt owns a running one.
+
+    Leaving `running` rows behind would make the next test's recovery requeue them, and the queue
+    would hand out an older row than the one under test.
+    """
     async with session_scope() as session:
         rows = (
-            await session.execute(select(Audit).where(Audit.status == lifecycle.QUEUED))
+            await session.execute(
+                select(Audit).where(Audit.status.in_([lifecycle.QUEUED, lifecycle.RUNNING]))
+            )
         ).scalars()
         for row in rows:
             row.status = lifecycle.CANCELLED
@@ -232,6 +238,16 @@ async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -
     """Totals are a SQL increment: two attempts recording at once must both count."""
     await drain()
     audit_id = await enqueue("usage.invalid")
+    async with session_scope() as session:
+        claimed = await repo.claim_audit(session, worker_id="worker-a", lease_s=0)
+    assert claimed is not None and claimed[0] == audit_id
+    # The lease is gone, so the row goes back to the queue and the next attempt takes it.
+    async with session_scope() as session:
+        requeued, _abandoned = await repo.requeue_expired(session, max_attempts=2)
+    assert requeued >= 1
+    async with session_scope() as session:
+        claimed = await repo.claim_audit(session, worker_id="worker-b", lease_s=60)
+    assert claimed is not None and claimed[0] == audit_id
 
     async def record(tokens: int) -> None:
         async with session_scope() as session:
@@ -246,8 +262,8 @@ async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -
             await session.commit()
 
     async with session_scope() as stale:
-        # The attempt that will lose the row records first, and its transaction stays open while
-        # the row is reclaimed: the next attempt's increment is already waiting on this row lock.
+        # The reclaimed attempt flushes its usage late, after the row belongs to worker-b. Its
+        # transaction holds the row lock, so the current attempt's increment has to wait for it.
         await repo.add_audit_usage(
             stale,
             audit_id=audit_id,
@@ -257,10 +273,7 @@ async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -
             cost_estimate_usd=0.5,
         )
         next_attempt = asyncio.create_task(record(5))
-        await asyncio.sleep(0.2)
-        row = await stale.get(Audit, audit_id)
-        assert row is not None
-        row.worker_id = "worker-b"
+        await wait_for_lock_waiter(stale)
         await stale.commit()
     await asyncio.wait_for(next_attempt, timeout=10)
     async with session_scope() as session:
