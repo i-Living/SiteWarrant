@@ -29,6 +29,49 @@ const NAV = [
   },
 ];
 
+/**
+ * The same destinations as the sidebar, for the viewports where the sidebar is hidden. The
+ * top bar only carries breadcrumbs and sign-out, so without this the Runs list would have no
+ * link at all on a phone.
+ */
+export function CompactNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav
+      aria-label="Main"
+      className="flex items-center gap-1 border-b border-border bg-background px-3 py-2 lg:hidden"
+    >
+      {NAV.map((item) => {
+        const isActive = item.active(pathname);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-xs transition-colors",
+              isActive
+                ? "bg-brand/10 font-medium text-brand"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            <item.icon className="size-3.5" aria-hidden="true" />
+            {item.label}
+          </Link>
+        );
+      })}
+      <Link
+        href="/audits/new"
+        className="flex h-8 items-center gap-1 rounded-md bg-brand px-2.5 text-xs font-medium text-white"
+      >
+        <Plus className="size-3.5" aria-hidden="true" />
+        New
+      </Link>
+    </nav>
+  );
+}
+
 export function Sidebar({ recent }: { recent: SiteSummary[] }) {
   const pathname = usePathname();
 

@@ -102,7 +102,7 @@ function ChartCard({
   return (
     <Card className={cn("gap-2", wide === true && "lg:col-span-2")}>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle as="h2">{title}</CardTitle>
         <CardDescription>{note}</CardDescription>
       </CardHeader>
       <CardContent>{children}</CardContent>

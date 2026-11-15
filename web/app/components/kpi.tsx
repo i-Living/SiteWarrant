@@ -19,7 +19,12 @@ export function Kpi({
         <p className="text-2xl font-semibold tracking-tight tabular-nums">
           {value}
         </p>
-        {children ?? <p className="text-xs text-muted-foreground">{hint}</p>}
+        {/* The hint explains the number; children break it down. One does not replace the
+            other — a filtered count keeps its total in the hint. */}
+        {hint !== undefined && (
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        )}
+        {children}
       </CardContent>
     </Card>
   );

@@ -206,7 +206,7 @@ function CauseCard({ cause }: { cause: RootCause & { findings: Finding[] } }) {
 
       <div className="mt-3 border-t border-border bg-muted/30 px-4 pt-1 pb-1">
         <p className="mb-1 pt-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Findings in this block · {cause.finding_ids.length}
+          Findings in this block · {cause.findings.length}
         </p>
       </div>
       <div className="px-4">
@@ -238,6 +238,11 @@ function SeverityBars({ counts }: { counts: Record<string, number> }) {
     (sum, key) => sum + (counts[key] ?? 0),
     0,
   );
+  if (total === 0) {
+    // Four zero-width bars would read as four measurements of nothing; the report measured
+    // and found nothing, which is a sentence, not a proportion.
+    return <p className="text-xs text-muted-foreground">no findings</p>;
+  }
   return (
     <div className="flex flex-col gap-2">
       {SEVERITY_ORDER.map((key) => {
@@ -248,6 +253,7 @@ function SeverityBars({ counts }: { counts: Record<string, number> }) {
             <Progress
               value={count}
               max={total}
+              label={`${key}: ${count} of ${total}`}
               className="flex-1"
               indicatorClassName={severityStyle(key).bar}
             />
@@ -311,6 +317,7 @@ function Panel({
                       <Progress
                         value={score}
                         max={100}
+                        label={`${scoreLabel(name)} score: ${score} of 100`}
                         indicatorClassName="bg-foreground/70"
                       />
                     </span>
@@ -655,7 +662,7 @@ export default async function AuditPage({
         >
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
             {severityChips.length === 0 ? (
-              <span className="text-muted-foreground">none measured</span>
+              <span className="text-muted-foreground">no findings</span>
             ) : (
               severityChips.map((key) => (
                 <span

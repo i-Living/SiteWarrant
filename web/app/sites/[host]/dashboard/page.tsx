@@ -126,10 +126,7 @@ export default async function SiteDashboardPage({
             </span>
             <span aria-hidden="true">·</span>
             <span>
-              last{" "}
-              {formatMoment(
-                (latestMeasured ?? runs[runs.length - 1])?.started_at ?? "",
-              )}
+              last {formatMoment(runs[runs.length - 1]?.started_at ?? "")}
             </span>
           </>
         }

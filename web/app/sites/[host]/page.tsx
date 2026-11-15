@@ -235,6 +235,10 @@ export default async function SitePage({
             counts={summary.by_severity}
             total={summary.findings_total}
             status={summary.running > 0 ? "running" : "completed"}
+            coverage={{
+              measured: summary.measured_pages,
+              pages: summary.pages,
+            }}
           />
         </CardContent>
       </Card>

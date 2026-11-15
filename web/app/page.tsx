@@ -103,6 +103,11 @@ export default async function Page({
   const localSites = sites.filter((site) => isLocalHost(site.host));
   const running = sites.reduce((total, site) => total + site.running, 0);
   const pages = sites.reduce((total, site) => total + site.pages, 0);
+  const localPages = localSites.reduce((total, site) => total + site.pages, 0);
+  const publicPages = publicSites.reduce(
+    (total, site) => total + site.pages,
+    0,
+  );
   const runs = sites.reduce((total, site) => total + site.runs, 0);
   const failed = sites.reduce((total, site) => total + site.failed, 0);
 
@@ -153,7 +158,7 @@ export default async function Page({
             <Kpi
               label="Pages"
               value={pages}
-              hint={`${localSites.length} local, ${publicSites.length} public`}
+              hint={`${localPages} local, ${publicPages} public`}
             />
             <Kpi label="Runs recorded" value={runs} hint="all statuses" />
             <Kpi

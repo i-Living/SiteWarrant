@@ -5,12 +5,15 @@ import { cn } from "../../lib/utils";
 function Progress({
   value,
   max = 100,
+  label,
   className,
   indicatorClassName,
   ...props
 }: Omit<ComponentProps<"div">, "children"> & {
   value: number | null;
   max?: number;
+  /** The progressbar role needs a name; the adjacent text is not one. */
+  label: string;
   indicatorClassName?: string;
 }) {
   const ratio =
@@ -19,9 +22,11 @@ function Progress({
     <div
       data-slot="progress"
       role="progressbar"
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value ?? undefined}
+      aria-valuetext={value === null ? "not measured" : undefined}
       className={cn(
         "relative h-1.5 w-full overflow-hidden rounded-full bg-muted",
         className,
