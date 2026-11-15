@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 BENCHMARK = ROOT / "benchmark"
 
 
+@pytest.mark.corpus
 async def test_every_fixable_rule_is_proposed_applied_and_closed() -> None:
     """One site plants one defect per rule, plus a second link covered by the same banner."""
     run = await measure_fixes(BENCHMARK / "dataset.json", sites=["northwind"])

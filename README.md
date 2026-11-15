@@ -141,7 +141,7 @@ Measured on 2026-11-15 against the fixture site, agent `sha256:b6f6435fee6719ff`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 377 tests green (321 unit, 56 integration).
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 391 tests green (332 unit, 59 integration).
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.
