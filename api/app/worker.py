@@ -33,6 +33,7 @@ from app.audit import (
 from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.storage import repo
+from app.survey import run_sitemap_audit
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +121,23 @@ async def run_once(context: WorkerContext) -> bool:
         return False
     audit_id, url = claimed
     # The row was written by whoever queued it: its agent list is the audit's, not the worker's
-    # default, and the attempt decides which artifact directory this run may write.
+    # default, and the attempt decides which artifact directory this run may write. A sitemap row
+    # is a dispatch of page audits, so its scope and page limit travel with it the same way.
     async with session_scope() as session:
         audit = await repo.get_audit(session, audit_id)
-        agents = tuple(str(name) for name in (audit.config.get("agents") or [])) if audit else ()
+        config = dict(audit.config) if audit else {}
+        agents = tuple(str(name) for name in (config.get("agents") or []))
         attempt = audit.attempts if audit else None
-    await execute(audit_id, url, agents=agents, attempt=attempt, context=context)
+    await execute(
+        audit_id,
+        url,
+        agents=agents,
+        attempt=attempt,
+        context=context,
+        scope=str(config.get("scope") or "page"),
+        pages_limit=int(config.get("pages_limit") or 1),
+        ignore_robots=config.get("robots") == "ignored",
+    )
     return True
 
 
@@ -136,6 +148,9 @@ async def execute(
     context: WorkerContext,
     agents: tuple[str, ...] = (),
     attempt: int | None = None,
+    scope: str = "page",
+    pages_limit: int = 1,
+    ignore_robots: bool = False,
 ) -> None:
     """Run one claimed audit, renewing the lease while it works.
 
@@ -170,15 +185,29 @@ async def execute(
         _heartbeat(audit_id, lease_lost=lease_lost, context=context), name=f"lease-{audit_id}"
     )
     try:
-        await run_audit(
-            url,
-            agents=agents,
-            audit_id=audit_id,
-            progress=progress,
-            cancelled=cancelled,
-            worker_id=context.worker_id,
-            attempt=attempt,
-        )
+        if scope == "sitemap":
+            await run_sitemap_audit(
+                url,
+                audit_id=audit_id,
+                pages_limit=pages_limit,
+                settings=get_settings(),
+                agents=agents,
+                ignore_robots=ignore_robots,
+                worker_id=context.worker_id,
+                progress=progress,
+                cancelled=cancelled,
+            )
+        else:
+            await run_audit(
+                url,
+                agents=agents,
+                ignore_robots=ignore_robots,
+                audit_id=audit_id,
+                progress=progress,
+                cancelled=cancelled,
+                worker_id=context.worker_id,
+                attempt=attempt,
+            )
     except AuditCancelled:
         logger.info("audit %s was cancelled", audit_id)
     except LeaseLost:

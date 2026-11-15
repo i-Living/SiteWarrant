@@ -3,7 +3,10 @@
 import uuid
 
 import pytest
+from protego import Protego
+from pydantic import ValidationError
 
+from app.api.main import AuditRequest
 from app.core.report import (
     AgentSummaryOut,
     EvidenceOut,
@@ -13,7 +16,7 @@ from app.core.report import (
     RootCauseOut,
     SummaryOut,
 )
-from app.survey import merge_agents, merge_reports
+from app.survey import merge_agents, merge_reports, select_sitemap_pages
 
 
 def finding(*, page_key: str, rule_id: str = "SEO-H1", severity: str = "major") -> FindingOut:
@@ -175,3 +178,65 @@ def test_a_partial_page_makes_the_survey_partial_without_a_failure() -> None:
 
     assert merged.status == "partial"
     assert not merged.summary.agents or all(agent.status == "ok" for agent in merged.summary.agents)
+
+
+def test_a_sitemap_run_starts_at_the_submitted_page_and_stops_at_the_cap() -> None:
+    """The operator's URL is audited first; the cap counts pages, not sitemap entries."""
+    pages = select_sitemap_pages(
+        "https://example.test/",
+        [
+            "https://example.test/about",
+            "https://example.test/",
+            "https://example.test/blog/post-1",
+            "https://example.test/blog/post-2",
+        ],
+        max_pages=3,
+    )
+
+    assert pages == [
+        "https://example.test/",
+        "https://example.test/about",
+        "https://example.test/blog/post-1",
+    ]
+
+
+def test_a_sitemap_entry_needs_the_audited_host_html_and_robots_permission() -> None:
+    policy = Protego.parse("User-agent: *\nDisallow: /blocked\n")
+
+    pages = select_sitemap_pages(
+        "https://example.test/",
+        [
+            "https://example.test/blocked",
+            "https://elsewhere.test/page",
+            "https://example.test/guide.pdf",
+            "https://example.test/about",
+        ],
+        max_pages=10,
+        policy=policy,
+        user_agent="SiteWarrant/0.1",
+    )
+
+    assert pages == ["https://example.test/", "https://example.test/about"]
+
+
+def test_two_spellings_of_one_sitemap_page_are_one_audit() -> None:
+    pages = select_sitemap_pages(
+        "https://example.test/guide",
+        [
+            "https://example.test/guide/",
+            "https://example.test/guide?from=sitemap",
+            "https://example.test/guide#top",
+        ],
+        max_pages=10,
+    )
+
+    assert pages == ["https://example.test/guide"]
+
+
+def test_the_api_accepts_a_sitemap_scope_and_caps_it_at_fifty_pages() -> None:
+    assert AuditRequest(url="https://example.test/").scope == "page"
+    assert AuditRequest(url="https://example.test/", scope="sitemap", max_pages=50).max_pages == 50
+    with pytest.raises(ValidationError):
+        AuditRequest(url="https://example.test/", scope="sitemap", max_pages=51)
+    with pytest.raises(ValidationError):
+        AuditRequest(url="https://example.test/", scope="everywhere")

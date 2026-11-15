@@ -524,12 +524,14 @@ async def find_recent_duplicate(
     site_url: str,
     agents: Sequence[str],
     window_s: int,
+    scope: str = "page",
 ) -> Audit | None:
-    """An audit of the same URL with the same agents, started inside the window.
+    """An audit of the same URL, scope and agents, started inside the window.
 
     A double-clicked form and a retried request both describe one intention; a second run of
     the same page also costs another model call. `force` in the request body is how a caller
-    says it wants a new one anyway.
+    says it wants a new one anyway. The scope is part of the identity: a page audit of a URL
+    does not answer a request to walk its sitemap.
     """
     since = datetime.now(UTC) - timedelta(seconds=window_s)
     rows = (
@@ -546,7 +548,9 @@ async def find_recent_duplicate(
         # hide the retry behind a `deduplicated: true`.
         if audit.status in (lifecycle.FAILED, lifecycle.CANCELLED):
             continue
-        if list(audit.config.get("agents") or []) == wanted:
+        if list(audit.config.get("agents") or []) != wanted:
+            continue
+        if str(audit.config.get("scope") or "page") == scope:
             return audit
     return None
 

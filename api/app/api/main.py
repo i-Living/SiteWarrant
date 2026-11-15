@@ -17,6 +17,7 @@ from app.core.db import session_scope
 from app.core.models import Audit, AuditSchedule, FindingFeedback
 from app.core.report import SEVERITIES, Report
 from app.storage import repo
+from app.survey import SITEMAP_DEFAULT_PAGES, SITEMAP_MAX_PAGES
 
 
 class AuditRequest(BaseModel):
@@ -26,11 +27,16 @@ class AuditRequest(BaseModel):
     would let any caller scan the host's internal network. Private targets are permitted
     by deployment configuration (SITEWARRANT_ALLOW_PRIVATE_HOSTS), never per request.
 
-    `force` asks for a new run even when the same URL was submitted moments ago; without it a
-    repeated submission inside the dedupe window answers with the audit already in flight.
+    `scope` decides what one submission covers: `page` audits the URL it names, `sitemap`
+    dispatches one ordinary page audit per entry of the site's /sitemap.xml, at most
+    `max_pages` of them. `force` asks for a new run even when the same URL was submitted
+    moments ago; without it a repeated submission inside the dedupe window answers with the
+    audit already in flight.
     """
 
     url: str
+    scope: Literal["page", "sitemap"] = "page"
+    max_pages: int = Field(default=SITEMAP_DEFAULT_PAGES, ge=1, le=SITEMAP_MAX_PAGES)
     force: bool = False
 
 
@@ -52,6 +58,8 @@ class AuditSummary(BaseModel):
     audit_id: str
     site: str
     status: str
+    # What the row covers: one page, or a dispatch of page audits read from /sitemap.xml.
+    scope: str
     # The stage inside `running`, written by the worker; None for anything else.
     stage: str | None = None
     cancel_requested: bool = False
@@ -89,6 +97,7 @@ def audit_summary(audit: Audit) -> AuditSummary:
         audit_id=str(audit.id),
         site=audit.site_url,
         status=audit.status,
+        scope=str(audit.config.get("scope") or "page"),
         stage=audit.stage,
         cancel_requested=audit.cancel_requested,
         pages_count=audit.pages_count,
@@ -467,6 +476,7 @@ def create_app() -> FastAPI:
                     site_url=request.url,
                     agents=(),
                     window_s=settings.audit_dedupe_window_s,
+                    scope=request.scope,
                 )
                 if existing is not None:
                     return AuditAccepted(
@@ -478,7 +488,14 @@ def create_app() -> FastAPI:
                 session,
                 site_url=request.url,
                 agent_version=current_agent_version(settings),
-                config=audit_config(settings, agents=(), ignore_robots=False),
+                config=audit_config(
+                    settings,
+                    agents=(),
+                    ignore_robots=False,
+                    scope=request.scope,
+                    # A page run audits one page however high the request's cap is.
+                    pages_limit=request.max_pages if request.scope == "sitemap" else 1,
+                ),
                 status=lifecycle.QUEUED,
                 owner_id=settings.owner_id,
             )

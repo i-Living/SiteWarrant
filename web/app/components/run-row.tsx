@@ -16,6 +16,14 @@ export function RunRow({
 }) {
   const running = audit.status === "running";
   const queued = audit.status === "queued";
+  // A sitemap run is a dispatch row: it has no report of its own, and the page audits it queued
+  // carry the findings. Saying so is the difference between "nothing found" and "ten pages queued".
+  const sitemapNote =
+    audit.scope !== "sitemap"
+      ? null
+      : queued || running
+        ? "sitemap dispatch"
+        : `sitemap · ${audit.pages_count} ${audit.pages_count === 1 ? "page" : "pages"} queued`;
 
   return (
     <li
@@ -48,6 +56,7 @@ export function RunRow({
                 )}
               </>
             )}
+            {sitemapNote !== null && <> · {sitemapNote}</>}
             {highlighted && <span className="row-new">just submitted</span>}
           </p>
           {audit.error !== null && (
