@@ -108,6 +108,11 @@ phase that makes them meaningful. Do not add a command to this file that has not
   row can be reclaimed, and the writes of the old run are fenced on the worker id — `set_stage` and
   `finish_audit` update nothing for a worker that no longer holds the row, so the stale run stops at
   its next stage boundary and writes to its own attempt directory, never over the new owner's report.
+- **The facts commit is fenced too.** Before the commit the agents need, `audit_page` asks
+  `repo.audit_owner` whether the row is still this worker's and raises `LeaseLost` otherwise; the
+  final `finish_audit` returning `False` rolls the pending findings back instead of committing them
+  onto somebody else's audit. Stage and finish writes alone would leave that window open — the
+  ownership check has to sit at the transaction boundary, not only at the stage.
 - **`stage` names the work in progress, not the work that finished.** `capture`, `facts`, `agents`,
   `chief` and `report` are written when their stage starts, because a stage written after the fact
   tells a polling reader nothing about the run it is watching; the row's terminal `status` is what
@@ -421,6 +426,10 @@ the repository does not grow by a copy of somebody's site.
 - **Numbers in advice are allowed to be constants.** A claim's own text carries the standard's
   constants ("24 by 24 CSS pixels", "4.5:1"), so repeating one is not a measurement claim and is
   allowed anywhere in the finding. A number that is neither measured nor in the claim is rejected.
+- **A revision that has run anywhere is not edited to carry a backfill.** `a7c41d2e8b90` had already
+  been applied on the branch database, so an `UPDATE` added to its `upgrade` would never run there;
+  `c9e53f4a0d12` carries it instead and its downgrade is a documented no-op. Adding SQL to an applied
+  revision looks like a fix and is a no-op on every database that matters.
 - **Both destructive downgrades ask for the flag.** The P3 one also documents how to keep the call
   log: `pg_dump --data-only --table=llm_calls` before the downgrade, restore after re-upgrade. The P3 downgrade drops `llm_calls`, which
   cannot be regenerated, so it needs `SITEWARRANT_ALLOW_DESTRUCTIVE_DOWNGRADE=1` like P0's.

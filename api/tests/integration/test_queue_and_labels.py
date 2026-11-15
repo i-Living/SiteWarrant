@@ -8,9 +8,10 @@ import pytest
 from sqlalchemy import select
 
 from app import lifecycle
+from app.audit import LeaseLost, run_audit
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.core.models import Audit, Finding
+from app.core.models import Audit, Finding, Page
 from app.eval.dataset import DatasetError, load_dataset
 from app.eval.labels import export_labels
 from app.rules.engine import FindingDraft
@@ -129,6 +130,48 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
     assert asked.cancel_requested is True
     async with session_scope() as session:
         assert await repo.cancel_requested(session, running_id) is True
+
+
+async def test_a_reclaim_before_the_facts_commit_stops_the_run() -> None:
+    """The commit that agents need is a commit a reclaimed run must not make."""
+    await drain()
+    url = "http://localhost:8081/"
+    audit_id = await enqueue(url)
+    async with session_scope() as session:
+        await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+
+    async def reclaim(stage: str) -> None:
+        if stage != "facts":
+            return
+        # Another worker takes the row while this run is still between stages.
+        async with session_scope() as session:
+            row = await repo.get_audit(session, audit_id)
+            assert row is not None
+            row.worker_id = "worker-b"
+            await session.commit()
+
+    with pytest.raises(LeaseLost):
+        await run_audit(
+            url,
+            allow_private=True,
+            agents=("a11y",),
+            audit_id=audit_id,
+            worker_id="worker-a",
+            attempt=1,
+            progress=reclaim,
+        )
+    async with session_scope() as session:
+        row = await repo.get_audit(session, audit_id)
+        findings = await repo.findings_for_audit(session, audit_id)
+        pages = (
+            (await session.execute(select(Page).where(Page.audit_id == audit_id))).scalars().all()
+        )
+    assert row is not None
+    assert row.worker_id == "worker-b"
+    assert row.status == lifecycle.RUNNING
+    assert row.report_key is None
+    # The facts of the losing run were rolled back with its transaction.
+    assert findings == [] and pages == []
 
 
 async def test_recovery_discards_the_dead_attempts_facts() -> None:

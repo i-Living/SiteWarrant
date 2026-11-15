@@ -239,6 +239,7 @@ async def claim_audit(
     if candidate is None:
         return None
     now = datetime.now(UTC)
+    lifecycle.ensure_transition(candidate.status, lifecycle.RUNNING)
     candidate.status = lifecycle.RUNNING
     candidate.stage = "starting"
     candidate.worker_id = worker_id
@@ -247,6 +248,13 @@ async def claim_audit(
     candidate.started_at = now
     await session.commit()
     return candidate.id, candidate.site_url
+
+
+async def audit_owner(session: AsyncSession, audit_id: uuid.UUID) -> str | None:
+    """Who holds the row right now: None when the row is gone or nobody holds it."""
+    return (
+        await session.execute(select(Audit.worker_id).where(Audit.id == audit_id))
+    ).scalar_one_or_none()
 
 
 async def renew_lease(
@@ -328,6 +336,7 @@ async def requeue_expired(session: AsyncSession, *, max_attempts: int) -> tuple[
             audit.lease_expires_at = None
             requeued += 1
         else:
+            lifecycle.ensure_transition(audit.status, lifecycle.FAILED)
             audit.status = lifecycle.FAILED
             audit.stage = None
             audit.worker_id = None
@@ -358,6 +367,7 @@ async def request_cancel(session: AsyncSession, audit_id: uuid.UUID) -> Audit | 
     if audit is None or lifecycle.is_terminal(audit.status):
         return audit
     if audit.status == lifecycle.QUEUED:
+        lifecycle.ensure_transition(audit.status, lifecycle.CANCELLED)
         audit.status = lifecycle.CANCELLED
         audit.finished_at = datetime.now(UTC)
         audit.error = "cancelled before it started"

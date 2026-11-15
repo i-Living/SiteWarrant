@@ -17,10 +17,10 @@ so the lock is seconds. On a table past a few hundred thousand rows the columns,
 the foreign key are three revisions, the index built `CONCURRENTLY` outside the migration
 transaction and the key added `NOT VALID` then validated.
 
-The backfill at the end gives rows interrupted before this revision a lease in the past, so the
-first `requeue_expired` pass picks them up instead of leaving them `running` forever. Run this
-revision **after the old API process has stopped**: an old process still running an audit would
-keep working on a row the worker then requeues, and the two would write the same files.
+Rows interrupted before this revision have no lease at all; `c9e53f4a0d12` backfills them, in its
+own revision, so a database that already applied this one still gets the fix. Run both **after the
+old API process has stopped**: an old process still running an audit would keep working on a row the
+worker then requeues, and the two would write the same files.
 
 Rollback: `downgrade` drops the new columns and the feedback table. The queue's clock
 (`stage`, lease, attempts) is recomputable by re-running audits, but **the feedback is not**:
@@ -67,13 +67,6 @@ def upgrade() -> None:
         "ADD COLUMN IF NOT EXISTS owner_id varchar(64)"
     )
     op.execute("ALTER TABLE findings ADD COLUMN IF NOT EXISTS basis jsonb")
-    # A row interrupted before this revision has no lease at all, and `requeue_expired` cannot see
-    # it: the column is NULL, not expired. One pass with the lease in the past hands every such row
-    # to the first recovery without touching a row that is not running.
-    op.execute(
-        "UPDATE audits SET lease_expires_at = now() "
-        "WHERE status = 'running' AND lease_expires_at IS NULL"
-    )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_audits_status_started_at ON audits (status, started_at)"
     )

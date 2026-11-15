@@ -499,6 +499,21 @@ async def audit_page(
         if cancelled is not None and await cancelled():
             raise AuditCancelled("cancelled by the operator")
 
+    async def stop_if_reclaimed() -> None:
+        """Refuse to commit facts for a row another worker has taken over.
+
+        The stage and finish writes are fenced in storage, but the page and finding rows of this
+        transaction are not: without this check a run that lost its lease during the agents could
+        still commit them under the new owner's audit.
+        """
+        if worker_id is None:
+            return
+        assert audit_id is not None  # created above, before any stage runs
+        async with session_scope() as check:
+            owner = await repo.audit_owner(check, audit_id)
+        if owner != worker_id:
+            raise LeaseLost(f"{audit_id} is no longer leased to {worker_id}")
+
     pages_committed = 0
     async with session_scope() as session:
         audit_id = await repo.create_audit(
@@ -596,7 +611,9 @@ async def audit_page(
             await stage("facts")
             if agent_names:
                 # The agents read the facts through a separate process, so the facts have to
-                # be committed before the MCP server can serve them.
+                # be committed before the MCP server can serve them. The row has to still be
+                # ours at that moment: this is the commit a reclaim would otherwise capture.
+                await stop_if_reclaimed()
                 await session.commit()
                 pages_committed = 1
                 await stage("agents")
@@ -712,7 +729,7 @@ async def audit_page(
             report_key = write_artifact(
                 audit_id, "report.json", report.model_dump_json(indent=2), attempt=attempt
             )
-            await repo.finish_audit(
+            finished = await repo.finish_audit(
                 session,
                 audit_id=audit_id,
                 status=report.status,
@@ -720,6 +737,11 @@ async def audit_page(
                 report_key=report_key,
                 worker_id=worker_id,
             )
+            if not finished:
+                # The row is no longer this worker's (or already terminal): committing the pending
+                # findings would attach them to somebody else's audit.
+                await session.rollback()
+                raise LeaseLost(f"{audit_id} was finished by another owner")
             await session.commit()
             return report
         except AuditCancelled as cancelled_error:
