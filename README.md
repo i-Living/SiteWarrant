@@ -141,11 +141,17 @@ Measured on 2026-11-15 against the fixture site, agent `sha256:e132ad9b57c7f80a`
 - Every finding carries at least one evidence item, and every cited `observation_id` resolves to a
   stored row — asserted by `tests/integration/test_audit_fixture.py`.
 - Two consecutive runs on the same page report the same rule set.
-- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 332 unit tests green; the integration
-  suite is 60 passed and 2 failed on this machine, and both failures reproduce on a clean `origin/main`
-  against the same database — `test_agents_audit.py` reads the newest audit row in the whole database
-  rather than the one it started, and a database that holds earlier runs answers with a different row.
-  CI runs the suite on a fresh database, where it passes.
+- Backend gate: `ruff`, `ruff format --check`, `mypy --strict`, 332 unit tests green. The integration
+  suite is split in two: `make integration` is the fixture site, the browser and the database and is
+  what the commit gate runs; `make corpus` is the frozen benchmark, one whole site per test, and runs
+  as its own CI job. `pytest --collect-only` counts 392 tests, 60 of them integration, 3 of those
+  corpus.
+- Two tests in `test_agents_audit.py` can fail on a database that already holds earlier audits: they
+  read the newest audit row in the whole database
+  (`select(Audit).order_by(Audit.started_at.desc()).limit(1)`) rather than the audit they started, so
+  an earlier run can answer the query. Both failures reproduce on a clean `origin/main` against the
+  same database, and the same selection passes on a later run against that database, so this is a
+  property of the query, not of a change.
 - Frontend gate: `biome check`, `tsc --noEmit`, `next build` green.
 - `robots.txt` is enforced by default: the fixture disallows `/blocked.html`, and auditing it exits with
   code 2 unless `--ignore-robots` is passed.

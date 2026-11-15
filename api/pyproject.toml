@@ -70,6 +70,7 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 markers = [
     "integration: needs Postgres, the fixture site and a Chromium build",
+    "corpus: audits the frozen benchmark corpus, a whole site per run",
     "network: reaches the public internet",
 ]
 addopts = "-q"

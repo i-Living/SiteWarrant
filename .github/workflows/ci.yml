@@ -37,6 +37,10 @@ jobs:
       - run: uv run mypy app
       - run: uv run pytest -q -m "not integration and not network"
 
+  # The corpus tests are their own job: each one audits a whole benchmark site (13 pages at three
+  # viewports), so they dominate the wall time, and a corpus failure has nothing to do with the
+  # fixture. Splitting them keeps the gate that answers a commit at fixture speed and names the
+  # slow half when it breaks.
   integration:
     name: integration (fixture site, real browser)
     runs-on: ubuntu-latest
@@ -57,7 +61,33 @@ jobs:
         run: docker compose -f infra/docker-compose.yml up -d --wait
       - run: uv run playwright install --with-deps chromium
       - run: uv run alembic upgrade head
-      - run: uv run pytest -q -m integration
+      - run: uv run pytest -q -m "integration and not corpus"
+      - name: Show container logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml logs --tail 50
+
+  corpus:
+    name: corpus (frozen benchmark, real browser)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - name: Start Postgres, Redis and the fixture site
+        working-directory: .
+        run: docker compose -f infra/docker-compose.yml up -d --wait
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run alembic upgrade head
+      - run: uv run pytest -q -m corpus
       - name: Show container logs on failure
         if: failure()
         working-directory: .
