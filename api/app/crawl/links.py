@@ -49,6 +49,12 @@ def is_crawlable(url: str) -> bool:
     return not path.endswith(SKIP_EXTENSIONS)
 
 
+def same_host(url: str, host: str) -> bool:
+    """Discovery stays inside the audited host set; a link elsewhere is not followed."""
+    candidate = urlsplit(url).hostname
+    return candidate is not None and candidate.lower() == host.lower()
+
+
 class _LinkCollector(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)

@@ -7,11 +7,11 @@ instead of rounding it into existence.
 
 ## 1. What the deterministic layer does on the benchmark
 
-Run `evals/runs/2026-11-15-baseline-occluder.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:e132ad9b57c7f80a`, 2026-11-15, 326.2 s, whole corpus (8 synthetic sites, 104 pages, 80
+Run `evals/runs/2026-11-15-baseline-sitemap-robots.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:eff87a8cd035afc0`, 2026-11-15, 318.0 s, whole corpus (8 synthetic sites, 104 pages, 80
 planted defects, 24 clean pages). Every earlier run recorded the same score under its own agent version;
-this one followed the occlusion probe (see *Fixes over the same corpus* below), which moved the version
-and not the measured layer:
+this one followed robots.txt being applied to the sitemap fetch (§19.7 in `docs/PLAN.md`), which moved
+the version and not the measured layer:
 
 | metric | value | denominator |
 | --- | --- | --- |
@@ -38,8 +38,8 @@ rather than in the agent:
 
 ### Fixes over the same corpus
 
-Run `evals/runs/2026-11-15-fix-acceptance.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:e132ad9b57c7f80a`, 2026-11-15, 512.6 s: every page audited, then every finding of a
+Run `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json`, corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:eff87a8cd035afc0`, 2026-11-15, 472.6 s: every page audited, then every finding of a
 mechanically fixable rule repaired on its own and the patched page re-audited.
 
 | metric | value | denominator |

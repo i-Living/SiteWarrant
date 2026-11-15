@@ -64,8 +64,8 @@ that cannot.
 
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
-`evals/runs/2026-11-15-baseline-occluder.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:e132ad9b57c7f80a`, 2026-11-15. A metric with no run behind it stays `null`.
+`evals/runs/2026-11-15-baseline-sitemap-robots.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:eff87a8cd035afc0`, 2026-11-15. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -75,8 +75,8 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 326.2 s |
-| Fix acceptance rate | repairs that applied to the served source / repairs proposed | `1.0000` — 48/48, from `evals/runs/2026-11-15-fix-acceptance.json` (agent `sha256:e132ad9b57c7f80a`, 512.6 s). A floor: the corpus is static, so a diff computed from the source it is applied to usually lands; what the run proves is that no repair was written that cannot be applied |
+| Median audit duration | wall clock per audit | `3.05 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 318.0 s |
+| Fix acceptance rate | repairs that applied to the served source / repairs proposed | `1.0000` — 48/48, from `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json` (agent `sha256:eff87a8cd035afc0`, 472.6 s). A floor: the corpus is static, so a diff computed from the source it is applied to usually lands; what the run proves is that no repair was written that cannot be applied |
 | Regression-free fix rate | re-audits with no new finding at all / applied fixes | `1.0000` — 48/48 from the same run; every applied repair also closed the finding it was computed for (48/48), measured by re-auditing the patched page rather than by reading the diff |
 
 A zero denominator reports `null`, never `0`. Cost is an estimate from a versioned price table; tokens
@@ -131,8 +131,8 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-15 against the fixture site, agent `sha256:e132ad9b57c7f80a` (axe-core 4.14.0,
-10 SiteWarrant rules; run `evals/audits/2026-11-15-fixture.json`):
+Measured on 2026-11-15 against the fixture site, agent `sha256:eff87a8cd035afc0` (axe-core 4.14.0,
+10 SiteWarrant rules; run `evals/audits/2026-11-15-fixture-sitemap-robots.json`):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
   covers five separate links, and each covered target is its own finding — collapsing them would
@@ -214,9 +214,9 @@ uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
 Measured on 2026-11-15 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:e132ad9b57c7f80a`, 326.2 s, `evals/runs/2026-11-15-baseline-occluder.json` — the same score every
-earlier run recorded; the change behind this version was the occlusion probe, and the fix measurements in
-`evals/runs/2026-11-15-fix-acceptance.json` carry the same version):
+`sha256:eff87a8cd035afc0`, 318.0 s, `evals/runs/2026-11-15-baseline-sitemap-robots.json` — the same score every
+earlier run recorded; the change behind this version was robots.txt on the sitemap fetch, and the fix
+measurements in `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json` carry the same version):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);

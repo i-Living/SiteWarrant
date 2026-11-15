@@ -513,7 +513,12 @@ the repository does not grow by a copy of somebody's site.
   a change here is an "ask first" change like `page_key`.
 - **Discovery never leaves the audited host.** Sitemap entries, links and redirect targets are filtered
   against the start host, and every URL passes robots.txt, the SSRF guard and the peer check before it is
-  fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions.
+  fetched. `tests/crawl/test_crawler.py` and the fixture sitemap pin both directions. A `<sitemapindex>`
+  child is a URL like any other: `app/crawl/sitemap.py` skips one whose host is not the audited host
+  *before* fetching it, and `robots_hop_check` is consulted for `/sitemap.xml` itself as well as for each
+  child, because the sitemap is a document this tool fetches. A refusal there leaves the run without a
+  sitemap — the crawl still starts from its start page, and a sitemap dispatch fails with its reason — and
+  is never a finding.
 - **The agent budget is 12 tool calls, 60k tokens and 180 s**, and the loop warns at 70 % of the
   tokens: after the warning a read is refused and the only way forward is `submit_findings`. Without
   that, a thorough agent reads until the budget dies and contributes nothing. The token number is a
@@ -611,7 +616,9 @@ the repository does not grow by a copy of somebody's site.
   loader's, so change both or neither.
 - **The crawl digest is part of `agent_version`.** `app/crawl/version.py` hashes the discovery sources,
   because which pages get audited changes the report. Editing the crawler changes every version string
-  and every published number — expected, not a bug.
+  and every published number — expected, not a bug. A change to `sitemap.py`, `crawler.py` or `links.py`
+  therefore lands with its own re-baseline (`sitewarrant eval` and `sitewarrant fixes` into `evals/runs/`)
+  and the new hash in every place the docs publish one; the hash is never hand-edited to match old runs.
 - **Rebinding is narrowed, not closed.** The browser is launched with
   `--host-resolver-rules=MAP <host> <ip>` for the page host, and an `httpx` response whose peer address
   is private is refused (`app/tools/guard.py::peer_is_blocked`). Third-party subresources are resolved by

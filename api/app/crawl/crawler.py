@@ -11,7 +11,7 @@ from protego import Protego
 from app.core.config import Settings, viewport_size
 from app.core.urls import page_key
 from app.core.version import compute_agent_version
-from app.crawl.links import is_crawlable, parse_html
+from app.crawl.links import is_crawlable, parse_html, same_host
 from app.crawl.models import (
     CrawlLimits,
     CrawlReport,
@@ -36,12 +36,6 @@ class CrawlFailed(RuntimeError):
 def normalize_url(url: str) -> str:
     """Drop the fragment: it never reaches the server, so it cannot identify a page."""
     return urldefrag(url.strip())[0]
-
-
-def same_host(url: str, host: str) -> bool:
-    """Discovery stays inside the audited host set; a link elsewhere is not followed."""
-    candidate = urlsplit(url).hostname
-    return candidate is not None and candidate.lower() == host.lower()
 
 
 async def render_links(
@@ -147,22 +141,23 @@ async def crawl(
         raise ValueError(f"{start_url} has no host to crawl")
 
     queue: deque[tuple[str, int, PageSource]] = deque()
+    hop_check = (
+        None
+        if ignore_robots
+        else robots_hop_check(settings.user_agent, allowed_private_hosts=allowed_private_hosts)
+    )
     if limits.include_sitemap:
         for loc in await sitemap_urls(
             start,
             user_agent=settings.user_agent,
             allowed_private_hosts=allowed_private_hosts,
             timeout_s=settings.page_timeout_ms / 1000,
+            hop_check=hop_check,
         ):
             if is_crawlable(loc) and same_host(loc, host):
                 queue.append((normalize_url(loc), 1, "sitemap"))
     queue.appendleft((start, 0, "start"))
 
-    hop_check = (
-        None
-        if ignore_robots
-        else robots_hop_check(settings.user_agent, allowed_private_hosts=allowed_private_hosts)
-    )
     seen: set[str] = set()
     pages: list[DiscoveredPage] = []
     policies: dict[str, Protego | None] = {}

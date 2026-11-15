@@ -97,6 +97,26 @@ def sitemap_site(origin: str) -> dict[str, Route]:
     }
 
 
+def sitemap_site_with_disallowed_sitemap(origin: str) -> dict[str, Route]:
+    """robots.txt forbids /sitemap.xml itself: the orphan page must not be seeded from it."""
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{origin}/orphan.html</loc></url>"
+        "</urlset>"
+    ).encode()
+    return {
+        "/robots.txt": (
+            200,
+            {"Content-Type": "text/plain"},
+            b"User-agent: *\nDisallow: /sitemap.xml\n",
+        ),
+        "/sitemap.xml": (200, {"Content-Type": "application/xml"}, sitemap),
+        "/": (200, {}, page("home", [])),
+        "/orphan.html": (200, {}, page("orphan", [])),
+    }
+
+
 def broken(origin: str) -> dict[str, Route]:
     return {
         "/robots.txt": ROBOTS_ALLOW_ALL,
@@ -221,6 +241,18 @@ async def test_sitemap_seeds_discovery_and_is_host_filtered(site) -> None:  # ty
     by_url = {page.url: page for page in report.pages}
     assert by_url[site.url("/orphan.html")].source == "sitemap"
     assert all("elsewhere.example" not in page.url for page in report.pages)
+
+
+@pytest.mark.parametrize("site", [sitemap_site_with_disallowed_sitemap], indirect=True)
+async def test_robots_refusing_the_sitemap_still_crawls_the_site(site) -> None:  # type: ignore[no-untyped-def]
+    """A sitemap robots.txt forbids is a sitemap this run does not have — not a failed crawl."""
+    report = await crawl(
+        site.url("/"),
+        limits=limits(include_sitemap=True),
+        settings=get_settings(),
+        allowed_private_hosts=ALLOW,
+    )
+    assert [page.url for page in report.pages] == [site.url("/")]
 
 
 @pytest.mark.parametrize("site", [broken], indirect=True)

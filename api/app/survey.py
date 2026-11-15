@@ -34,12 +34,12 @@ from app.core.db import session_scope
 from app.core.report import AgentSummaryOut, Report, build_report
 from app.core.urls import page_key
 from app.crawl.crawler import crawl as crawl_site
-from app.crawl.crawler import normalize_url, same_host
-from app.crawl.links import is_crawlable
+from app.crawl.crawler import normalize_url
+from app.crawl.links import is_crawlable, same_host
 from app.crawl.models import CrawlLimits, CrawlReport
 from app.crawl.sitemap import sitemap_urls
 from app.storage import repo
-from app.tools.robots import fetch_robots
+from app.tools.robots import fetch_robots, robots_hop_check
 
 FAILURE_CHARS = 300
 
@@ -276,6 +276,11 @@ async def sitemap_pages(
     timeout_s = settings.page_timeout_ms / 1000
     parts = urlsplit(url)
     origin = f"{parts.scheme}://{parts.netloc.strip()}/"
+    hop_check = (
+        None
+        if ignore_robots
+        else robots_hop_check(settings.user_agent, allowed_private_hosts=allowed_private_hosts)
+    )
     tried = url
     try:
         # `http_get` bounds each read, not the discovery: a sitemap host that drips a byte at a
@@ -288,6 +293,7 @@ async def sitemap_pages(
                 user_agent=settings.user_agent,
                 allowed_private_hosts=allowed_private_hosts,
                 timeout_s=timeout_s,
+                hop_check=hop_check,
             )
             if not entries and page_key(origin) != page_key(url):
                 entries = await sitemap_urls(
@@ -295,6 +301,7 @@ async def sitemap_pages(
                     user_agent=settings.user_agent,
                     allowed_private_hosts=allowed_private_hosts,
                     timeout_s=timeout_s,
+                    hop_check=hop_check,
                 )
                 tried = origin
     except TimeoutError as error:
@@ -302,7 +309,10 @@ async def sitemap_pages(
             f"reading /sitemap.xml of {url} took longer than {deadline_s:g} s"
         ) from error
     if not entries:
-        raise SitemapUnavailable(f"{tried} publishes no readable /sitemap.xml")
+        raise SitemapUnavailable(
+            f"{tried} publishes no /sitemap.xml this run may read "
+            "(absent, unreadable, or disallowed by robots.txt)"
+        )
     policy = (
         None
         if ignore_robots

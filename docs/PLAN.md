@@ -409,6 +409,11 @@ BFS с лимитами, sitemap.xml, JS-рендеринг при пустом 
 - Verify: `uv run sitewarrant crawl http://localhost:8081/ --allow-private --out pages.json` +
   `uv run pytest tests/crawl -q`
 
+**Дополнено 2026-11-15 (issue #25).** robots.txt применяется и к самому `/sitemap.xml`, и к каждому
+дочернему `<loc>` из `<sitemapindex>`; дочерний sitemap с чужим хостом не фетчится вовсе. Отказ
+политики означает «sitemap у этого прогона нет»: обход всё равно начинается со стартовой страницы, а
+sitemap-прогон падает с причиной. Детали и пере-замер — §19.7.
+
 ### P2 — детерминированный слой фактов (неделя 2–3)
 
 Все инструменты и три viewport. Наблюдения в БД, артефакты на диск.
@@ -589,7 +594,9 @@ pgvector (`rules.embedding`, `<=>`), команда `sitewarrant index-rules`, �
   брифы `ui`/`ux` изменились, детерминированный слой — нет, и корпус не несёт визуальных меток.
   Прогон 2026-11-15 после правки occlusion-пробы (`agent sha256:e132ad9b57c7f80a`, 326.2 с,
   `evals/runs/2026-11-15-baseline-occluder.json`) — тот же счёт в шестой раз: проба меняет то, какой
-  элемент чинит правка, а не что находит аудит.
+  элемент чинит правка, а не что находит аудит. Прогон после §19.7 (`agent sha256:eff87a8cd035afc0`,
+  318.0 с, `evals/runs/2026-11-15-baseline-sitemap-robots.json`) — тот же счёт в седьмой раз: правка в
+  `app/crawl/sitemap.py` меняет дискавери, а корпусный eval sitemap не читает.
   **Это пол — а не точность на реальном вебе:** генератор сажает ровно те дефекты, которые каталог
   обещает ловить, поэтому идеальный счёт означает «ни одна посаженная метка не потеряна и лишнего
   не придумано», а не «инструмент видит всё, что видит человек».
@@ -620,7 +627,7 @@ re-audit с диффом закрыто / осталось / новое и сп�
 - Acceptance: реальный патч фикстуры закрывает `SEO-TITLE` и `A11Y-LANG` и не добавляет ничего
   (`tests/integration/test_fixes_audit.py`); внесённый в тот же патч неразмеченный input
   попадает в `regressions` как `A11Y-LABEL`; по корпусу 48 из 48 правок применяются, закрывают
-  свою находку и не дают новых (`evals/runs/2026-11-15-fix-acceptance.json`,
+  свою находку и не дают новых (`evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json`,
   `tests/integration/test_fix_acceptance.py`).
 - Verify: `uv run sitewarrant reaudit <audit_id> --against-report old.json`
 
@@ -919,3 +926,41 @@ uv run sitewarrant labels --host example.com --out ../benchmark/live/example.jso
 отчёта; корневой sitemap, когда рядом со страницей его нет; сайт без sitemap даёт `failed` и ни одной
 строки в очереди; отмена во время discovery не ставит ничего; строка-диспетчер не вытесняет аудит
 страницы из `latest_audit_per_url`), `make check`.
+
+### 19.7 robots.txt и чужие хосты в sitemap (2026-11-15, issue #25)
+
+Два замечания к #24, которые касались `app/crawl/sitemap.py` и были отложены там намеренно: этот файл
+входит в `CRAWL_SOURCES`, поэтому правка в нём — пере-замер, а не довесок к другой работе.
+
+**Решение.**
+
+- `/sitemap.xml` и каждый дочерний `<loc>` из `<sitemapindex>` фетчатся с тем же `hop_check`, что и
+  страницы: `robots_hop_check(user_agent, allowed_private_hosts)`. robots.txt применяется к самому
+  sitemap, а не только к записям, которые он публикует, — sitemap это документ, который инструмент
+  скачивает.
+- Дочерний sitemap чужого хоста не фетчится вовсе: `same_host` переехал из `crawler.py` в
+  `links.py` рядом с `is_crawlable`, потому что `sitemap.py` не может импортировать краулер без цикла.
+  Записи sitemap по-прежнему проверяются на вызывающей стороне (`is_crawlable` + `same_host`), потому
+  что sitemap может перечислять что угодно.
+- Отказ политики (`RobotsDisallowed`, `RobotsUnavailable`), гейт SSRF или сетевая ошибка означают
+  «у этого прогона нет sitemap»: обход всё равно начинается со стартовой страницы и идёт по ссылкам, а
+  sitemap-прогон падает с причиной, где перечислены все три случая — «absent, unreadable, or disallowed
+  by robots.txt». Отказ политики не является находкой аудита.
+
+**Что это меняет в опубликованных числах.** `crawl_digest` (а с ним `agent_version`) сдвинулся:
+`sitemap.py`, `crawler.py` и `links.py` входят в `CRAWL_SOURCES`. Поэтому пере-замер, а не пере-подпись:
+
+| Артефакт | Что доказывает | Числа |
+| --- | --- | --- |
+| `evals/runs/2026-11-15-baseline-sitemap-robots.json` | корпус 8 сайтов / 104 страницы, `agent sha256:eff87a8cd035afc0`, 318.0 с | precision 1.0 (80/80), recall 1.0 (80/80), fp-rate 0.0 (0/80), медиана 3.05 с на страницу — как в шести прогонах до него |
+| `evals/runs/2026-11-15-fix-acceptance-sitemap-robots.json` | 48 находок, 48 правок, `agent sha256:eff87a8cd035afc0`, 472.6 с | applied 48/48, closed 48/48, regression-free 48/48 |
+| `evals/audits/2026-11-15-fixture-sitemap-robots.json` | фикстура, `agent sha256:eff87a8cd035afc0` | те же 14 находок (`blocker=2 major=11 minor=1`), 3.4 с |
+
+Одинаковые числа — ожидаемый результат: корпусный eval и `fixes` sitemap не читают, поэтому правка
+дискавери до них не доходит. Если бы они разошлись, это значило бы, что изменение не behaviour-preserving.
+
+**Приёмка.** `tests/crawl/test_sitemap.py` (дочерний `<loc>` чужого хоста не запрашивается; отказ
+политики оставляет прогон без sitemap), `tests/crawl/test_crawler.py`
+(`Disallow: /sitemap.xml` — orphan-страница не засевается, обход стартует со стартовой страницы),
+`tests/integration/test_sitemap_run.py` (sitemap-прогон на таком сайте падает `failed` с причиной и
+ничего не ставит в очередь), `make check`.
