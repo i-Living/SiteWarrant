@@ -195,22 +195,39 @@ async def _heartbeat(
 ) -> None:
     """Keep the lease alive while the audit runs; stop when another worker owns the row.
 
-    A failed renewal is not a lost lease by itself: the row stays ours until the lease we last
-    wrote runs out. The deadline is what decides — a database blip shorter than the lease is
-    retried, a longer one means another worker may already hold the row.
+    Every wait and the renewal itself are bounded by what is left of the lease. A renewal that is
+    still blocked when the lease runs out has to be abandoned, not awaited: the other worker may
+    already hold the row, and a success that lands afterwards would reset the deadline and hide it.
     """
     interval = max(1.0, context.lease_s / 3)
     deadline = time.monotonic() + context.lease_s
     while True:
-        await asyncio.sleep(interval)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            lease_lost.set()
+            return
+        # The sleep is bounded by the budget: a short lease, or a stalled loop, cannot carry the
+        # heartbeat past the deadline and renew afterwards.
+        await asyncio.sleep(min(interval, remaining))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            lease_lost.set()
+            return
         try:
             async with session_scope() as session:
-                renewed = await repo.renew_lease(
-                    session,
-                    audit_id=audit_id,
-                    worker_id=context.worker_id,
-                    lease_s=context.lease_s,
+                renewed = await asyncio.wait_for(
+                    repo.renew_lease(
+                        session,
+                        audit_id=audit_id,
+                        worker_id=context.worker_id,
+                        lease_s=context.lease_s,
+                    ),
+                    timeout=remaining,
                 )
+        except TimeoutError:
+            logger.warning("lease renewal for %s outlived the lease", audit_id)
+            lease_lost.set()
+            return
         except Exception:
             logger.warning("lease renewal for %s failed", audit_id, exc_info=True)
             if time.monotonic() >= deadline:
