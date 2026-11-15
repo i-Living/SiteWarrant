@@ -133,6 +133,70 @@ async def test_a_queued_audit_is_cancelled_at_once_and_a_running_one_is_asked() 
         assert await repo.cancel_requested(session, running_id) is True
 
 
+async def test_recovery_skips_an_audit_whose_facts_transaction_is_open() -> None:
+    """A page insert locks the audit row for key share, so recovery skips it instead of racing."""
+    await drain()
+    audit_id = await enqueue("facts-lock.invalid")
+    async with session_scope() as session:
+        await repo.claim_audit(session, worker_id="worker-a", lease_s=0)  # expired on arrival
+    async with session_scope() as facts:
+        await repo.save_page(
+            facts,
+            audit_id=audit_id,
+            url="http://facts-lock.invalid/",
+            key="facts-lock.invalid",
+            status_code=200,
+            render_mode="browser",
+        )
+        async with session_scope() as recovery:
+            await repo.requeue_expired(recovery, max_attempts=2)
+        async with session_scope() as check:
+            held = await repo.get_audit(check, audit_id)
+        # Recovery's `FOR UPDATE ... SKIP LOCKED` skipped the row the facts transaction holds.
+        assert held is not None and held.status == lifecycle.RUNNING
+        await facts.rollback()
+    async with session_scope() as recovery:
+        await repo.requeue_expired(recovery, max_attempts=2)
+    async with session_scope() as check:
+        after = await repo.get_audit(check, audit_id)
+    assert after is not None and after.status == lifecycle.QUEUED
+
+
+async def test_a_rejected_final_write_rolls_the_last_commit_back() -> None:
+    """A row reclaimed at the last stage: the report is fenced, and the findings go with it."""
+    await drain()
+    url = "http://localhost:8081/"
+    audit_id = await enqueue(url)
+    async with session_scope() as session:
+        await repo.claim_audit(session, worker_id="worker-a", lease_s=60)
+
+    async def reclaim(stage: str) -> None:
+        if stage != "report":
+            return
+        async with session_scope() as session:
+            row = await repo.get_audit(session, audit_id)
+            assert row is not None
+            row.worker_id = "worker-b"
+            await session.commit()
+
+    with pytest.raises(LeaseLost):
+        await run_audit(
+            url,
+            allow_private=True,
+            audit_id=audit_id,
+            worker_id="worker-a",
+            attempt=1,
+            progress=reclaim,
+        )
+    async with session_scope() as session:
+        row = await repo.get_audit(session, audit_id)
+        findings = await repo.findings_for_audit(session, audit_id)
+    assert row is not None
+    assert row.worker_id == "worker-b"
+    assert row.report_key is None
+    assert findings == []
+
+
 async def test_usage_from_two_attempts_of_one_audit_is_added_not_overwritten() -> None:
     """Totals are a SQL increment: two attempts recording at once must both count."""
     await drain()
