@@ -6,10 +6,13 @@ INTERACTIVE = "a[href], button, input, select, textarea, [role='button'], [role=
 
 PROBE_SCRIPT = f"""() => {{
   const MAX = {MAX_ITEMS};
+  // Root-anchored on purpose: a chain truncated at a fixed depth can name two elements in two
+  // identical subtrees, and the repair would restyle both. An nth-of-type chain from `html` names
+  // exactly one element by construction.
   const path = (el) => {{
     const parts = [];
     let node = el;
-    while (node && node.nodeType === 1 && parts.length < 6) {{
+    while (node && node.nodeType === 1) {{
       const parent = node.parentElement;
       let index = 1;
       if (parent) {{
@@ -22,6 +25,34 @@ PROBE_SCRIPT = f"""() => {{
       node = parent;
     }}
     return parts.join(' > ');
+  }};
+  // The element under the pointer is often a child of the element that is positioned over the
+  // target: the label inside an absolutely positioned banner, not the banner. A repair has to move
+  // the element that carries the position, so the probe records it instead of leaving the fixer to
+  // guess from a tag name.
+  // `relative` moves a box without taking it out of the flow, so `top: -40px` on a static-looking
+  // banner still covers its neighbours. It only counts when an inset is set: nearly every wrapper
+  // on a real page is `position: relative` with every inset `auto`, and that one carries no offset.
+  const shifted = (style) =>
+    ['top', 'right', 'bottom', 'left'].some((side) => {{
+      const value = style[side];
+      return value && value !== 'auto';
+    }});
+  const positioned = (el) => {{
+    let node = el;
+    while (node && node.nodeType === 1) {{
+      const style = getComputedStyle(node);
+      if (
+        style.position === 'absolute' ||
+        style.position === 'fixed' ||
+        style.position === 'sticky' ||
+        (style.position === 'relative' && shifted(style))
+      ) {{
+        return node;
+      }}
+      node = node.parentElement;
+    }}
+    return el;
   }};
   const hits = [];
   for (const element of document.querySelectorAll("{INTERACTIVE}")) {{
@@ -37,11 +68,14 @@ PROBE_SCRIPT = f"""() => {{
     const top = document.elementFromPoint(x, y);
     if (!top) continue;
     if (top === element || element.contains(top) || top.contains(element)) continue;
+    const cover = positioned(top);
     hits.push({{
       selector: path(element),
       tag: element.tagName.toLowerCase(),
       occluder_selector: path(top),
       occluder_tag: top.tagName.toLowerCase(),
+      occluder_positioned_selector: path(cover),
+      occluder_positioned_tag: cover.tagName.toLowerCase(),
     }});
     if (hits.length >= MAX) break;
   }}
@@ -61,6 +95,10 @@ class OccludedTarget(BaseModel):
     tag: str
     occluder_selector: str
     occluder_tag: str
+    # The element that carries the position (an ancestor of the one under the pointer). Empty on
+    # payloads recorded before the probe learned to look for it.
+    occluder_positioned_selector: str = ""
+    occluder_positioned_tag: str = ""
 
 
 async def probe(page: Page) -> list[OccludedTarget]:

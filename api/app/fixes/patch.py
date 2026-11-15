@@ -32,6 +32,9 @@ class Patch:
     before: str
     after: str
     note: str
+    # The finding this repair was computed for, as `reaudit.key_of` names it. Two findings of one
+    # rule on one page are two repairs, and a count has to say which one closed.
+    subject: str = ""
 
 
 def text_of(fragment: str) -> str:
@@ -159,18 +162,29 @@ def darken_until(hex_colour: str, background: str, target: float = 4.5) -> str:
 
 
 def selector_of(path: str) -> str:
-    """The last segment of a DOM path, as a CSS selector a stylesheet can use."""
-    segment = path.split(">")[-1].strip()
-    if not segment:
+    """A CSS selector for the element a DOM path names.
+
+    The probe's path is an `nth-of-type` chain with no classes in it. When the last segment also
+    carries a class or an id, that name is the stable selector a human would write; otherwise the
+    chain itself is valid CSS and is used as it stands: `header:nth-of-type(1) > div:nth-of-type(1)`
+    picks one element out of the page. A single bare tag names every element of that tag, so it is
+    refused instead of becoming a rule.
+    """
+    segments = [segment.strip() for segment in path.split(">") if segment.strip()]
+    if not segments:
         raise FixError("the occluder has no selector")
-    tag = segment.partition(":")[0]
-    classes = re.findall(r"\.([A-Za-z0-9_-]+)", tag)
+    last = segments[-1].partition(":")[0]
+    classes = re.findall(r"\.([A-Za-z0-9_-]+)", last)
     if classes:
         return "." + ".".join(classes)
-    identifier = re.search(r"#([A-Za-z0-9_-]+)", tag)
+    identifier = re.search(r"#([A-Za-z0-9_-]+)", last)
     if identifier:
         return "#" + identifier.group(1)
-    return tag.lower() if tag else "body"
+    if len(segments) > 1:
+        return " > ".join(segments)
+    raise FixError(
+        f"the occluder path {path!r} has no ancestors, so a rule would hit every element of its tag"
+    )
 
 
 def fix_occlusion(html: str, *, occluder_selector: str) -> tuple[str, str]:

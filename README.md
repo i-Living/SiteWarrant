@@ -64,8 +64,8 @@ that cannot.
 
 Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the matching rule live in
 [docs/PLAN.md](docs/PLAN.md). Unless a row names another source, the value comes from
-`evals/runs/2026-11-14-baseline-vision.json` — corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:0974495c97f1e7d5`, 2026-11-14. A metric with no run behind it stays `null`.
+`evals/runs/2026-11-15-baseline-occluder.json` — corpus `sha256:df240161c8d3e5ea`, agent
+`sha256:b6f6435fee6719ff`, 2026-11-15. A metric with no run behind it stays `null`.
 
 | Metric | Definition | Value |
 | --- | --- | --- |
@@ -75,9 +75,9 @@ Measured on a labelled benchmark of 8 sites and 104 pages. Definitions and the m
 | Duplicate finding rate | findings repeating the same page, rule and element | `0.0000` — 0/88 |
 | Pages audited | pages in the benchmark run | 104 (8 sites; 80 planted defects, 24 clean pages) |
 | Audit cost per 100 pages | estimated cost for 100 pages, extrapolated from one priced page | `$3.69` — an estimate, `0.036854 × 100`, from one fixture page with two agents ([report §3](docs/ENGINEERING_REPORT.md)); the corpus itself ran without agents, so there is no median across sites |
-| Median audit duration | wall clock per audit | `3.07 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 321.3 s |
-| Fix acceptance rate | accepted fixes / proposed fixes | `null` — no run artifact; the patch behaviour is pinned by `tests/test_fixes_patch.py` and `tests/integration/test_fixes_audit.py` |
-| Regression-free fix rate | re-audits with no new finding at all / applied fixes | `null` — no run artifact; re-audit behaviour is pinned by the same tests, on the fixture only |
+| Median audit duration | wall clock per audit | `3.05 s` per page — median of the run's 104 page durations, deterministic layer; the whole corpus took 319.3 s |
+| Fix acceptance rate | repairs that applied to the served source / repairs proposed | `1.0000` — 48/48, from `evals/runs/2026-11-15-fix-acceptance.json` (agent `sha256:b6f6435fee6719ff`, 473.3 s). A floor: the corpus is static, so a diff computed from the source it is applied to usually lands; what the run proves is that no repair was written that cannot be applied |
+| Regression-free fix rate | re-audits with no new finding at all / applied fixes | `1.0000` — 48/48 from the same run; every applied repair also closed the finding it was computed for (48/48), measured by re-auditing the patched page rather than by reading the diff |
 
 A zero denominator reports `null`, never `0`. Cost is an estimate from a versioned price table; tokens
 and call counts are the measured, tariff-independent values reported next to it.
@@ -131,8 +131,8 @@ Exit codes: `0` no blocker, `1` a blocker was proven, `2` the run itself failed.
 
 ## Verification
 
-Measured on 2026-11-14 against the fixture site, agent `sha256:0974495c97f1e7d5` (axe-core 4.14.0,
-10 SiteWarrant rules; run `evals/audits/2026-11-14-fixture-vision.json`):
+Measured on 2026-11-15 against the fixture site, agent `sha256:b6f6435fee6719ff` (axe-core 4.14.0,
+10 SiteWarrant rules; run `evals/audits/2026-11-15-fixture.json`):
 
 - 14 findings from the ten planted defects: `blocker=2 major=11 minor=1 info=0`. The banner
   covers five separate links, and each covered target is its own finding — collapsing them would
@@ -203,9 +203,10 @@ python3 ../benchmark/generate.py --check       # every page still matches the ge
 uv run sitewarrant eval --dataset ../benchmark --out ../evals/runs/latest.json
 ```
 
-Measured on 2026-11-14 over the whole corpus (104 pages, 80 planted defects, agent
-`sha256:0974495c97f1e7d5`, 321.3 s, `evals/runs/2026-11-14-baseline-vision.json` — the same score the
-2026-11-13 runs recorded under the previous agent version):
+Measured on 2026-11-15 over the whole corpus (104 pages, 80 planted defects, agent
+`sha256:b6f6435fee6719ff`, 319.3 s, `evals/runs/2026-11-15-baseline-occluder.json` — the same score every
+earlier run recorded; the change behind this version was the occlusion probe, and the fix measurements in
+`evals/runs/2026-11-15-fix-acceptance.json` carry the same version):
 
 - precision `1.0` (80/80), recall `1.0` (80/80), false-positive rate `0.0` (0/80);
 - pages with at least one unlabelled finding: `0/104`; duplicate rate `0.0` (0/88);

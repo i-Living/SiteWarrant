@@ -93,6 +93,19 @@ reviews:
           measured. Flag any code that presents the dollar figure as measured.
         - Eval fixtures must not reach the public network.
 
+    - path: "api/app/fixes/**"
+      instructions: |
+        A repair never invents text: alt text, link names and button names stay recommendations,
+        and a patch that would write one is a defect, not a fix.
+        - A patch is computed against the served source (`--site-dir`); a diff of the captured HTML
+          reorders attributes and is advisory, and the report must say so.
+        - A repair is measured one finding at a time (`measure.py`): `applied`, `closed` and
+          `regression_free` are three different claims, and a ratio must carry its denominator.
+          A zero denominator yields null, never 0.0.
+        - Every new finding after a repair is a regression; nothing may grade which ones are fine.
+        - The occlusion repair must move the element that carries the position (the probe records
+          the nearest positioned ancestor), never a bare tag that would restyle the page.
+
     - path: "api/app/api/**"
       instructions: |
         HTTP surface: pydantic models in, pydantic models out, small typed functions.

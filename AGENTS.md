@@ -12,7 +12,8 @@ disagrees with the plan, the plan is right — fix this file in the same change.
 Playwright capture, eight deterministic channels at three viewports, the rule engine, the crawler, the
 MCP fact server, eight budgeted agents behind the validator, the vision pass (`page_image`: `ui` and
 `ux` read the full screenshot of each viewport as an image), the deterministic chief layer, the eval
-runner over a frozen corpus, fixes with re-audits, and traces with a versioned cost estimate. `web/`
+runner over a frozen corpus, fixes with re-audits and a measured fix-acceptance run, and traces
+with a versioned cost estimate. `web/`
 is a closed Next.js interface: a ledger of audited hosts, one page per host, a list of current and
 recent runs, a run form, the stored report, and a login gate in `web/middleware.ts`. `infra/` brings up
 Postgres, Redis and a fixture site with ten planted defects, and `infra/demo.yml` runs the same code on
@@ -29,7 +30,7 @@ Still open, and the plan says so in each case:
 The audit of a public site at 50+ pages (§16.1) is done: `evals/surveys/2026-11-13-docs-python.json`,
 58 audited pages, two that timed out and stayed in the denominator as failures.
 
-The commands below were executed at least once on 2026-11-12 or 2026-11-13 and are annotated with the
+The commands below were executed at least once between 2026-11-12 and 2026-11-15 and are annotated with the
 phase that makes them meaningful. Do not add a command to this file that has not been run.
 
 ## Invariants
@@ -75,6 +76,22 @@ phase that makes them meaningful. Do not add a command to this file that has not
   sentence: fewer words, never fewer facts, never a new finding.
 - **Every new finding is a regression.** `reaudit` does not decide which new findings are acceptable;
   it lists them and exits `1`, and `diff_findings` keeps closed, remaining and new disjoint.
+- **A repair is measured one finding at a time, and applying is not fixing.** `fix` composes a page's
+  repairs into one diff, which is right for a human and wrong for a count: a composed diff cannot say
+  which repair failed to apply. `sitewarrant fixes` gives each repair its own diff, applies it to a
+  copy of the site and re-audits the page, and the artifact keeps `applied`, `closed` and
+  `regression_free` apart — a diff that lands, the finding it was computed for going away, and a
+  re-audit that finds no new findings (other findings may stay open: a repair answers one). A rate
+  of 1.0 on `applied` with `closed` below it is the fix layer failing.
+- **The element under the pointer is not the element that is positioned.** The occlusion probe records
+  the chain `elementFromPoint` returns (`nth-of-type`, no classes, anchored at `html` — a fixed-depth
+  cap can name two elements in identical subtrees) and, since 2026-11-15, the nearest ancestor that
+  carries an offset — `absolute`, `fixed`, `sticky`, or `relative` with a `top`/`right`/`bottom`/
+  `left` set. A plain `position: relative` wrapper carries no offset and is skipped, or every repair
+  would move the wrapper. A repair that names the element
+  under the pointer — `span { position: static !important }` — applies cleanly, moves unrelated
+  elements and closes nothing; the corpus found it, the fixture had not. `selector_of` prefers a
+  class or an id, falls back to the measured chain (valid CSS), and refuses a single bare tag.
 - **An image is not a measurement.** `page_image` hands the model the stored full-page capture, one
   per viewport; every number in a finding still comes from an observation and the validator checks it,
   so a size or a ratio judged from the picture is rejected. The tool refuses — artifacts off, a
@@ -91,8 +108,10 @@ These are not style preferences. Breaking one silently invalidates the published
 3. **Root causes are clustered deterministically.** The cluster key is built from shared layout
    component, shared DOM ancestor and rule family. The model writes rationale and impact only. A cluster
    is a root cause only if its symptoms span at least two categories.
-4. **`agent_version` is a hash.** sha256 over prompts, rule corpus, model identifiers and tool config.
-   Changing a prompt creates a new version; every audit and eval run records it.
+4. **`agent_version` is a hash.** sha256 over prompts, rule corpus, model identifiers and tool config —
+   probes and the per-agent tool surface included. Changing a prompt, a probe or the tools an agent may
+   call creates a new version; every audit and eval run records it, and a recorded baseline is stale
+   until it is re-run.
 5. **Numbers carry their basis.** Any published figure comes from a run artifact under `evals/runs/`
    with a denominator and a date. A zero denominator yields `null`, not `0`. Cost is labelled an
    estimate; tokens and call counts are measured.
@@ -145,6 +164,7 @@ uv run sitewarrant prompt-check --baseline ../evals/runs/base.json --candidate .
 uv run sitewarrant fix <audit_id> --site-dir ../benchmark/fixtures/site --out fixes/<audit_id>
 uv run sitewarrant reaudit <audit_id> --against-report old.json \
   --patch fixes/<audit_id>/fixes.patch --site-dir ../benchmark/fixtures/site
+uv run sitewarrant fixes --dataset ../benchmark --out ../evals/runs/2026-11-15-fix-acceptance.json
 
 # MCP fact server [P3, verified]: there is no console script — the orchestrator spawns it over stdio
 uv run python -m app.mcp.server                    # needs SITEWARRANT_MCP_AUDIT_ID, one audit per process
@@ -183,7 +203,8 @@ api/app/rules/     catalog.py (10 rules), engine.py (facts to findings), corpus,
 api/app/agents/    specs, prompts/, runner (budgeted loop), validator, orchestrator, llm client
 api/app/chief/     anchor (where a finding lives), cluster (dedupe, root causes, priority) and
                    narrate (one model call explaining the clusters) with prompts/chief.md
-api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new)
+api/app/fixes/     patch (five mechanical rules), recommend (every finding), reaudit (closed/new),
+                   measure (fix acceptance and fix safety over the corpus)
 api/app/eval/      dataset (manifest and digest), metrics (denominators), runner, compare
 api/app/mcp/       fact server (stdio, one audit per process, seven tools including `page_image`, the
                    full-page capture as an image) and the agent loop's MCP client
@@ -258,7 +279,8 @@ documented residual: fine for a demo, wrong for a crawl of 50 pages.
 ## Pitfalls
 
 - **Network tests flake.** Third-party sites change hourly. CI uses the fixture site; the real benchmark
-  runs nightly and is not a merge gate.
+  runs weekly — `.github/workflows/eval.yml`, Monday 04:00 UTC, plus `workflow_dispatch` — and is
+  not a merge gate.
 - **Lighthouse is noisy on a VPS.** Take the median of three runs, never a single number. Performance
   figures stay out of CI gates.
 - **INP cannot be measured in a lab.** Use TBT as a proxy and say so in the report. Do not label TBT as INP.

@@ -1,0 +1,149 @@
+{
+  "context": {
+    "dataset_digest": "sha256:df240161c8d3e5ea",
+    "dataset_version": 1,
+    "agent_version": "sha256:b6f6435fee6719ff",
+    "viewports": [
+      "390x844",
+      "768x1024",
+      "1440x900"
+    ],
+    "agents": [],
+    "model": null,
+    "store_artifacts": false,
+    "started_at": "2026-11-14T23:02:00.775754Z",
+    "finished_at": "2026-11-14T23:09:54.048526Z",
+    "duration_s": 473.3
+  },
+  "totals": {
+    "findings": 48,
+    "proposed": 48,
+    "applied": 48,
+    "closed": 48,
+    "regression_free": 48,
+    "fix_acceptance_rate": 1.0,
+    "regression_free_fix_rate": 1.0
+  },
+  "per_site": {
+    "northwind": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "saltmarsh": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "lumen": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "kilnhouse": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "fernhollow": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "tidewater": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "oatfield": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "bright-anvil": {
+      "findings": 6,
+      "proposed": 6,
+      "applied": 6,
+      "closed": 6,
+      "regression_free": 6,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    }
+  },
+  "per_rule": {
+    "A11Y-LANG": {
+      "findings": 8,
+      "proposed": 8,
+      "applied": 8,
+      "closed": 8,
+      "regression_free": 8,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "LAYOUT-OCCLUSION": {
+      "findings": 16,
+      "proposed": 16,
+      "applied": 16,
+      "closed": 16,
+      "regression_free": 16,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "SEO-H1": {
+      "findings": 8,
+      "proposed": 8,
+      "applied": 8,
+      "closed": 8,
+      "regression_free": 8,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "SEO-META-DESC": {
+      "findings": 8,
+      "proposed": 8,
+      "applied": 8,
+      "closed": 8,
+      "regression_free": 8,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    },
+    "SEO-TITLE": {
+      "findings": 8,
+      "proposed": 8,
+      "applied": 8,
+      "closed": 8,
+      "regression_free": 8,
+      "fix_acceptance_rate": 1.0,
+      "regression_free_fix_rate": 1.0
+    }
+  },
+  "not_applied": []
+}
