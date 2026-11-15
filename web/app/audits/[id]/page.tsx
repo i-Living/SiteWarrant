@@ -1,8 +1,20 @@
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { SeverityLine } from "../../components/severity-line";
+import { Kpi } from "../../components/kpi";
 import { StatusStamp } from "../../components/status-stamp";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
+import { Progress } from "../../components/ui/progress";
 import { type AuditSummary, apiBase, getAudit } from "../../lib/audits";
-import { formatDuration, formatMoment, splitSite } from "../../lib/format";
+import {
+  formatCostEstimate,
+  formatDuration,
+  formatMoment,
+  splitSite,
+} from "../../lib/format";
+import { SEVERITY_ORDER, severityStyle } from "../../lib/severity";
+import { cn } from "../../lib/utils";
 
 type Evidence = {
   kind: string;
@@ -52,6 +64,10 @@ type Report = {
     root_causes: number;
     duplicates_removed: number;
     duplicate_rate: number;
+    tokens_in?: number;
+    tokens_out?: number;
+    llm_calls?: number;
+    cost_estimate_usd?: number | null;
   };
   findings: Finding[];
   root_causes: RootCause[];
@@ -67,10 +83,11 @@ async function loadReport(auditId: string): Promise<Report | null> {
   return (await response.json()) as Report;
 }
 
-function FindingItem({ finding }: { finding: Finding }) {
+function FindingItem({ finding, last }: { finding: Finding; last: boolean }) {
+  const style = severityStyle(finding.severity);
   const meta = [
-    finding.category,
     finding.severity,
+    finding.category,
     `priority ${finding.priority}`,
   ];
   if (finding.criterion !== null) {
@@ -80,83 +97,437 @@ function FindingItem({ finding }: { finding: Finding }) {
   }
 
   return (
-    <li className="finding" data-severity={finding.severity}>
-      <span className="finding-rail" aria-hidden="true" />
-      <div className="finding-body">
-        <h4>
-          {finding.title} <span className="rule">{finding.rule_id}</span>
-        </h4>
-        <p className="finding-meta">{meta.join(" · ")}</p>
-        <p className="finding-summary">{finding.summary}</p>
-        <div className="finding-fix">
-          <span className="label">Fix</span>
-          <p>{finding.suggested_fix}</p>
-        </div>
-        <div className="evidence">
-          <span className="label">Evidence</span>
-          {finding.evidence.map((item) => (
-            <div
-              className="evidence-item"
-              key={`${item.kind}-${item.observation_id}-${item.excerpt ?? ""}`}
-            >
-              <span className="evidence-kind">{item.kind}</span>
-              <pre>{item.excerpt ?? item.observation_id}</pre>
-            </div>
-          ))}
-        </div>
+    <div className={cn("py-3.5", !last && "border-b border-border/70")}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          aria-hidden="true"
+          className={cn("size-1.5 rounded-full", style.dot)}
+        />
+        <h4 className="text-sm font-medium">{finding.title}</h4>
+        <Badge variant="muted" className="font-mono text-[10px]">
+          {finding.rule_id}
+        </Badge>
       </div>
-    </li>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {meta.join(" · ")}
+      </p>
+      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+        {finding.summary}
+      </p>
+      <p className="mt-2 flex gap-2 text-sm leading-relaxed">
+        <span className="mt-0.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Fix
+        </span>
+        <span className="text-foreground/80">{finding.suggested_fix}</span>
+      </p>
+      <details className="group mt-2 rounded-md border border-border/70 bg-muted/40">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 font-mono text-[11px] text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            {finding.evidence[0]?.excerpt ??
+              finding.evidence[0]?.observation_id ??
+              "no excerpt"}
+          </span>
+          <span className="shrink-0 text-[10px]">
+            {finding.evidence.length}{" "}
+            {finding.evidence.length === 1 ? "item" : "items"}
+          </span>
+          <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+        </summary>
+        <ul className="border-t border-border/70 px-2.5 py-2">
+          {finding.evidence.map((item) => (
+            <li
+              key={`${item.kind}-${item.observation_id}-${item.excerpt ?? ""}`}
+              className="flex gap-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+            >
+              <span className="w-16 shrink-0 text-foreground/60">
+                {item.kind}
+              </span>
+              <span className="min-w-0 break-words">
+                {item.excerpt ?? item.observation_id}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
   );
 }
 
-function Unavailable({
-  id,
+function CauseCard({ cause }: { cause: RootCause & { findings: Finding[] } }) {
+  const style = severityStyle(cause.severity);
+
+  return (
+    <Card className="gap-0 py-0">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className={cn(
+              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+              style.badge,
+            )}
+          >
+            <AlertTriangle className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">{cause.label}</h3>
+              <Badge
+                variant="outline"
+                className={cn("capitalize", style.badge)}
+              >
+                {cause.severity}
+              </Badge>
+            </div>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {cause.anchor}
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {cause.categories.map((category) => (
+                <Badge key={category} variant="muted" className="text-[10px]">
+                  {category}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+        <Badge variant="muted" className="font-mono text-[11px]">
+          P{cause.priority}
+        </Badge>
+      </div>
+
+      <p className="mt-3 px-4 text-sm leading-relaxed text-muted-foreground">
+        {cause.summary}
+      </p>
+      {cause.rationale !== "" && (
+        <p className="mt-1.5 px-4 text-xs leading-relaxed text-muted-foreground/80">
+          {cause.rationale}
+        </p>
+      )}
+
+      <div className="mt-3 border-t border-border bg-muted/30 px-4 pt-1 pb-1">
+        <p className="mb-1 pt-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Findings in this block · {cause.finding_ids.length}
+        </p>
+      </div>
+      <div className="px-4">
+        {cause.findings.map((finding, position) => (
+          <FindingItem
+            key={finding.id}
+            finding={finding}
+            last={position === cause.findings.length - 1}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function scoreLabel(name: string): string {
+  const labels: Record<string, string> = {
+    a11y: "Accessibility",
+    seo: "SEO",
+    ui: "UI",
+    ux: "UX",
+    i18n: "i18n",
+  };
+  return labels[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function SeverityBars({ counts }: { counts: Record<string, number> }) {
+  const total = SEVERITY_ORDER.reduce(
+    (sum, key) => sum + (counts[key] ?? 0),
+    0,
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      {SEVERITY_ORDER.map((key) => {
+        const count = counts[key] ?? 0;
+        return (
+          <div key={key} className="flex items-center gap-2 text-xs">
+            <span className="w-16 capitalize text-muted-foreground">{key}</span>
+            <Progress
+              value={count}
+              max={total}
+              className="flex-1"
+              indicatorClassName={severityStyle(key).bar}
+            />
+            <span className="w-5 text-right font-medium tabular-nums">
+              {count}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Panel({
+  report,
   summary,
+  counts,
+  categories,
+  selected,
 }: {
-  id: string;
+  report: Report;
   summary: AuditSummary | null;
+  counts: Record<string, number>;
+  categories: string[];
+  selected: string | null;
 }) {
+  const scores = Object.entries(report.summary.scores);
+  const startedAt = summary?.started_at ?? report.generated_at;
+  const finishedAt = summary?.finished_at ?? null;
+  const duration = summary?.duration_ms ?? report.summary.duration_ms;
+  const tokensIn = report.summary.tokens_in;
+  const tokensOut = report.summary.tokens_out;
+  const calls = report.summary.llm_calls;
+  const cost = report.summary.cost_estimate_usd ?? null;
+
+  return (
+    <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+      <Card className="gap-3">
+        <CardContent className="flex flex-col gap-4 px-4">
+          <section>
+            <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Severity
+            </h3>
+            <div className="mt-2.5">
+              <SeverityBars counts={counts} />
+            </div>
+          </section>
+
+          {scores.length > 0 && (
+            <section className="border-t border-border pt-3">
+              <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Direction scores
+              </h3>
+              <div className="mt-2.5 flex flex-col gap-2">
+                {scores.map(([name, score]) => (
+                  <div key={name} className="flex items-center gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {scoreLabel(name)}
+                    </span>
+                    <span className="w-20 shrink-0">
+                      <Progress
+                        value={score}
+                        max={100}
+                        indicatorClassName="bg-foreground/70"
+                      />
+                    </span>
+                    <span className="w-7 text-right font-medium tabular-nums">
+                      {Math.round(score)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="border-t border-border pt-3">
+            <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Run
+            </h3>
+            <dl className="mt-2.5 flex flex-col gap-1.5 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Started</dt>
+                <dd className="text-right">{formatMoment(startedAt)}</dd>
+              </div>
+              {finishedAt !== null && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Finished</dt>
+                  <dd className="text-right">{formatMoment(finishedAt)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Duration</dt>
+                <dd className="text-right tabular-nums">
+                  {formatDuration(duration)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Pages</dt>
+                <dd className="text-right tabular-nums">
+                  {report.summary.pages_audited}
+                </dd>
+              </div>
+              {tokensIn !== undefined && tokensOut !== undefined && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Tokens</dt>
+                  <dd className="text-right tabular-nums">
+                    {tokensIn.toLocaleString("en-GB")} in ·{" "}
+                    {tokensOut.toLocaleString("en-GB")} out
+                  </dd>
+                </div>
+              )}
+              {calls !== undefined && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Model calls</dt>
+                  <dd className="text-right tabular-nums">{calls}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Cost estimate</dt>
+                <dd className="text-right tabular-nums">
+                  {formatCostEstimate(cost)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Agent</dt>
+                <dd
+                  className="max-w-[11rem] truncate text-right font-mono text-[11px]"
+                  title={report.agent_version}
+                >
+                  {report.agent_version.replace("sha256:", "")}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="border-t border-border pt-3">
+            <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Categories
+            </h3>
+            <ul className="mt-2.5 flex flex-col gap-1">
+              <li>
+                <Link
+                  href={`/audits/${report.audit_id}`}
+                  aria-current={selected === null ? "true" : undefined}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-accent",
+                    selected === null
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-3.5 items-center justify-center rounded-[4px] border",
+                      selected === null
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border",
+                    )}
+                  >
+                    {selected === null && (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="size-2.5"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M20 6 9 17l-5-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                        />
+                      </svg>
+                    )}
+                  </span>
+                  All findings
+                  <span className="ml-auto tabular-nums text-muted-foreground">
+                    {report.findings.length}
+                  </span>
+                </Link>
+              </li>
+              {categories.map((name) => {
+                const isSelected = selected === name;
+                const count = report.findings.filter(
+                  (finding) => finding.category === name,
+                ).length;
+                return (
+                  <li key={name}>
+                    <Link
+                      href={`/audits/${report.audit_id}?category=${encodeURIComponent(name)}`}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-accent",
+                        isSelected
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex size-3.5 items-center justify-center rounded-[4px] border",
+                          isSelected
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border",
+                        )}
+                      >
+                        {isSelected && (
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="size-2.5"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M20 6 9 17l-5-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                            />
+                          </svg>
+                        )}
+                      </span>
+                      {name}
+                      <span className="ml-auto tabular-nums text-muted-foreground">
+                        {count}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </CardContent>
+      </Card>
+
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+        Counts come from the stored report. Tokens and call counts are measured;
+        the dollar figure is an estimate from the pinned price table. A run
+        without a report keeps no numbers here.
+      </p>
+    </div>
+  );
+}
+
+function Unavailable({ summary }: { summary: AuditSummary | null }) {
   const { host } = splitSite(summary?.site ?? "");
   const reason =
     summary === null
       ? "No audit with this id exists."
-      : summary.status === "running"
-        ? "The run is still going; the report appears when it finishes."
-        : summary.status === "failed"
-          ? "The run failed before a report was written."
-          : "The stored report could not be read.";
+      : summary.status === "queued"
+        ? "The run is queued; the report appears when a worker finishes it."
+        : summary.status === "running"
+          ? "The run is still going; the report appears when it finishes."
+          : summary.status === "failed"
+            ? "The run failed before a report was written."
+            : summary.status === "cancelled"
+              ? "The run was cancelled; no report was written."
+              : "The stored report could not be read.";
 
   return (
-    <main>
-      <p className="eyebrow">
-        <Link href="/">Sites</Link> <span className="sep">/</span>{" "}
-        {summary !== null && host !== "" && (
-          <>
-            <Link href={`/sites/${encodeURIComponent(host)}`}>{host}</Link>{" "}
-            <span className="sep">/</span>{" "}
-          </>
-        )}
-        {id.slice(0, 8)}
-      </p>
-      <h1>{host === "" ? "Report unavailable" : host}</h1>
+    <>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {host === "" ? "Report unavailable" : host}
+      </h1>
       {summary !== null && (
-        <p className="run-meta">
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <StatusStamp status={summary.status} />
           <span>started {formatMoment(summary.started_at)}</span>
-        </p>
-      )}
-      <p className="lede">{reason}</p>
-      {summary?.error != null && (
-        <div className="notice">
-          <p>{summary.error}</p>
         </div>
       )}
-      <p>
-        <Link className="button-link" href="/audits">
-          Back to runs
-        </Link>
-      </p>
-    </main>
+      <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{reason}</p>
+      {summary?.error != null && (
+        <Card className="mt-4 border-red-200 bg-red-50/60">
+          <CardContent className="py-1 font-mono text-xs text-red-800">
+            {summary.error}
+          </CardContent>
+        </Card>
+      )}
+      <Button asChild variant="outline" className="mt-4">
+        <Link href="/audits">Back to runs</Link>
+      </Button>
+    </>
   );
 }
 
@@ -172,7 +543,7 @@ export default async function AuditPage({
   const [report, summary] = await Promise.all([loadReport(id), getAudit(id)]);
 
   if (report === null) {
-    return <Unavailable id={id} summary={summary} />;
+    return <Unavailable summary={summary} />;
   }
 
   const { host } = splitSite(report.site);
@@ -191,14 +562,16 @@ export default async function AuditPage({
   const causes = report.root_causes
     .map((cause) => ({
       ...cause,
-      finding_ids: cause.finding_ids.filter((findingId) => byId.has(findingId)),
+      findings: cause.finding_ids
+        .map((findingId) => byId.get(findingId))
+        .filter((finding): finding is Finding => finding !== undefined),
     }))
-    .filter((cause) => cause.finding_ids.length > 0);
+    .filter((cause) => cause.findings.length > 0);
   const grouped = new Set(causes.flatMap((cause) => cause.finding_ids));
   const ungrouped = shown
     .filter((finding) => !grouped.has(finding.id))
     .sort((left, right) => right.priority - left.priority);
-  // The verdict line counts what is on screen, so a filtered report does not show the
+  // The verdict counts what is on screen, so a filtered report does not show the
   // unfiltered severity split above a shorter list.
   const shownBySeverity = shown.reduce<Record<string, number>>(
     (counts, item) => {
@@ -207,162 +580,167 @@ export default async function AuditPage({
     },
     {},
   );
-  // Unfiltered, the verdict is the report's own summary — the same numbers the artifact
-  // recorded, not a recount of them. A filtered view counts the subset on screen.
   const verdictSeverity =
     selected === null ? report.summary.by_severity : shownBySeverity;
   const verdictTotal =
     selected === null ? report.summary.findings_total : shown.length;
+  const severityChips = SEVERITY_ORDER.filter(
+    (key) => (verdictSeverity[key] ?? 0) > 0,
+  );
 
   return (
-    <main>
-      <p className="eyebrow">
-        <Link href="/">Sites</Link> <span className="sep">/</span>{" "}
-        <Link href={`/sites/${encodeURIComponent(host)}`}>{host}</Link>{" "}
-        <span className="sep">/</span> {report.audit_id.slice(0, 8)}
-      </p>
-
-      <header className="report-head">
-        <h1>{host}</h1>
-        <p className="report-url">{report.site}</p>
-        <p className="run-meta">
-          <StatusStamp status={report.status} />
-          <span>
-            {summary === null
-              ? formatMoment(report.generated_at)
-              : formatMoment(summary.finished_at ?? summary.started_at)}
-          </span>
-          {summary?.duration_ms != null && (
-            <span>took {formatDuration(summary.duration_ms)}</span>
-          )}
-          <span>
-            {report.summary.pages_audited}{" "}
-            {report.summary.pages_audited === 1 ? "page" : "pages"}
-          </span>
-          <span className="agent">agent {report.agent_version}</span>
-        </p>
+    <>
+      <header className="mb-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">
+                {host}
+              </h1>
+              <StatusStamp status={report.status} />
+              {selected !== null && (
+                <Badge variant="outline">filtered: {selected}</Badge>
+              )}
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+              {report.site}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {formatMoment(
+                  summary?.finished_at ??
+                    summary?.started_at ??
+                    report.generated_at,
+                )}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {report.summary.pages_audited}{" "}
+                {report.summary.pages_audited === 1 ? "page" : "pages"}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>run {report.audit_id.slice(0, 8)}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/sites/${encodeURIComponent(host)}`}>Open site</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={`/api/audits/${report.audit_id}/report`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Report JSON
+              </a>
+            </Button>
+          </div>
+        </div>
       </header>
 
-      <p className="filter-line">
-        <span>Category</span>
-        <Link
-          href={`/audits/${report.audit_id}`}
-          aria-current={selected === null ? "true" : undefined}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          label="Findings"
+          value={verdictTotal}
+          hint={
+            selected === null
+              ? "after dedupe"
+              : `of ${report.summary.findings_total}`
+          }
         >
-          all
-        </Link>
-        {categories.map((name) => (
-          <Link
-            key={name}
-            href={`/audits/${report.audit_id}?category=${encodeURIComponent(name)}`}
-            aria-current={selected === name ? "true" : undefined}
-          >
-            {name}
-          </Link>
-        ))}
-      </p>
-
-      <div className="verdict">
-        <div className="verdict-total">
-          <strong>{verdictTotal}</strong>
-          <span>
-            {selected === null
-              ? verdictTotal === 1
-                ? "finding"
-                : "findings"
-              : `of ${report.summary.findings_total} · ${selected}`}
-          </span>
-        </div>
-        <SeverityLine
-          counts={verdictSeverity}
-          total={verdictTotal}
-          status={report.status}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+            {severityChips.length === 0 ? (
+              <span className="text-muted-foreground">none measured</span>
+            ) : (
+              severityChips.map((key) => (
+                <span
+                  key={key}
+                  className={cn(
+                    "inline-flex items-center gap-1.5",
+                    severityStyle(key).text,
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      severityStyle(key).dot,
+                    )}
+                  />
+                  {verdictSeverity[key]} {key}
+                </span>
+              ))
+            )}
+          </div>
+        </Kpi>
+        <Kpi
+          label="Root causes"
+          value={causes.length}
+          hint={
+            causes.length === 1
+              ? "block that repeats across categories"
+              : "blocks that repeat across categories"
+          }
         />
-        <div className="verdict-fact">
-          <strong>{causes.length}</strong>
-          <span>
-            {causes.length === 1 ? "root cause" : "root causes"}
-            {selected !== null ? " with a finding here" : ""}
-          </span>
-        </div>
-        <div className="verdict-fact">
-          <strong>{report.summary.duplicates_removed}</strong>
-          <span>duplicates merged</span>
-        </div>
+        <Kpi
+          label="Duplicates merged"
+          value={report.summary.duplicates_removed}
+          hint={`${Math.round(report.summary.duplicate_rate * 100)}% of candidates`}
+        />
+        <Kpi
+          label="Cost estimate"
+          value={formatCostEstimate(report.summary.cost_estimate_usd ?? null)}
+          hint={
+            report.summary.llm_calls === undefined
+              ? "from the pinned price table"
+              : `${report.summary.llm_calls} model calls`
+          }
+        />
       </div>
 
-      {Object.keys(report.summary.scores).length > 0 && (
-        <div className="score-line">
-          <span className="score-label">Direction scores</span>
-          {Object.entries(report.summary.scores).map(([name, score]) => (
-            <span key={name} className="score">
-              <span>{name}</span>
-              <strong>{Math.round(score)}</strong>
-            </span>
-          ))}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20.5rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {causes.length === 0 ? (
+            <Card>
+              <CardContent className="py-5 text-sm text-muted-foreground">
+                {selected === null
+                  ? "No block has symptoms in two categories, so no finding was grouped into a root cause."
+                  : `No root cause has a finding in ${selected} on this page.`}
+              </CardContent>
+            </Card>
+          ) : (
+            causes.map((cause) => <CauseCard key={cause.id} cause={cause} />)
+          )}
+
+          {ungrouped.length > 0 && (
+            <Card className="gap-0 py-0">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                  Findings without a shared cause
+                </h3>
+                <Badge variant="muted">{ungrouped.length}</Badge>
+              </div>
+              <div className="border-t border-border px-4">
+                {ungrouped.map((finding, position) => (
+                  <FindingItem
+                    key={finding.id}
+                    finding={finding}
+                    last={position === ungrouped.length - 1}
+                  />
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
-      )}
 
-      <section>
-        <h2 className="section-label">
-          <span>Root causes</span>
-          <span className="section-count">{causes.length}</span>
-        </h2>
-        {causes.length === 0 ? (
-          <p className="empty">
-            {selected === null
-              ? "No block has symptoms in two categories, so no finding was grouped into a root cause."
-              : `No root cause has a finding in ${selected} on this page.`}
-          </p>
-        ) : (
-          causes.map((cause) => (
-            <article
-              key={cause.id}
-              className="cause"
-              data-severity={cause.severity}
-            >
-              <header className="cause-head">
-                <div>
-                  <p className="cause-anchor">{cause.anchor}</p>
-                  <h3>{cause.label === "" ? cause.anchor : cause.label}</h3>
-                </div>
-                <p className="cause-side">
-                  <span className="cause-tags">
-                    {cause.categories.map((category) => (
-                      <span key={category}>{category}</span>
-                    ))}
-                  </span>
-                  <span>priority {cause.priority}</span>
-                </p>
-              </header>
-              <p className="cause-summary">{cause.summary}</p>
-              <p className="cause-rationale">{cause.rationale}</p>
-              <ol className="findings">
-                {cause.finding_ids.map((findingId) => {
-                  const finding = byId.get(findingId);
-                  return finding ? (
-                    <FindingItem key={findingId} finding={finding} />
-                  ) : null;
-                })}
-              </ol>
-            </article>
-          ))
-        )}
-      </section>
-
-      {ungrouped.length > 0 && (
-        <section>
-          <h2 className="section-label">
-            <span>Findings without a shared cause</span>
-            <span className="section-count">{ungrouped.length}</span>
-          </h2>
-          <ol className="findings">
-            {ungrouped.map((finding) => (
-              <FindingItem key={finding.id} finding={finding} />
-            ))}
-          </ol>
-        </section>
-      )}
-    </main>
+        <Panel
+          report={report}
+          summary={summary}
+          counts={verdictSeverity}
+          categories={categories}
+          selected={selected}
+        />
+      </div>
+    </>
   );
 }
