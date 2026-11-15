@@ -8,7 +8,7 @@ instead of rounding it into existence.
 ## 1. What the deterministic layer does on the benchmark
 
 Run `evals/runs/2026-11-15-baseline-occluder.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:b6f6435fee6719ff`, 2026-11-15, 319.3 s, whole corpus (8 synthetic sites, 104 pages, 80
+`sha256:e132ad9b57c7f80a`, 2026-11-15, 326.2 s, whole corpus (8 synthetic sites, 104 pages, 80
 planted defects, 24 clean pages). Every earlier run recorded the same score under its own agent version;
 this one followed the occlusion probe (see *Fixes over the same corpus* below), which moved the version
 and not the measured layer:
@@ -20,7 +20,7 @@ and not the measured layer:
 | false-positive rate | 0.0000 | 0/80 |
 | pages with at least one unlabelled finding | 0.0000 | 0/104 |
 | duplicate rate | 0.0000 | 0/88 |
-| duration | 319.3 s | 104 pages (3.05 s/page) |
+| duration | 326.2 s | 104 pages (3.07 s/page) |
 
 Every rule scores 8/8 on its own labels. **This is a floor, not a claim about the open web.** The
 generator plants exactly the defects the catalogue promises to catch, so `1.0`/`1.0` means "no
@@ -39,7 +39,7 @@ rather than in the agent:
 ### Fixes over the same corpus
 
 Run `evals/runs/2026-11-15-fix-acceptance.json`, corpus `sha256:df240161c8d3e5ea`, agent
-`sha256:b6f6435fee6719ff`, 2026-11-15, 473.3 s: every page audited, then every finding of a
+`sha256:e132ad9b57c7f80a`, 2026-11-15, 512.6 s: every page audited, then every finding of a
 mechanically fixable rule repaired on its own and the patched page re-audited.
 
 | metric | value | denominator |
