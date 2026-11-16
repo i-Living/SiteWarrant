@@ -16,38 +16,49 @@ import {
 } from "recharts";
 import type { HistoryRun } from "../lib/audits";
 import { formatDate, formatDuration } from "../lib/format";
+import { cn } from "../lib/utils";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Select } from "./ui/select";
 
 const SEVERITIES = ["blocker", "major", "minor", "info"] as const;
 
-// The same palette as globals.css: the charts are part of the report's typography, not a
+// The same palette as the badges: the charts are part of the report's typography, not a
 // second visual language. Explicit hex because SVG fills resolve `var()` per browser.
 const SEVERITY_COLORS: Record<(typeof SEVERITIES)[number], string> = {
-  blocker: "#a3231a",
-  major: "#9d5209",
-  minor: "#7a6a24",
-  info: "#62676d",
+  blocker: "#b91c1c",
+  major: "#c2410c",
+  minor: "#a16207",
+  info: "#1d4ed8",
 };
 
 const CATEGORY_COLORS = [
   "#1d4d3b",
-  "#a3231a",
-  "#4e5f8a",
-  "#9d5209",
-  "#7b4a74",
-  "#3f6b6b",
-  "#7a6a24",
-  "#62676d",
+  "#b91c1c",
+  "#2563eb",
+  "#c2410c",
+  "#7c3aed",
+  "#0f766e",
+  "#a16207",
+  "#52525b",
 ];
 
 const TOOLTIP_STYLE = {
-  background: "var(--surface)",
-  border: "1px solid var(--line)",
-  fontFamily: "var(--mono)",
+  background: "#ffffff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 8,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontSize: 11,
-  color: "var(--ink)",
+  color: "#18181b",
 };
 
-const AXIS_TICK = { fontSize: 11, fill: "#5f584c" };
+const AXIS_TICK = { fontSize: 11, fill: "#71717a" };
+const GRID_STROKE = "#e4e4e7";
 
 function runLabel(value: string, withDate: boolean): string {
   // A dashboard window is often one afternoon; repeat the date on every tick and the axis
@@ -89,11 +100,13 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <article className={`dash-card${wide === true ? " dash-card-wide" : ""}`}>
-      <h3>{title}</h3>
-      <p className="note">{note}</p>
-      <div className="chart-wrap">{children}</div>
-    </article>
+    <Card className={cn("gap-2", wide === true && "lg:col-span-2")}>
+      <CardHeader>
+        <CardTitle as="h2">{title}</CardTitle>
+        <CardDescription>{note}</CardDescription>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
@@ -151,7 +164,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
 
   return (
     <>
-      <div className="dash-grid">
+      <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Findings per run"
           note="Stacked by severity, from the stored report. A run without one leaves a gap instead of a zero."
@@ -163,7 +176,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                 data={points}
                 margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
               >
-                <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                <CartesianGrid stroke={GRID_STROKE} vertical={false} />
                 <XAxis
                   dataKey="i"
                   tick={AXIS_TICK}
@@ -183,7 +196,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                     String(points[Number(value)]?.label ?? "")
                   }
                   contentStyle={TOOLTIP_STYLE}
-                  cursor={{ fill: "#e9e3d4" }}
+                  cursor={{ fill: "#f4f4f5" }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {SEVERITIES.map((severity) => (
@@ -199,7 +212,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="empty">
+            <p className="text-sm text-muted-foreground">
               No run of this host has a stored report yet. The timeline draws
               itself when one finishes; a run's cost still appears below,
               because the audit row records it.
@@ -217,7 +230,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                 data={points}
                 margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
               >
-                <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                <CartesianGrid stroke={GRID_STROKE} vertical={false} />
                 <XAxis
                   dataKey="i"
                   tick={AXIS_TICK}
@@ -237,12 +250,12 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                     String(points[Number(value)]?.label ?? "")
                   }
                   contentStyle={TOOLTIP_STYLE}
-                  cursor={{ fill: "#e9e3d4" }}
+                  cursor={{ fill: "#f4f4f5" }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar
                   dataKey="opened"
-                  fill="#9d5209"
+                  fill="#c2410c"
                   name="opened"
                   isAnimationActive={false}
                 />
@@ -255,18 +268,18 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="empty">
+            <p className="text-sm text-muted-foreground">
               No two runs in this window are comparable yet: a delta needs a
               previous report of the same page.
             </p>
           )}
           {comparisonIsZero && (
-            <p className="chart-note">
+            <p className="mt-2 text-xs text-muted-foreground">
               Every comparable pair in this window opened and closed nothing.
             </p>
           )}
           {incomparable.length > 0 && (
-            <ul className="chart-note">
+            <ul className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
               {incomparable.map((run) => (
                 <li key={run.audit_id}>
                   {formatDate(run.started_at)}:{" "}
@@ -283,11 +296,17 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
         >
           {categories.length > 0 ? (
             <>
-              <label className="filter-line">
+              <label
+                htmlFor="category-filter"
+                className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"
+              >
                 <span>Category</span>
-                <select
+                <Select
+                  id="category-filter"
+                  name="category"
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
+                  className="h-8 w-40 text-xs"
                 >
                   <option value="all">All</option>
                   {categories.map((name) => (
@@ -295,14 +314,14 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                       {name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <ResponsiveContainer width="100%" height={190}>
                 <LineChart
                   data={points}
                   margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
                 >
-                  <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                  <CartesianGrid stroke={GRID_STROKE} vertical={false} />
                   <XAxis
                     dataKey="i"
                     tick={AXIS_TICK}
@@ -344,7 +363,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                 </LineChart>
               </ResponsiveContainer>
               {latest !== undefined && (
-                <ul className="category-list">
+                <ul className="mt-2 flex flex-col gap-1 text-xs">
                   {selected.map((name) => {
                     // A category that exists only in an older run is a real zero in the
                     // latest one; linking it to the latest report would open the report
@@ -354,12 +373,13 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                       <li key={name}>
                         {count > 0 ? (
                           <Link
+                            className="text-brand hover:underline"
                             href={`/audits/${latest.audit_id}?category=${encodeURIComponent(name)}`}
                           >
                             {name}: {count} in the latest run
                           </Link>
                         ) : (
-                          <span className="muted">
+                          <span className="text-muted-foreground">
                             {name}: 0 in the latest run
                           </span>
                         )}
@@ -370,7 +390,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
               )}
             </>
           ) : (
-            <p className="empty">
+            <p className="text-sm text-muted-foreground">
               {hasReports
                 ? "The runs in this window wrote reports but found nothing, so there is no category to break down."
                 : "No stored report in this window, so there is no category to break down."}
@@ -390,7 +410,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                   data={points}
                   margin={{ top: 8, right: 8, bottom: 0, left: -8 }}
                 >
-                  <CartesianGrid stroke="#dcd6c9" vertical={false} />
+                  <CartesianGrid stroke={GRID_STROKE} vertical={false} />
                   <XAxis
                     dataKey="i"
                     tick={AXIS_TICK}
@@ -410,7 +430,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                       String(points[Number(value)]?.label ?? "")
                     }
                     contentStyle={TOOLTIP_STYLE}
-                    cursor={{ fill: "#e9e3d4" }}
+                    cursor={{ fill: "#f4f4f5" }}
                     formatter={(value) => [
                       `$${Number(value).toFixed(4)}`,
                       "estimate",
@@ -425,13 +445,13 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
                 </BarChart>
               </ResponsiveContainer>
               {costIsZero && (
-                <p className="chart-note">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Every recorded cost estimate in this window is zero.
                 </p>
               )}
             </>
           ) : (
-            <p className="empty">
+            <p className="text-sm text-muted-foreground">
               No run in this window carries a cost estimate: no model was
               called, the model has no price in the table, or the provider
               reported no usage to price.
@@ -441,7 +461,7 @@ export function HistoryCharts({ runs }: { runs: HistoryRun[] }) {
       </div>
 
       {runs.some((run) => run.duration_ms !== null) && (
-        <p className="note dash-footnote">
+        <p className="mt-3 px-1 text-[11px] leading-relaxed text-muted-foreground">
           Latest duration:{" "}
           {formatDuration(
             [...runs].reverse().find((run) => run.duration_ms !== null)

@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { HistoryCharts } from "../../../components/history-charts";
+import { Kpi } from "../../../components/kpi";
+import { PageHeader } from "../../../components/page-header";
 import { StatusStamp } from "../../../components/status-stamp";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import { Card, CardContent } from "../../../components/ui/card";
 import {
   getSiteHistory,
   type HistoryRun,
@@ -58,39 +63,38 @@ export default async function SiteDashboardPage({
 
   if (error !== null) {
     return (
-      <main>
-        <p className="eyebrow">Dashboard</p>
-        <h1>{host}</h1>
-        <div className="notice">
-          <p>{error}</p>
-          <p className="note">
-            The history could not be read; retry in a moment.
-          </p>
-        </div>
-        <p>
-          <Link
-            className="button-link"
-            href={`/sites/${encodeURIComponent(host)}`}
-          >
+      <>
+        <h1 className="text-2xl font-semibold tracking-tight">{host}</h1>
+        <Card className="mt-4 border-red-200 bg-red-50/60">
+          <CardContent className="py-1 text-sm text-red-800">
+            <p className="font-medium">{error}</p>
+            <p className="mt-1 text-red-700/80">
+              The history could not be read; retry in a moment.
+            </p>
+          </CardContent>
+        </Card>
+        <Button asChild variant="outline" className="mt-4">
+          <Link href={`/sites/${encodeURIComponent(host)}`}>
             Back to the site
           </Link>
-        </p>
-      </main>
+        </Button>
+      </>
     );
   }
 
   if (history === null) {
     return (
-      <main>
-        <p className="eyebrow">Dashboard</p>
-        <h1>Site not found</h1>
-        <p className="lede">No page audit exists for {host}.</p>
-        <p>
-          <Link className="button-link" href="/">
-            Back to sites
-          </Link>
+      <>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Site not found
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No page audit exists for {host}.
         </p>
-      </main>
+        <Button asChild variant="outline" className="mt-4">
+          <Link href="/">Back to sites</Link>
+        </Button>
+      </>
     );
   }
 
@@ -103,144 +107,163 @@ export default async function SiteDashboardPage({
   const latestDuration = lastWhere(runs, (run) => run.duration_ms !== null);
 
   return (
-    <main>
-      <p className="eyebrow">
-        <Link href="/">Sites</Link> <span className="sep">/</span>{" "}
-        <Link href={`/sites/${encodeURIComponent(history.host)}`}>
-          {history.host}
-        </Link>{" "}
-        <span className="sep">/</span> dashboard
-      </p>
-
-      <header className="report-head">
-        <h1>
-          {history.host}
-          {isLocalHost(history.host) && <span className="site-tag">local</span>}
-        </h1>
-        <p className="run-meta">
-          <span>
-            {runs.length} {runs.length === 1 ? "run" : "runs"} in the window
-          </span>
-          <span>
-            last{" "}
-            {formatMoment(
-              (latestMeasured ?? runs[runs.length - 1])?.started_at ?? "",
+    <>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2.5">
+            {history.host}
+            {isLocalHost(history.host) && (
+              <Badge variant="outline" className="text-[10px]">
+                local
+              </Badge>
             )}
           </span>
-        </p>
-      </header>
+        }
+        meta={
+          <>
+            <span>
+              {runs.length} {runs.length === 1 ? "run" : "runs"} in the window
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              last {formatMoment(runs[runs.length - 1]?.started_at ?? "")}
+            </span>
+          </>
+        }
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/sites/${encodeURIComponent(history.host)}`}>
+              Back to the site
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="dash-stats">
-        <div className="dash-stat">
-          <strong>{value(latestMeasured?.findings_total ?? null)}</strong>
-          <span>latest findings</span>
-        </div>
-        <div className="dash-stat">
-          <strong>
-            {lastCompared === null
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          label="Latest findings"
+          value={value(latestMeasured?.findings_total ?? null)}
+          hint="from the stored report"
+        />
+        <Kpi
+          label="Opened / closed"
+          value={
+            lastCompared === null
               ? "—"
-              : `${value(lastCompared.new)} / ${value(lastCompared.closed)}`}
-          </strong>
-          <span>opened / closed, last comparison</span>
-        </div>
-        <div className="dash-stat">
-          <strong>{formatCostEstimate(latestCost)}</strong>
-          <span>latest cost, estimate</span>
-        </div>
-        <div className="dash-stat">
-          <strong>
-            {latestDuration?.duration_ms == null
+              : `${value(lastCompared.new)} / ${value(lastCompared.closed)}`
+          }
+          hint="last comparable pair"
+        />
+        <Kpi
+          label="Cost estimate"
+          value={formatCostEstimate(latestCost)}
+          hint="from the pinned price table"
+        />
+        <Kpi
+          label="Duration"
+          value={
+            latestDuration?.duration_ms == null
               ? "—"
-              : formatDuration(latestDuration.duration_ms)}
-          </strong>
-          <span>latest duration</span>
-        </div>
+              : formatDuration(latestDuration.duration_ms)
+          }
+          hint="latest measured run"
+        />
       </div>
 
       {history.notes.length > 0 && (
-        <div className="notice">
-          {history.notes.map((note) => (
-            <p key={note}>{note}</p>
-          ))}
-        </div>
+        <Card className="mb-5 border-amber-200 bg-amber-50/60">
+          <CardContent className="py-1 text-xs text-amber-900">
+            {history.notes.map((note) => (
+              <p key={note}>{note}</p>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       <HistoryCharts runs={runs} />
 
-      <section>
-        <h2 className="section-label">
-          <span>Runs</span>
-          <span className="section-count">{runs.length}</span>
-        </h2>
-        <p className="group-note">
+      <Card className="mt-5 gap-0 overflow-hidden py-0">
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            Runs
+          </h2>
+          <Badge variant="muted">{runs.length}</Badge>
+        </div>
+        <p className="px-4 pb-2 text-xs text-muted-foreground">
           Oldest first. A run without a report keeps its row and shows no
           numbers.
         </p>
-        <div className="table-scroll">
-          <table className="dash-table">
+        <div className="overflow-x-auto border-t border-border">
+          <table className="w-full text-sm">
             <thead>
-              <tr>
-                <th scope="col">Run</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="num">
-                  Findings
-                </th>
-                <th scope="col" className="num">
-                  Opened
-                </th>
-                <th scope="col" className="num">
-                  Closed
-                </th>
-                <th scope="col" className="num">
-                  Cost
-                </th>
-                <th scope="col" className="num">
-                  Duration
-                </th>
-                <th scope="col">Agent</th>
-                <th scope="col" />
+              <tr className="border-b border-border text-left text-[11px] text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Run</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 text-right font-medium">Findings</th>
+                <th className="px-2 py-2 text-right font-medium">Opened</th>
+                <th className="px-2 py-2 text-right font-medium">Closed</th>
+                <th className="px-2 py-2 text-right font-medium">Cost</th>
+                <th className="px-2 py-2 text-right font-medium">Duration</th>
+                <th className="px-2 py-2 font-medium">Agent</th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
               {runs.map((run) => (
-                <tr key={run.audit_id}>
-                  <td>
+                <tr
+                  key={run.audit_id}
+                  className="border-b border-border/70 last:border-b-0"
+                >
+                  <td className="px-4 py-2.5 whitespace-nowrap">
                     <time dateTime={run.started_at}>
                       {formatMoment(run.started_at)}
                     </time>
                   </td>
-                  <td>
+                  <td className="px-2 py-2.5">
                     <StatusStamp status={run.status} />
                     {run.error !== null && run.findings_total === null && (
-                      <details className="row-error">
-                        <summary>Why</summary>
-                        <p>{run.error}</p>
+                      <details className="mt-1 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">Why</summary>
+                        <p className="mt-1 max-w-56 font-mono text-[11px] break-words">
+                          {run.error}
+                        </p>
                       </details>
                     )}
                   </td>
-                  <td className="num">{value(run.findings_total)}</td>
-                  <td className="num">{value(run.new)}</td>
-                  <td className="num">{value(run.closed)}</td>
-                  <td className="num">
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {value(run.findings_total)}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {value(run.new)}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
+                    {value(run.closed)}
+                  </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums">
                     {formatCostEstimate(run.cost_estimate_usd)}
                   </td>
-                  <td className="num">
+                  <td className="px-2 py-2.5 text-right tabular-nums">
                     {run.duration_ms === null
                       ? "—"
                       : formatDuration(run.duration_ms)}
                   </td>
-                  <td className="muted">
+                  <td className="px-2 py-2.5 font-mono text-[11px] text-muted-foreground">
                     {run.agent_version.replace("sha256:", "")}
                   </td>
-                  <td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     {run.has_report ? (
-                      <Link href={`/audits/${run.audit_id}`}>
+                      <Link
+                        href={`/audits/${run.audit_id}`}
+                        className="text-xs font-medium text-brand hover:underline"
+                      >
                         {run.findings_total === null
                           ? "unreadable →"
                           : "report →"}
                       </Link>
                     ) : (
-                      <span className="muted">no report</span>
+                      <span className="text-xs text-muted-foreground">
+                        no report
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -248,14 +271,14 @@ export default async function SiteDashboardPage({
             </tbody>
           </table>
         </div>
-      </section>
+      </Card>
 
-      <p className="note dash-footnote">
+      <p className="mt-3 px-1 text-[11px] leading-relaxed text-muted-foreground">
         Counts come from the stored report; tokens and call counts are measured,
         the dollar figure is an estimate from the pinned price table. A pair of
         runs with no shared page is not a comparison, and its delta is left
         empty rather than guessed.
       </p>
-    </main>
+    </>
   );
 }

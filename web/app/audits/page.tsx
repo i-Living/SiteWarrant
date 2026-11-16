@@ -2,11 +2,73 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { PageHeader } from "../components/page-header";
 import { RunRow } from "../components/run-row";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
 import type { AuditSummary } from "../lib/audits";
 import { formatClock, isBenchmarkSite, isLocalSite } from "../lib/format";
 
 const REFRESH_MS = 2000;
+
+function RunSection({
+  title,
+  count,
+  rows,
+  now,
+  highlight,
+  empty,
+  note,
+}: {
+  title: string;
+  count: number;
+  rows: AuditSummary[];
+  now: number;
+  highlight: string | null;
+  empty: string;
+  note?: string;
+}) {
+  return (
+    <Card className="mb-5 gap-0 overflow-hidden py-0">
+      <div className="flex items-center justify-between px-4 py-2.5">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {title}
+        </h2>
+        <Badge variant="muted">{count}</Badge>
+      </div>
+      {note !== undefined && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground">{note}</p>
+      )}
+      <div className="hidden grid-cols-[minmax(0,1fr)_11rem_6.5rem_5.5rem] gap-x-4 border-t border-border px-4 py-1.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase md:grid">
+        <span>Run</span>
+        <span>Findings</span>
+        <span>Status</span>
+        <span className="text-right">Report</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+          {empty}
+        </p>
+      ) : (
+        <div className="border-t border-border md:border-t-0">
+          {rows.map((audit) => (
+            <div
+              key={audit.audit_id}
+              className="border-b border-border last:border-b-0"
+            >
+              <RunRow
+                audit={audit}
+                now={now}
+                highlighted={audit.audit_id === highlight}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export default function AuditsPage() {
   const [audits, setAudits] = useState<AuditSummary[] | null>(null);
@@ -173,130 +235,109 @@ export default function AuditsPage() {
   const bench = finished.filter((audit) => isBenchmarkSite(audit.site));
 
   return (
-    <main>
-      <header className="page-head">
-        <p className="eyebrow">Live queue</p>
-        <h1>Runs</h1>
-        <p className="lede">
-          {audits === null
+    <>
+      <PageHeader
+        title="Runs"
+        description={
+          audits === null
             ? "Reading the queue…"
             : inFlight.length === 0
               ? "Nothing is queued or running."
-              : `${inFlight.length} ${inFlight.length === 1 ? "audit" : "audits"} queued or running.`}{" "}
-          {audits !== null && updated !== null && (
+              : `${inFlight.length} ${inFlight.length === 1 ? "audit" : "audits"} queued or running.`
+        }
+        meta={
+          audits !== null && updated !== null ? (
             <>
               Updated {formatClock(updated)}; auto-refresh every{" "}
-              {REFRESH_MS / 1000} s.{" "}
+              {REFRESH_MS / 1000} s.
             </>
-          )}
-        </p>
-      </header>
+          ) : undefined
+        }
+        actions={
+          <Button asChild variant="brand">
+            <Link href="/audits/new">New audit</Link>
+          </Button>
+        }
+      />
 
       {error !== null && (
-        <div className="notice">
-          <p>{error}</p>
-          <p className="note">
-            The page keeps the last answer it received and retries on the next
-            tick.
-          </p>
-        </div>
+        <Card className="mb-5 border-red-200 bg-red-50/60">
+          <CardContent className="py-1 text-sm text-red-800">
+            <p className="font-medium">{error}</p>
+            <p className="mt-1 text-red-700/80">
+              The page keeps the last answer it received and retries on the next
+              tick.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
-      {audits !== null && (
+      {audits === null ? (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Reading the queue…
+          </CardContent>
+        </Card>
+      ) : (
         <>
-          <section>
-            <h2 className="section-label">
-              <span>In flight</span>
-              <span className="section-count">{inFlight.length}</span>
-            </h2>
-            {inFlight.length === 0 ? (
-              <p className="empty">
-                Nothing is queued or running now.{" "}
-                <Link href="/audits/new">Start one</Link>.
-              </p>
-            ) : (
-              <ol className="ledger">
-                {inFlight.map((audit) => (
-                  <RunRow
-                    key={audit.audit_id}
-                    audit={audit}
-                    now={now}
-                    highlighted={audit.audit_id === highlight}
-                  />
-                ))}
-              </ol>
-            )}
-          </section>
-
-          <section>
-            <h2 className="section-label">
-              <span>Recent</span>
-              <span className="section-count">{recent.length}</span>
-            </h2>
-            {recent.length === 0 ? (
-              <p className="empty">No public run has finished yet.</p>
-            ) : (
-              <ol className="ledger">
-                {recent.map((audit) => (
-                  <RunRow
-                    key={audit.audit_id}
-                    audit={audit}
-                    now={now}
-                    highlighted={audit.audit_id === highlight}
-                  />
-                ))}
-              </ol>
-            )}
-          </section>
-
+          <RunSection
+            title="In flight"
+            count={inFlight.length}
+            rows={inFlight}
+            now={now}
+            highlight={highlight}
+            empty="Nothing is queued or running now."
+          />
+          <RunSection
+            title="Recent"
+            count={recent.length}
+            rows={recent}
+            now={now}
+            highlight={highlight}
+            empty="No public run has finished yet."
+          />
           {fixture.length > 0 && (
-            <section>
-              <h2 className="section-label">
-                <span>Local fixture</span>
-                <span className="section-count">{fixture.length}</span>
-              </h2>
-              <ol className="ledger">
-                {fixture.map((audit) => (
-                  <RunRow
-                    key={audit.audit_id}
-                    audit={audit}
-                    now={now}
-                    highlighted={audit.audit_id === highlight}
-                  />
-                ))}
-              </ol>
-              {fixtureFinished.length > fixture.length && (
-                <p className="empty">
-                  Showing the {fixture.length} most recent of{" "}
-                  {fixtureFinished.length} fixture runs.
-                </p>
-              )}
-            </section>
+            <RunSection
+              title="Local fixture"
+              count={fixture.length}
+              rows={fixture}
+              now={now}
+              highlight={highlight}
+              empty=""
+              note={
+                fixtureFinished.length > fixture.length
+                  ? `Showing the ${fixture.length} most recent of ${fixtureFinished.length} fixture runs.`
+                  : undefined
+              }
+            />
           )}
-
           {bench.length > 0 && (
-            <details className="ledger-group">
-              <summary>
+            <details className="group rounded-xl border border-border bg-card">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
                 <span>Benchmark corpus</span>
-                <span className="group-count">{bench.length}</span>
+                <Badge variant="muted">{bench.length}</Badge>
               </summary>
-              <p className="group-note">
+              <p className="px-4 pb-2 text-xs text-muted-foreground">
                 Generated pages from the frozen eval corpus, not customer sites.
               </p>
-              <ol className="ledger">
+              <ul className="border-t border-border">
                 {bench.map((audit) => (
-                  <RunRow
+                  <li
                     key={audit.audit_id}
-                    audit={audit}
-                    now={now}
-                    highlighted={audit.audit_id === highlight}
-                  />
+                    className="border-b border-border last:border-b-0"
+                  >
+                    <RunRow
+                      audit={audit}
+                      now={now}
+                      highlighted={audit.audit_id === highlight}
+                    />
+                  </li>
                 ))}
-              </ol>
+              </ul>
             </details>
           )}
         </>
       )}
-    </main>
+    </>
   );
 }

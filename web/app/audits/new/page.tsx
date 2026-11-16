@@ -2,6 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { PageHeader } from "../../components/page-header";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 
 function normalizeSite(value: string): string | null {
   const trimmed = value.trim();
@@ -68,96 +74,127 @@ export default function NewAuditPage() {
   }
 
   return (
-    <main>
-      <header className="page-head">
-        <p className="eyebrow">New audit</p>
-        <h1>Point it at a page or a sitemap.</h1>
-        <p className="lede">
-          SiteWarrant captures the page at every configured viewport and reports
-          each finding with the fact behind it. A sitemap run queues one audit
-          per entry — ten by default, fifty at most — and each page keeps its
-          own report. The run continues in the background, so this tab can close
-          once it starts.
-        </p>
-      </header>
+    <>
+      <PageHeader
+        title="New audit"
+        description="Point SiteWarrant at a page or a sitemap. It captures the page at every configured viewport and reports each finding with the fact behind it."
+      />
 
-      <form className="audit-form" onSubmit={submit}>
-        <label htmlFor="site">
-          {scope === "sitemap" ? "Site URL" : "Page URL"}
-        </label>
-        <div className="input-line">
-          <input
-            id="site"
-            name="site"
-            value={site}
-            onChange={(event) => setSite(event.target.value)}
-            placeholder={
-              scope === "sitemap"
-                ? "https://example.com/"
-                : "https://example.com/pricing"
-            }
-            autoComplete="url"
-            spellCheck={false}
-            disabled={submitting}
-          />
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Starting…" : "Start audit"}
-          </button>
-        </div>
-        <div className="scope-line">
-          <div className="field">
-            <label htmlFor="scope">Scope</label>
-            <select
-              id="scope"
-              name="scope"
-              value={scope}
-              onChange={(event) =>
-                setScope(event.target.value === "sitemap" ? "sitemap" : "page")
-              }
-              disabled={submitting}
-            >
-              <option value="page">This page</option>
-              <option value="sitemap">Every page in sitemap.xml</option>
-            </select>
-          </div>
-          {scope === "sitemap" && (
-            <div className="field">
-              <label htmlFor="pages">Pages</label>
-              <select
-                id="pages"
-                name="pages"
-                value={pages}
-                onChange={(event) => setPages(event.target.value)}
-                disabled={submitting}
-              >
-                <option value="10">Up to 10</option>
-                <option value="50">All (50 at most)</option>
-              </select>
-            </div>
-          )}
-        </div>
-        {error !== null && <p className="form-error">{error}</p>}
-      </form>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <Card>
+          <CardContent>
+            <form onSubmit={submit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="site">
+                  {scope === "sitemap" ? "Site URL" : "Page URL"}
+                </Label>
+                <Input
+                  id="site"
+                  name="site"
+                  value={site}
+                  onChange={(event) => setSite(event.target.value)}
+                  placeholder={
+                    scope === "sitemap"
+                      ? "https://example.com/"
+                      : "https://example.com/pricing"
+                  }
+                  autoComplete="url"
+                  spellCheck={false}
+                  disabled={submitting}
+                />
+              </div>
 
-      <dl className="facts">
-        <div>
-          <dt>Scope</dt>
-          <dd>One page, or up to 50 sitemap pages</dd>
-        </div>
-        <div>
-          <dt>Passes</dt>
-          <dd>Eight measurement channels</dd>
-        </div>
-        <div>
-          <dt>Output</dt>
-          <dd>Findings, causes, evidence</dd>
-        </div>
-      </dl>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex min-w-52 flex-col gap-2">
+                  <Label htmlFor="scope">Scope</Label>
+                  <Select
+                    id="scope"
+                    name="scope"
+                    value={scope}
+                    onChange={(event) =>
+                      setScope(
+                        event.target.value === "sitemap" ? "sitemap" : "page",
+                      )
+                    }
+                    disabled={submitting}
+                  >
+                    <option value="page">This page</option>
+                    <option value="sitemap">Every page in sitemap.xml</option>
+                  </Select>
+                </div>
+                {scope === "sitemap" && (
+                  <div className="flex min-w-40 flex-col gap-2">
+                    <Label htmlFor="pages">Pages</Label>
+                    <Select
+                      id="pages"
+                      name="pages"
+                      value={pages}
+                      onChange={(event) => setPages(event.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="10">Up to 10</option>
+                      <option value="50">All (50 at most)</option>
+                    </Select>
+                  </div>
+                )}
+              </div>
 
-      <p className="note">
+              {error !== null && (
+                <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                  {error}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3">
+                <Button type="submit" variant="brand" disabled={submitting}>
+                  {submitting ? "Starting…" : "Start audit"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  The run continues in the background; this tab can close once
+                  it starts.
+                </p>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-col gap-3">
+          <Card className="gap-1 py-3">
+            <CardContent>
+              <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Scope
+              </p>
+              <p className="mt-1 text-sm">
+                One page, or up to 50 sitemap pages
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="gap-1 py-3">
+            <CardContent>
+              <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Passes
+              </p>
+              <p className="mt-1 text-sm">Eight measurement channels</p>
+            </CardContent>
+          </Card>
+          <Card className="gap-1 py-3">
+            <CardContent>
+              <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Output
+              </p>
+              <p className="mt-1 text-sm">Findings, causes, evidence</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <p className="mt-4 px-1 text-xs text-muted-foreground">
         Private addresses are refused unless the deployment names the host in{" "}
-        <code>SITEWARRANT_ALLOW_PRIVATE_HOSTS</code>.
+        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+          SITEWARRANT_ALLOW_PRIVATE_HOSTS
+        </code>
+        .
       </p>
-    </main>
+    </>
   );
 }

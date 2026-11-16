@@ -1,6 +1,11 @@
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "../../components/page-header";
 import { SeverityLine } from "../../components/severity-line";
 import { StatusStamp } from "../../components/status-stamp";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
 import { getSite, type PageSummary, type SiteDetail } from "../../lib/audits";
 import {
   formatDate,
@@ -8,6 +13,7 @@ import {
   formatMoment,
   isLocalHost,
 } from "../../lib/format";
+import { cn } from "../../lib/utils";
 
 const SEVERITIES = ["blocker", "major", "minor", "info"] as const;
 
@@ -43,6 +49,65 @@ function decodeHost(value: string): string {
   }
 }
 
+function PageRow({ page }: { page: PageSummary }) {
+  const body = (
+    <>
+      <div className="min-w-0">
+        <p className="truncate font-mono text-sm">{page.page}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {page.runs > 1 && <>{page.runs} runs · </>}
+          {formatDate(page.finished_at ?? page.started_at)}
+          {page.duration_ms !== null && (
+            <> · took {formatDuration(page.duration_ms)}</>
+          )}
+        </p>
+        {!page.has_report && page.error !== null && (
+          <details className="mt-1 text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Why it failed</summary>
+            <p className="mt-1 font-mono text-[11px] break-words">
+              {page.error}
+            </p>
+          </details>
+        )}
+      </div>
+      <SeverityLine
+        counts={page.by_severity}
+        total={page.findings_total}
+        status={page.status}
+      />
+      <div className="flex items-center gap-2 md:justify-end">
+        <StatusStamp status={page.status} />
+        {page.has_report ? (
+          <ChevronRight
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">no report</span>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <li className="border-t border-border first:border-t-0">
+      {page.has_report ? (
+        <Link
+          href={`/audits/${page.audit_id}`}
+          title={`Open the report for ${page.page}`}
+          className="grid gap-x-4 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/50 md:grid-cols-[minmax(0,1fr)_12rem_auto] md:items-center"
+        >
+          {body}
+        </Link>
+      ) : (
+        <div className="grid gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_12rem_auto] md:items-center">
+          {body}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default async function SitePage({
   params,
 }: {
@@ -64,36 +129,36 @@ export default async function SitePage({
 
   if (error !== null) {
     return (
-      <main>
-        <p className="eyebrow">Site</p>
-        <h1>{host}</h1>
-        <div className="notice">
-          <p>{error}</p>
-          <p className="note">
-            The ledger could not be read; retry in a moment.
-          </p>
-        </div>
-        <p>
-          <Link className="button-link" href="/">
-            Back to sites
-          </Link>
-        </p>
-      </main>
+      <>
+        <h1 className="text-2xl font-semibold tracking-tight">{host}</h1>
+        <Card className="mt-4 border-red-200 bg-red-50/60">
+          <CardContent className="py-1 text-sm text-red-800">
+            <p className="font-medium">{error}</p>
+            <p className="mt-1 text-red-700/80">
+              The ledger could not be read; retry in a moment.
+            </p>
+          </CardContent>
+        </Card>
+        <Button asChild variant="outline" className="mt-4">
+          <Link href="/">Back to sites</Link>
+        </Button>
+      </>
     );
   }
 
   if (site === null) {
     return (
-      <main>
-        <p className="eyebrow">Site</p>
-        <h1>Site not found</h1>
-        <p className="lede">No audit exists for {host}.</p>
-        <p>
-          <Link className="button-link" href="/">
-            Back to sites
-          </Link>
+      <>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Site not found
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No audit exists for {host}.
         </p>
-      </main>
+        <Button asChild variant="outline" className="mt-4">
+          <Link href="/">Back to sites</Link>
+        </Button>
+      </>
     );
   }
 
@@ -101,127 +166,111 @@ export default async function SitePage({
   const pages = [...site.pages].sort(comparePages);
 
   return (
-    <main>
-      <p className="eyebrow">
-        <Link href="/">Sites</Link> <span className="sep">/</span>{" "}
-        {summary.host}
-      </p>
-
-      <header className="report-head">
-        <h1>
-          {summary.host}
-          {isLocalHost(summary.host) && <span className="site-tag">local</span>}
-        </h1>
-        <p className="run-meta">
-          <span>
-            {summary.runs} {summary.runs === 1 ? "run" : "runs"}
+    <>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2.5">
+            {summary.host}
+            {isLocalHost(summary.host) && (
+              <Badge variant="outline" className="text-[10px]">
+                local
+              </Badge>
+            )}
           </span>
-          <span>last {formatMoment(summary.last_activity)}</span>
-          {summary.measured_pages < summary.pages && (
+        }
+        meta={
+          <>
             <span>
-              {summary.measured_pages} of {summary.pages} measured
+              {summary.runs} {summary.runs === 1 ? "run" : "runs"}
             </span>
-          )}
-          {summary.running > 0 && (
-            <span className="flag" data-state="running">
-              <span className="status-dot" aria-hidden="true" />
-              {summary.running} running
-            </span>
-          )}
-          {summary.failed > 0 && (
-            <span className="flag" data-state="failed">
-              {summary.failed} failed
-            </span>
-          )}
-        </p>
-      </header>
+            <span aria-hidden="true">·</span>
+            <span>last {formatMoment(summary.last_activity)}</span>
+            {summary.measured_pages < summary.pages && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {summary.measured_pages} of {summary.pages} measured
+                </span>
+              </>
+            )}
+            {summary.running > 0 && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 border-blue-200 bg-blue-50 text-blue-700"
+              >
+                <span className="size-1.5 animate-pulse rounded-full bg-current" />
+                {summary.running} running
+              </Badge>
+            )}
+            {summary.failed > 0 && (
+              <Badge
+                variant="outline"
+                className="border-red-200 bg-red-50 text-red-700"
+              >
+                {summary.failed} failed
+              </Badge>
+            )}
+          </>
+        }
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/sites/${encodeURIComponent(summary.host)}/dashboard`}>
+              Quality over time
+            </Link>
+          </Button>
+        }
+      />
 
-      <p className="page-actions">
-        <Link
-          className="button-link"
-          href={`/sites/${encodeURIComponent(summary.host)}/dashboard`}
-        >
-          Quality over time
-        </Link>
-      </p>
+      <Card className="mb-5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums">
+              {summary.findings_total ?? "—"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {summary.findings_total === 1 ? "finding" : "findings"}
+            </span>
+          </div>
+          <SeverityLine
+            counts={summary.by_severity}
+            total={summary.findings_total}
+            status={summary.running > 0 ? "running" : "completed"}
+            coverage={{
+              measured: summary.measured_pages,
+              pages: summary.pages,
+            }}
+          />
+        </CardContent>
+      </Card>
 
-      <div className="verdict">
-        <div className="verdict-total">
-          <strong>{summary.findings_total ?? "—"}</strong>
-          <span>{summary.findings_total === 1 ? "finding" : "findings"}</span>
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            Pages
+          </h2>
+          <Badge variant="muted">{pages.length}</Badge>
         </div>
-        <SeverityLine
-          counts={summary.by_severity}
-          total={summary.findings_total}
-          status={summary.running > 0 ? "running" : "completed"}
-        />
-      </div>
-
-      <section>
-        <h2 className="section-label">
-          <span>Pages</span>
-          <span className="section-count">{pages.length}</span>
-        </h2>
-        <p className="group-note">
+        <p className="px-4 pb-2 text-xs text-muted-foreground">
           Latest run per page; failed and running first, then worst severity.
         </p>
-        <ol className="ledger">
-          {pages.map((page) => {
-            const body = (
-              <>
-                <div className="row-main">
-                  <span className="page-name">{page.page}</span>
-                  <p className="row-meta">
-                    {page.runs > 1 && <>{page.runs} runs · </>}
-                    {formatDate(page.finished_at ?? page.started_at)}
-                    {page.duration_ms !== null && (
-                      <> · took {formatDuration(page.duration_ms)}</>
-                    )}
-                  </p>
-                  {!page.has_report && page.error !== null && (
-                    <details className="row-error">
-                      <summary>Why it failed</summary>
-                      <p>{page.error}</p>
-                    </details>
-                  )}
-                </div>
-                <SeverityLine
-                  counts={page.by_severity}
-                  total={page.findings_total}
-                  status={page.status}
-                />
-                <StatusStamp status={page.status} />
-              </>
-            );
+        <div className="hidden grid-cols-[minmax(0,1fr)_12rem_auto] gap-x-4 border-t border-border px-4 py-1.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase md:grid">
+          <span>Page</span>
+          <span>Findings</span>
+          <span className="text-right">Status</span>
+        </div>
+        <ul className="border-t border-border md:border-t-0">
+          {pages.map((page) => (
+            <PageRow key={page.page} page={page} />
+          ))}
+        </ul>
+      </Card>
 
-            return (
-              <li
-                key={page.page}
-                className="ledger-row"
-                data-status={page.status}
-              >
-                {page.has_report ? (
-                  <Link
-                    href={`/audits/${page.audit_id}`}
-                    className="row-grid run-grid row-link"
-                    title={`Open the report for ${page.page}`}
-                  >
-                    {body}
-                    <span className="row-arrow" aria-hidden="true">
-                      →
-                    </span>
-                  </Link>
-                ) : (
-                  <div className="row-grid run-grid">
-                    {body}
-                    <span className="row-open muted">no report</span>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-    </main>
+      {pages.some((page) => !page.has_report) && (
+        <p className={cn("mt-3 px-1 text-xs text-muted-foreground")}>
+          A page without a report was not measured; its row keeps the failure
+          reason instead of a zero.
+        </p>
+      )}
+    </>
   );
 }

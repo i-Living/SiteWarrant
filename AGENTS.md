@@ -298,7 +298,8 @@ api/tests/         unit tests (math, thresholds, merge, validator, runner on cas
                    queue and label export)
 rules/             claims.jsonl: 22 claims + 12 WCAG criteria, the corpus agents may cite
 web/app/           Next.js interface: sites, site pages, the per-host dashboard, audit form, current
-                   audits, report, login
+                   audits, report, login; the shell (sidebar, top bar) in components/, the shadcn
+                   primitives in components/ui/, and Tailwind tokens in globals.css
 web/middleware.ts  session gate: every route but /login and /auth/login needs a signed cookie
 benchmark/fixtures/  static site with ten planted defects, expected.json, robots.txt, sitemap.xml
 benchmark/sites/     eight generated sites + their labels (never hand-edited)
@@ -325,6 +326,10 @@ the repository does not grow by a copy of somebody's site.
   Classes only where a framework or protocol demands them. No `Manager`, `Helper`, `Processor`, `Util`.
 - **TypeScript.** Next.js app router, function components, named exports. No classes. Universal names
   from the domain, not from the framework.
+- **The interface is Tailwind v4 with shadcn components.** `web/app/components/ui/` holds the
+  primitives (button, badge, card, input, label, progress, avatar, select); a page composes them and
+  adds utility classes. `web/app/globals.css` carries the theme tokens and nothing page-specific, so a
+  new style is a component prop, not a stylesheet rule.
 - **Prompts are code.** English, one file per agent under `api/app/agents/prompts/`, reviewed like code,
   versioned through `agent_version`.
 - **Names are domain names.** `observation`, `finding`, `root_cause`, `page_key`, `severity` mean exactly
